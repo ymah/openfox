@@ -47,7 +47,8 @@ export function TerminalPane({ sessionId, onClose, onEscape, autoFocus }: Termin
   }, [onEscape])
 
   useEffect(() => {
-    if (!terminalRef.current) return
+    const containerNode = terminalRef.current
+    if (!containerNode) return
 
     const term = new Terminal({
       fontFamily: terminalFont,
@@ -67,16 +68,17 @@ export function TerminalPane({ sessionId, onClose, onEscape, autoFocus }: Termin
     term.loadAddon(fitAddon)
     termRef.current = { term, fitAddon }
 
-    terminalRef.current.addEventListener('keydown', (e: KeyboardEvent) => {
+    const handleContainerKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape' && onEscape) {
         e.preventDefault()
         e.stopPropagation()
         onEscape()
       }
-    })
+    }
+    containerNode.addEventListener('keydown', handleContainerKeyDown)
 
-    term.open(terminalRef.current)
-    const terminalElement = terminalRef.current.querySelector('.xterm') as HTMLElement | null
+    term.open(containerNode)
+    const terminalElement = containerNode.querySelector('.xterm') as HTMLElement | null
     if (terminalElement) {
       terminalElement.style.padding = '8px'
     }
@@ -104,7 +106,7 @@ export function TerminalPane({ sessionId, onClose, onEscape, autoFocus }: Termin
         })
       }, 100)
     })
-    resizeObserver.observe(terminalRef.current)
+    resizeObserver.observe(containerNode)
 
     term.onData((data) => {
       if (data === '\x1b' && onEscape) {
@@ -134,6 +136,7 @@ export function TerminalPane({ sessionId, onClose, onEscape, autoFocus }: Termin
     return () => {
       unsubscribe()
       resizeObserver.disconnect()
+      containerNode.removeEventListener('keydown', handleContainerKeyDown)
       if (resizeTimeoutRef.current) {
         clearTimeout(resizeTimeoutRef.current)
       }

@@ -8,6 +8,15 @@ let highlighterPromise: Promise<Highlighter> | null = null
 const loadedLanguages = new Set<string>()
 const loadingPromises = new Map<string, Promise<void>>()
 
+// Shiki has no per-language unload API (only getLoadedLanguages()), so a
+// language's WASM grammar stays resident in `highlighter` forever once
+// loaded. Over a long session touching many languages this grows without
+// bound — cap the non-core languages kept loaded at once; beyond the cap,
+// the whole highlighter is disposed and recreated fresh (core langs only),
+// letting new code blocks reload their language on demand.
+const MAX_EXTRA_LANGUAGES = 15
+const extraLanguageOrder: string[] = []
+
 const coreLangs: Array<string> = [
   'typescript',
   'javascript',
@@ -89,6 +98,18 @@ export async function getHighlighter() {
   return highlighterPromise
 }
 
+/** Drop the shared highlighter and recreate it fresh (core languages only) — the only way to release loaded grammars, since Shiki has no per-language unload. */
+function resetHighlighterForLanguageCap(): void {
+  const old = highlighter
+  highlighter = null
+  highlighterPromise = null
+  loadedLanguages.clear()
+  coreLangs.forEach((lang) => loadedLanguages.add(lang))
+  extraLanguageOrder.length = 0
+  loadingPromises.clear()
+  old?.dispose()
+}
+
 export async function loadLanguage(lang: string): Promise<void> {
   if (loadedLanguages.has(lang)) return
 
@@ -105,6 +126,13 @@ export async function loadLanguage(lang: string): Promise<void> {
     if (langDef) {
       await h.loadLanguage(langDef)
       loadedLanguages.add(lang)
+      extraLanguageOrder.push(lang)
+      // Only reset when this is the sole in-flight load — resetting while
+      // another loadLanguage() call still holds a reference to the current
+      // `highlighter` would dispose an instance it's mid-use of.
+      if (extraLanguageOrder.length > MAX_EXTRA_LANGUAGES && loadingPromises.size <= 1) {
+        resetHighlighterForLanguageCap()
+      }
       return
     }
 
@@ -114,6 +142,10 @@ export async function loadLanguage(lang: string): Promise<void> {
       if (langModule.default) {
         await h.loadLanguage(langModule.default)
         loadedLanguages.add(lang)
+        extraLanguageOrder.push(lang)
+        if (extraLanguageOrder.length > MAX_EXTRA_LANGUAGES && loadingPromises.size <= 1) {
+          resetHighlighterForLanguageCap()
+        }
       }
     } catch (error) {
       console.warn(`Failed to load language ${lang}:`, error)
@@ -125,14 +157,57 @@ export async function loadLanguage(lang: string): Promise<void> {
   loadingPromises.delete(lang)
 }
 
+// Shiki emits a <span> per token, so the HTML it returns typically weighs
+// 8-20x the source. Highlighting a whole large file (a read_file dump, a
+// full-file diff) therefore costs tens of MB — retained three times over:
+// here in the cache, in each mounted component's state, and as real DOM
+// nodes. Above this threshold we skip highlighting entirely and callers fall
+// back to plain text (which is also much faster to render).
+const MAX_HIGHLIGHT_CHARS = 100 * 1024
+
+// Bounded by entry count AND by total key+value bytes — a count-only cap says
+// nothing about size when a single entry can hold megabytes of markup. Same
+// design as the markdown render cache in components/shared/Markdown.tsx.
 const highlightCache = new Map<string, string>()
 const CACHE_MAX = 50
+const HIGHLIGHT_CACHE_MAX_BYTES = 24 * 1024 * 1024
+let highlightCacheMaxBytes = HIGHLIGHT_CACHE_MAX_BYTES
+let highlightCacheBytes = 0
+
+/** Exposed for tests: lets the byte-bounded eviction be verified without generating tens of MB of markup. */
+export function getHighlightCacheBytesForTest(): number {
+  return highlightCacheBytes
+}
+
+/** Exposed for tests: call with no argument to restore the production budget. */
+export function setHighlightCacheMaxBytesForTest(bytes = HIGHLIGHT_CACHE_MAX_BYTES): void {
+  highlightCacheMaxBytes = bytes
+}
 
 function cacheKey(code: string, language: string, theme: string): string {
   return `${code}|${language}|${theme}`
 }
 
-export async function highlightCode(code: string, language: string, theme = 'github-dark-default'): Promise<string> {
+function cacheHighlight(key: string, html: string): void {
+  highlightCache.set(key, html)
+  highlightCacheBytes += key.length + html.length
+  while (highlightCache.size > CACHE_MAX || highlightCacheBytes > highlightCacheMaxBytes) {
+    const firstKey = highlightCache.keys().next().value
+    if (firstKey === undefined) break
+    const evicted = highlightCache.get(firstKey)
+    highlightCache.delete(firstKey)
+    highlightCacheBytes -= firstKey.length + (evicted?.length ?? 0)
+  }
+}
+
+/** Returns highlighted HTML, or null when the input is too large to highlight — callers render plain text instead. */
+export async function highlightCode(
+  code: string,
+  language: string,
+  theme = 'github-dark-default',
+): Promise<string | null> {
+  if (code.length > MAX_HIGHLIGHT_CHARS) return null
+
   if (language !== 'text' && !loadedLanguages.has(language)) {
     await loadLanguage(language)
   }
@@ -148,11 +223,7 @@ export async function highlightCode(code: string, language: string, theme = 'git
     transformers: [lineNumbersTransformer()],
   })
 
-  if (highlightCache.size >= CACHE_MAX) {
-    const firstKey = highlightCache.keys().next().value
-    if (firstKey) highlightCache.delete(firstKey)
-  }
-  highlightCache.set(key, result)
+  cacheHighlight(key, result)
 
   return result
 }
@@ -163,6 +234,7 @@ if (import.meta.hot) {
     highlighter = null
     loadedLanguages.clear()
     loadingPromises.clear()
+    extraLanguageOrder.length = 0
   })
 }
 

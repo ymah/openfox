@@ -22,6 +22,7 @@ export function RunningIndicator() {
   const pendingQuestions = useSessionStore((state) => state.pendingQuestions)
   const pendingPathConfirmations = useSessionStore((state) => state.pendingPathConfirmations)
   const activeWorkflowExecution = useSessionStore((state) => state.activeWorkflowExecution)
+  const contextStatus = useSessionStore((state) => state.contextStatus)
 
   const view = projectFromSessionStore({
     currentSession,
@@ -86,7 +87,9 @@ export function RunningIndicator() {
         <span className="text-text-secondary">
           {aborting && state === 'running'
             ? `${label} ${t({ en: '(abort in progress)', fr: '(interruption en cours)' })}`
-            : label}
+            : !aborting && state === 'running' && contextStatus
+              ? contextStatus
+              : label}
         </span>
       </div>
       {!aborting && state === 'running' && (

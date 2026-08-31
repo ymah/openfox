@@ -16,7 +16,7 @@ export function ReadonlySessionView() {
 
   const [session, setSession] = useState<Session | null>(null)
   const [messages, setMessages] = useState<Message[]>([])
-  const [hiddenCount, setHiddenCount] = useState(0)
+  const [serverHiddenCount, setServerHiddenCount] = useState(0)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
@@ -28,7 +28,7 @@ export function ReadonlySessionView() {
       const data = await readonlySessionResource.refresh(sessionId)
       setSession(data?.session ?? null)
       setMessages(data?.messages ?? [])
-      setHiddenCount(data?.hiddenCount ?? 0)
+      setServerHiddenCount(data?.hiddenCount ?? 0)
     } catch (err) {
       setError(err instanceof Error ? err.message : t({ en: 'Unknown error', fr: 'Erreur inconnue' }))
     } finally {
@@ -40,12 +40,26 @@ export function ReadonlySessionView() {
     loadSession()
   }, [sessionId])
 
-  const { showThinking, showVerboseToolOutput, showStats, showAgentDefinitions, showWorkflowBars } =
+  const { showThinking, showVerboseToolOutput, showStats, showAgentDefinitions, showWorkflowBars, maxVisibleItems } =
     useDisplaySettings()
 
-  const displayItems = useMemo((): DisplayItem[] => {
-    return groupMessages(messages)
-  }, [messages])
+  // This route has no live pane / streaming state to bound it — unlike
+  // PlanPanel, which applies the same maxVisibleItems cap, it was rendering
+  // every message the server sent with zero limit. A long session here means
+  // mounting the entire feed (markdown + syntax highlighting + embedded
+  // base64 images per message) at once.
+  const { displayItems, clientHiddenCount } = useMemo((): {
+    displayItems: DisplayItem[]
+    clientHiddenCount: number
+  } => {
+    const items = groupMessages(messages)
+    if (maxVisibleItems > 0 && items.length > maxVisibleItems) {
+      return { displayItems: items.slice(-maxVisibleItems), clientHiddenCount: items.length - maxVisibleItems }
+    }
+    return { displayItems: items, clientHiddenCount: 0 }
+  }, [messages, maxVisibleItems])
+
+  const hiddenCount = serverHiddenCount + clientHiddenCount
 
   if (loading) {
     return (

@@ -36,7 +36,7 @@ describe('loadDefaultAgents', () => {
   it('should load all built-in agent definitions', async () => {
     const agents = await loadDefaultAgents()
 
-    expect(agents.length).toBeGreaterThanOrEqual(5)
+    expect(agents.length).toBeGreaterThanOrEqual(12)
 
     const ids = agents.map((a) => a.metadata.id)
     expect(ids).toContain('planner')
@@ -44,6 +44,13 @@ describe('loadDefaultAgents', () => {
     expect(ids).toContain('verifier')
     expect(ids).toContain('code_reviewer')
     expect(ids).toContain('explorer')
+    expect(ids).toContain('gtd-secretary')
+    expect(ids).toContain('gtd-planner')
+    expect(ids).toContain('gtd-researcher')
+    expect(ids).toContain('gtd-writer')
+    expect(ids).toContain('gtd-translator')
+    expect(ids).toContain('gtd-scheduler')
+    expect(ids).toContain('gtd-reviewer')
   })
 
   it('should parse agent metadata correctly', async () => {

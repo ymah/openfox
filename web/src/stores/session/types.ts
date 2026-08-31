@@ -83,6 +83,8 @@ export interface SessionPane {
   liveTurnStats: MessageStats | null
   /** Server-computed headline stats for the whole session (all context windows). Null when no response has stats yet. */
   sessionStats: SessionStatsSummary | null
+  /** Status shown before the first response chunk arrives (e.g. context size about to be sent); null once streaming starts or idle. */
+  contextStatus: string | null
 }
 
 export interface SessionState {
@@ -115,6 +117,8 @@ export interface SessionState {
   liveTurnStats: MessageStats | null
   /** Server-computed headline stats for the whole session (all context windows). Null when no response has stats yet. */
   sessionStats: SessionStatsSummary | null
+  /** Status shown before the first response chunk arrives (e.g. context size about to be sent); null once streaming starts or idle. */
+  contextStatus: string | null
   sessionsHasMore: boolean
   sessionsPaginationLoading: boolean
   pendingSessionCreate: boolean | string

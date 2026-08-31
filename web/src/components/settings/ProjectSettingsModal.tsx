@@ -19,6 +19,7 @@ import { authFetch } from '../../lib/api'
 import { formatRootDir, getRootDirBlockReason, suggestRootDirChild } from '@shared/workspace.js'
 import { dedupById } from '../../lib/modal-utils'
 import { useT } from '../../hooks/useT'
+import { ImportFromFolderPanel } from './ImportFromFolderPanel'
 
 interface ProjectSettingsModalProps {
   isOpen: boolean
@@ -560,6 +561,34 @@ export function ProjectSettingsModal({ isOpen, onClose, project }: ProjectSettin
             })}
             className="w-full h-32 px-3 py-2 bg-bg-tertiary border border-border rounded text-sm font-mono resize-none focus:outline-none focus:ring-1 focus:ring-accent-primary"
             disabled={saving}
+          />
+          <div className="mt-2">
+            <ImportFromFolderPanel
+              buttonLabel="Import instructions from folder"
+              confirmTitle="Import instructions?"
+              confirmMessage="Copies every .md file from the selected folder into this project's .openfox/instructions/, where they're injected into every prompt alongside AGENTS.md."
+              endpoint="/api/instructions/import-to-project"
+              itemLabel="file"
+            />
+          </div>
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium text-text-primary mb-1 flex-shrink-0">
+            {t({ en: 'Project Skills', fr: 'Skills du projet' })}
+          </label>
+          <p className="text-sm text-text-muted mb-3 flex-shrink-0">
+            {t({
+              en: "Import skill packages (folders containing a SKILL.md) into this project's .openfox/skills/, committed with the project and available to every session working here.",
+              fr: 'Importez des packages de skills (dossiers contenant un SKILL.md) dans .openfox/skills/ de ce projet, committés avec le projet et disponibles pour toute session y travaillant.',
+            })}
+          </p>
+          <ImportFromFolderPanel
+            buttonLabel="Import skills from folder"
+            confirmTitle="Import skills?"
+            confirmMessage="Skills may contain instructions and scripts. Copies every valid skill package (a subfolder with a SKILL.md) from the selected folder into this project's .openfox/skills/."
+            endpoint="/api/skills/import-to-project"
+            itemLabel="skill"
           />
         </div>
 

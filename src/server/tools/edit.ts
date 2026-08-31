@@ -22,7 +22,10 @@ interface FileLockHandle {
   isLastInQueue: () => boolean
 }
 
-async function withFileLock<T>(filePath: string, fn: (handle: FileLockHandle) => Promise<T>): Promise<T> {
+// Exported for write.ts: a validate-then-write in write_file needs the same
+// serialization, or a concurrent edit_file/write_file pair on the same path
+// can silently lose one of the two writes.
+export async function withFileLock<T>(filePath: string, fn: (handle: FileLockHandle) => Promise<T>): Promise<T> {
   let state = fileLocks.get(filePath)
   if (!state) {
     state = { tail: Promise.resolve(), pending: 0 }

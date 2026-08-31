@@ -76,7 +76,11 @@ export const SETTINGS_DEFAULTS: Record<string, string> = {
     '"JetBrains Mono", "Cascadia Mono", "Menlo", "Consolas", "DejaVu Sans Mono", "Liberation Mono", monospace',
   [SETTINGS_KEYS.DISPLAY_USE_NATIVE_SCROLLBARS]: 'false',
   [SETTINGS_KEYS.DISPLAY_USE_NATIVE_SCROLLBARS_CODE_BLOCKS]: 'false',
-  [SETTINGS_KEYS.DISPLAY_COLLAPSE_LARGE_TOOL_CALLS]: 'false',
+  // Both default ON: they bound how much of the feed is mounted at once.
+  // Without them every tool result mounts fully expanded and the whole list
+  // stays in the DOM, retaining highlighted markup that can reach GBs over a
+  // long session.
+  [SETTINGS_KEYS.DISPLAY_COLLAPSE_LARGE_TOOL_CALLS]: 'true',
   [SETTINGS_KEYS.DISPLAY_DEFER_CODE_HIGHLIGHT_WHILE_STREAMING]: 'false',
   [SETTINGS_KEYS.DISPLAY_SHOW_TOOL_CALL_STREAMING]: 'false',
   [SETTINGS_KEYS.DISPLAY_FEED_VIRTUALIZATION]: 'true',

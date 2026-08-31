@@ -355,6 +355,94 @@ describe('stream-pure', () => {
     })
   })
 
+  it('does not throttle partial arguments while a call stays below the size gate', async () => {
+    const client = createMockClient([
+      { type: 'tool_call_delta', index: 0, name: 'edit_file' },
+      { type: 'tool_call_delta', index: 0, arguments: '{"path":"src/foo.ts","old_string":"a' },
+      { type: 'tool_call_delta', index: 0, arguments: '","new_string":"b' },
+      { type: 'tool_call_delta', index: 0, arguments: '"}' },
+      {
+        type: 'done',
+        response: {
+          id: 'resp-1',
+          content: '',
+          toolCalls: [
+            { id: 'call-1', name: 'edit_file', arguments: { path: 'src/foo.ts', old_string: 'a', new_string: 'b' } },
+          ],
+          finishReason: 'tool_calls',
+          usage: { promptTokens: 10, completionTokens: 10, totalTokens: 20, cacheSource: 'unavailable' as const },
+        },
+      },
+    ])
+
+    const gen = streamLLMPure({
+      messageId: 'msg-small',
+      systemPrompt: 'system',
+      llmClient: client,
+      messages: [{ role: 'user', content: 'edit' }],
+      tools: [{ type: 'function', function: { name: 'edit_file', description: 'Edit', parameters: {} } }],
+    })
+
+    const events: Array<{ type: string; data: unknown }> = []
+    await consumeStreamGenerator(gen, (event) => {
+      events.push(event)
+    })
+
+    // Small edits stay fully responsive: one event per delta, and the last one
+    // carries the complete arguments.
+    const preparingEvents = events.filter((e) => e.type === 'tool.preparing')
+    expect(preparingEvents).toHaveLength(4)
+    expect(preparingEvents[3]!).toMatchObject({
+      data: { name: 'edit_file', arguments: '{"path":"src/foo.ts","old_string":"a","new_string":"b"}' },
+    })
+  })
+
+  it('throttles small deltas only after a write_file call grows past the size gate', async () => {
+    // Push the call well past the 2048-byte gate in one big chunk, then send
+    // small trailing deltas that must be batched rather than each re-sending
+    // the whole accumulated string.
+    const bulk = 'x'.repeat(3000)
+    const client = createMockClient([
+      { type: 'tool_call_delta', index: 0, name: 'write_file' },
+      { type: 'tool_call_delta', index: 0, arguments: `{"path":"src/foo.ts","content":"${bulk}` },
+      { type: 'tool_call_delta', index: 0, arguments: 'small' },
+      { type: 'tool_call_delta', index: 0, arguments: 'also-small' },
+      {
+        type: 'done',
+        response: {
+          id: 'resp-1',
+          content: '',
+          toolCalls: [{ id: 'call-1', name: 'write_file', arguments: { path: 'src/foo.ts', content: 'x' } }],
+          finishReason: 'tool_calls',
+          usage: { promptTokens: 10, completionTokens: 10, totalTokens: 20, cacheSource: 'unavailable' as const },
+        },
+      },
+    ])
+
+    const gen = streamLLMPure({
+      messageId: 'msg-throttle',
+      systemPrompt: 'system',
+      llmClient: client,
+      messages: [{ role: 'user', content: 'write' }],
+      tools: [{ type: 'function', function: { name: 'write_file', description: 'Write', parameters: {} } }],
+    })
+
+    const events: Array<{ type: string; data: unknown }> = []
+    await consumeStreamGenerator(gen, (event) => {
+      events.push(event)
+    })
+
+    // The name-only event, then the bulk chunk (emitted while still under the
+    // gate at the time of the check). The two small trailing deltas add far
+    // less than the 512-byte minimum growth, so neither is re-sent.
+    const preparingEvents = events.filter((e) => e.type === 'tool.preparing')
+    expect(preparingEvents).toHaveLength(2)
+    expect(preparingEvents[0]!).toMatchObject({ data: { name: 'write_file' } })
+    expect(preparingEvents[1]!).toMatchObject({
+      data: { name: 'write_file', arguments: `{"path":"src/foo.ts","content":"${bulk}` },
+    })
+  })
+
   it('treats AbortError as an aborted result', async () => {
     const controller = new AbortController()
     controller.abort()

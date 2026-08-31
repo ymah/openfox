@@ -1,15 +1,16 @@
 // @vitest-environment happy-dom
 import { describe, it, expect, vi } from 'vitest'
+import { createRoot } from 'react-dom/client'
+import { flushSync } from 'react-dom'
 import { TerminalPane } from './TerminalPane'
 
 const mockWriteSession = vi.fn()
 const mockResizeSession = vi.fn()
 
 vi.mock('../../stores/terminal', () => ({
-  useTerminalStore: () => ({
-    writeSession: mockWriteSession,
-    resizeSession: mockResizeSession,
-  }),
+  useTerminalStore: (
+    selector: (state: { writeSession: typeof mockWriteSession; resizeSession: typeof mockResizeSession }) => unknown,
+  ) => selector({ writeSession: mockWriteSession, resizeSession: mockResizeSession }),
 }))
 
 vi.mock('../../lib/ws', () => ({
@@ -35,6 +36,7 @@ vi.mock('@xterm/xterm', () => ({
       this.element = element
     }
     onData() {}
+    onKey() {}
     write() {}
     resize(cols: number, rows: number) {
       mockCols = cols
@@ -62,5 +64,42 @@ vi.mock('@xterm/addon-fit', () => ({
 describe('TerminalPane', () => {
   it('component exists', () => {
     expect(TerminalPane).toBeDefined()
+  })
+
+  it('removes the container keydown listener it adds on unmount', () => {
+    // Scoped to the terminal container node specifically — a bare prototype
+    // spy also catches React's own internal root-level event delegation
+    // listener, which isn't removed the same way and would false-positive.
+    const addSpy = vi.spyOn(HTMLElement.prototype, 'addEventListener')
+    const removeSpy = vi.spyOn(HTMLElement.prototype, 'removeEventListener')
+
+    const container = document.createElement('div')
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    flushSync(() => root.render(<TerminalPane sessionId="s1" onClose={() => {}} onEscape={() => {}} />))
+
+    const terminalNode = container.querySelector('[tabindex="0"]')
+    expect(terminalNode).toBeTruthy()
+
+    const addedHandlers = addSpy.mock.calls
+      .map((args, i) => ({ type: args[0], handler: args[1], instance: addSpy.mock.instances[i] }))
+      .filter(({ type, instance }) => type === 'keydown' && instance === terminalNode)
+      .map(({ handler }) => handler)
+    expect(addedHandlers.length).toBeGreaterThan(0)
+
+    flushSync(() => root.unmount())
+
+    const removedHandlers = removeSpy.mock.calls
+      .map((args, i) => ({ type: args[0], handler: args[1], instance: removeSpy.mock.instances[i] }))
+      .filter(({ type, instance }) => type === 'keydown' && instance === terminalNode)
+      .map(({ handler }) => handler)
+
+    for (const handler of addedHandlers) {
+      expect(removedHandlers).toContain(handler)
+    }
+
+    addSpy.mockRestore()
+    removeSpy.mockRestore()
+    document.body.removeChild(container)
   })
 })

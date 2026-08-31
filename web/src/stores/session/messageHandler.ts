@@ -14,6 +14,7 @@ import type {
   ChatToolOutputPayload,
   ChatToolResultPayload,
   ChatTodoPayload,
+  ChatProgressPayload,
   ChatMessagePayload,
   ChatMessageUpdatedPayload,
   ChatStatsPayload,
@@ -496,6 +497,10 @@ export function handleServerMessage(
             session: pane.session
               ? { ...pane.session, messageCount: (pane.session.messageCount ?? 0) + 1 }
               : pane.session,
+            // The assistant message.start is the first thing the client sees
+            // once streaming actually begins — the pre-send context status is
+            // no longer relevant past this point.
+            ...(payload.message.role === 'assistant' ? { contextStatus: null } : {}),
           }
         })
       ) {
@@ -740,6 +745,14 @@ export function handleServerMessage(
             m.id === payload.messageId
               ? {
                   ...m,
+                  // Drop the raw stream once a result lands: no component reads
+                  // streamingOutput for a finished call (RunCommandView.tsx,
+                  // ToolCallDisplay.tsx both gate on status === 'pending'), and
+                  // keeping both copies around for the session's lifetime is
+                  // exactly the growth the server already had to fix once for
+                  // snapshots (see trimSnapshotStreamingOutput in
+                  // src/server/events/fold-state.ts — "a single session once
+                  // accumulated 41MB of it").
                   toolCalls: m.toolCalls?.map((tc) =>
                     tc.id === payload.callId
                       ? // The final result supersedes the streamed view; drop the
@@ -787,10 +800,8 @@ export function handleServerMessage(
     }
 
     case 'chat.progress': {
-      // Liveness-only event: no state to apply. Background (non-open)
-      // sessions get an unread tick — the original behaviour — while open
-      // panes already stream live.
-      if (!isLivePane(get(), message.sessionId)) {
+      const payload = message.payload as ChatProgressPayload
+      if (!applyChat(set, get, message.sessionId, (pane) => ({ ...pane, contextStatus: payload.message }))) {
         markBackgroundSessionUnread(set, message)
       }
       break
@@ -836,6 +847,7 @@ export function handleServerMessage(
           // top-level chat.stats / resumed streaming.
           ...(clearsLiveTurnStats(payload) ? { liveTurnStats: null } : {}),
           ...(payload.reason !== 'error' ? { llmRetry: null } : {}),
+          contextStatus: null,
         })),
       )
       break
@@ -900,6 +912,7 @@ export function handleServerMessage(
         updatePane(state, sessionId ?? '', (pane) => ({
           ...pane,
           error: { code: 'CHAT_ERROR', message: payload.error },
+          contextStatus: null,
         })),
       )
       break

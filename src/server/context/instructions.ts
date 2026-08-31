@@ -1,8 +1,9 @@
-import { readFile, access } from 'node:fs/promises'
-import { join, dirname } from 'node:path'
+import { readFile, access, readdir, mkdir, copyFile } from 'node:fs/promises'
+import { join, dirname, basename } from 'node:path'
 import { constants } from 'node:fs'
 import { getSetting, SETTINGS_KEYS } from '../db/settings.js'
 import { getProject } from '../db/projects.js'
+import { pathExists } from '../shared/item-loader.js'
 import type { InjectedFile } from '../../shared/types.js'
 
 // ============================================================================
@@ -11,7 +12,7 @@ import type { InjectedFile } from '../../shared/types.js'
 
 export interface InstructionFile {
   path: string
-  source: 'agents-md' | 'global' | 'project'
+  source: 'agents-md' | 'global' | 'project' | 'directory'
   content?: string
 }
 
@@ -70,6 +71,87 @@ export async function findInstructionFiles(workdir: string): Promise<Instruction
   }
 
   return foundFiles
+}
+
+function getProjectInstructionsDir(projectDir: string): string {
+  return join(projectDir, '.openfox', 'instructions')
+}
+
+/**
+ * Find instruction files committed under .openfox/instructions/ — the
+ * project-scoped, folder-of-many-files convention already used for
+ * .openfox/skills/, .openfox/agents/, .openfox/workflows/. Unlike the
+ * AGENTS.md/CLAUDE.md walk (fixed filenames, found by convention), this
+ * directory only exists if something (an import, or a contributor by hand)
+ * put files there — a flat listing of *.md files, sorted for determinism.
+ */
+export async function findProjectInstructionsDirectory(projectDir: string): Promise<InstructionFile[]> {
+  const dir = getProjectInstructionsDir(projectDir)
+  let entries
+  try {
+    entries = await readdir(dir, { withFileTypes: true })
+  } catch {
+    return []
+  }
+  return entries
+    .filter((entry) => entry.isFile() && entry.name.endsWith('.md'))
+    .map((entry) => entry.name)
+    .sort()
+    .map((name) => ({ path: join(dir, name), source: 'directory' as const }))
+}
+
+export interface ImportInstructionsResult {
+  imported: string[]
+  skipped: Array<{ name: string; reason: string }>
+}
+
+/**
+ * Bulk-import instruction files from an arbitrary local directory into this
+ * project's .openfox/instructions/. Copies each *.md file as-is; anything
+ * else in the source directory (non-.md files) is reported in `skipped`
+ * rather than silently ignored, since this is a one-time user-initiated
+ * action they need feedback on, not passive discovery.
+ */
+export async function importInstructionsFromDirectory(
+  sourceDir: string,
+  projectDir: string,
+): Promise<ImportInstructionsResult> {
+  // jscpd:ignore-start — same setup shape as importSkillsFromDirectory
+  // (registry.ts): init result arrays, readdir the source, mkdir the
+  // target. The per-entry validation below is where the two genuinely
+  // diverge (frontmatter parsing + directory copy vs extension check +
+  // file copy), so only this shared preamble is marked.
+  const imported: string[] = []
+  const skipped: Array<{ name: string; reason: string }> = []
+
+  let entries
+  try {
+    entries = await readdir(sourceDir, { withFileTypes: true })
+  } catch {
+    throw new Error(`Cannot read directory: ${sourceDir}`)
+  }
+
+  const targetDir = getProjectInstructionsDir(projectDir)
+  await mkdir(targetDir, { recursive: true })
+  // jscpd:ignore-end
+
+  for (const entry of entries) {
+    if (!entry.isFile()) continue // subdirectories aren't instruction files, ignored silently
+    const name = entry.name
+    if (!name.endsWith('.md')) {
+      skipped.push({ name, reason: 'Not a .md file' })
+      continue
+    }
+    const destination = join(targetDir, basename(name))
+    if (await pathExists(destination)) {
+      skipped.push({ name, reason: 'A file with this name already exists in the project' })
+      continue
+    }
+    await copyFile(join(sourceDir, name), destination)
+    imported.push(name)
+  }
+
+  return { imported, skipped }
 }
 
 /**
@@ -134,8 +216,13 @@ export async function getAllInstructions(workdir: string, projectId: string): Pr
     allFiles.push({ path: `Project: ${project.name}`, source: 'project', content: project.customInstructions })
   }
 
-  // 3. AGENTS.md files (from filesystem)
-  const agentFiles = await findInstructionFiles(workdir)
+  // 3. AGENTS.md/CLAUDE.md files (from filesystem) + .openfox/instructions/ —
+  // both land in the same FILE INSTRUCTIONS section; loadInstructions()
+  // already concatenates an arbitrary number of files cleanly, so scoping
+  // the directory scan to the project's root (not `workdir`, which may be a
+  // workspace/worktree path) and merging it in needs no new merge logic.
+  const directoryFiles = project?.workdir ? await findProjectInstructionsDirectory(project.workdir) : []
+  const agentFiles = [...(await findInstructionFiles(workdir)), ...directoryFiles]
   if (agentFiles.length > 0) {
     const agentContent = await loadInstructions(agentFiles)
     if (agentContent) {

@@ -131,10 +131,14 @@ vi.mock('../../lib/api', () => ({ authFetch: vi.fn() }))
 describe('ChatFeedItems default (virtualization off)', () => {
   beforeEach(() => {
     clearCache()
+    // Virtualization defaults ON now (it bounds how much of the feed stays
+    // mounted), so the unvirtualized path has to be opted into explicitly.
     settingResource.write('false', SETTINGS_KEYS.DISPLAY_FEED_VIRTUALIZATION)
   })
 
-  it('mounts every item with no placeholders or sentinel when explicitly disabled', () => {
+  it('mounts every item with no placeholders or sentinel when explicitly disabled', () => {})
+
+  it('mounts every item with no placeholders or sentinel', () => {
     const items = Array.from({ length: 70 }, (_, i) => msg(`m${i}`, 'user', `Content ${i}`))
 
     const container = document.createElement('div')

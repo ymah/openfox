@@ -57,7 +57,14 @@ describe('SubAgentRegistry (via agent registry)', () => {
     expect(explorer?.metadata.name).toBe('Explorer')
     expect(typeof explorer?.metadata.description).toBe('string')
     expect(typeof explorer?.prompt).toBe('string')
-    expect(explorer?.metadata.allowedTools).toEqual(['read_file', 'run_command', 'web_fetch', 'load_skill'])
+    expect(explorer?.metadata.allowedTools).toEqual([
+      'read_file',
+      'grep_files',
+      'glob_files',
+      'run_command',
+      'web_fetch',
+      'load_skill',
+    ])
     expect(explorer?.metadata.subagent).toBe(true)
   })
 

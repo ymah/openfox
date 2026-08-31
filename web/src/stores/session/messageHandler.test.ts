@@ -762,6 +762,109 @@ describe('chat.stats handler', () => {
   })
 })
 
+describe('chat.progress handler', () => {
+  beforeEach(() => {
+    wsSendMock.mockClear()
+    wsSubscribeMock.mockClear()
+    wsConnectMock.mockClear()
+    wsDisconnectMock.mockClear()
+    wsStatusMock.mockClear()
+    playNotificationMock.mockClear()
+    playAchievementMock.mockClear()
+    playInterventionMock.mockClear()
+    playWaitingForUserMock.mockClear()
+    playNewMessageMock.mockClear()
+    fetchMock.mockClear()
+  })
+
+  it('stores the progress message as contextStatus on the focused session', async () => {
+    const useSessionStore = await loadSessionStore()
+
+    useSessionStore.setState((state) => ({
+      ...state,
+      currentSession: { id: 'session-1' } as any,
+    }))
+
+    useSessionStore.getState().handleServerMessage({
+      type: 'chat.progress',
+      sessionId: 'session-1',
+      payload: { message: 'Context: ~500 / 128000 tokens (0%) — sending to model…', phase: 'starting' },
+    })
+
+    const state = useSessionStore.getState()
+    expect(state.contextStatus).toBe('Context: ~500 / 128000 tokens (0%) — sending to model…')
+    expect(state.panes['session-1']?.contextStatus).toBe('Context: ~500 / 128000 tokens (0%) — sending to model…')
+  })
+
+  it('clears contextStatus once the assistant message starts streaming', async () => {
+    const useSessionStore = await loadSessionStore()
+
+    useSessionStore.setState((state) => ({
+      ...state,
+      currentSession: { id: 'session-1' } as any,
+    }))
+
+    useSessionStore.getState().handleServerMessage({
+      type: 'chat.progress',
+      sessionId: 'session-1',
+      payload: { message: 'Context: ~500 / 128000 tokens (0%) — sending to model…', phase: 'starting' },
+    })
+    expect(useSessionStore.getState().contextStatus).not.toBeNull()
+
+    useSessionStore.getState().handleServerMessage({
+      type: 'chat.message',
+      sessionId: 'session-1',
+      payload: { message: { id: 'm1', role: 'assistant', content: '', timestamp: '2024-01-01T00:00:00.000Z' } },
+    })
+
+    expect(useSessionStore.getState().contextStatus).toBeNull()
+  })
+
+  it('does not clear contextStatus when the echoed user message arrives', async () => {
+    const useSessionStore = await loadSessionStore()
+
+    useSessionStore.setState((state) => ({
+      ...state,
+      currentSession: { id: 'session-1' } as any,
+    }))
+
+    useSessionStore.getState().handleServerMessage({
+      type: 'chat.message',
+      sessionId: 'session-1',
+      payload: { message: { id: 'u1', role: 'user', content: 'hi', timestamp: '2024-01-01T00:00:00.000Z' } },
+    })
+    useSessionStore.getState().handleServerMessage({
+      type: 'chat.progress',
+      sessionId: 'session-1',
+      payload: { message: 'Context: ~500 / 128000 tokens (0%) — sending to model…', phase: 'starting' },
+    })
+
+    expect(useSessionStore.getState().contextStatus).toBe('Context: ~500 / 128000 tokens (0%) — sending to model…')
+  })
+
+  it('clears contextStatus on chat.done as a safety net', async () => {
+    const useSessionStore = await loadSessionStore()
+
+    useSessionStore.setState((state) => ({
+      ...state,
+      currentSession: { id: 'session-1' } as any,
+    }))
+
+    useSessionStore.getState().handleServerMessage({
+      type: 'chat.progress',
+      sessionId: 'session-1',
+      payload: { message: 'Context: ~500 / 128000 tokens (0%) — sending to model…', phase: 'starting' },
+    })
+    useSessionStore.getState().handleServerMessage({
+      type: 'chat.done',
+      sessionId: 'session-1',
+      payload: { messageId: 'm1', reason: 'complete' },
+    })
+
+    expect(useSessionStore.getState().contextStatus).toBeNull()
+  })
+})
+
 describe('session.deleted handler', () => {
   beforeEach(() => {
     wsSendMock.mockClear()
@@ -1241,5 +1344,106 @@ describe('chat.tool_preparing handler', () => {
     const preparing2 = useSessionStore.getState().panes['session-1']?.messages[0]?.preparingToolCalls?.[0]
     expect(preparing2?.editContext).toEqual(editContext)
     expect(preparing2?.arguments).toBe('{"path":"a.ts","old_string":"a","new_string":"b"}')
+  })
+})
+
+describe('chat.tool_result handler', () => {
+  beforeEach(() => {
+    wsSendMock.mockClear()
+    wsSubscribeMock.mockClear()
+    wsConnectMock.mockClear()
+    wsDisconnectMock.mockClear()
+    wsStatusMock.mockClear()
+    playNotificationMock.mockClear()
+    playAchievementMock.mockClear()
+    playInterventionMock.mockClear()
+    playWaitingForUserMock.mockClear()
+    playNewMessageMock.mockClear()
+    fetchMock.mockClear()
+  })
+
+  it('drops streamingOutput once the result lands, to avoid keeping both copies forever', async () => {
+    const useSessionStore = await loadSessionStore()
+
+    useSessionStore.setState((state) => ({
+      ...state,
+      currentSession: { id: 'session-1' } as any,
+      messages: [
+        {
+          id: 'msg-1',
+          role: 'assistant',
+          content: '',
+          toolCalls: [
+            {
+              id: 'call-1',
+              name: 'run_command',
+              arguments: { command: 'npm test' },
+              streamingOutput: [
+                { stream: 'stdout', content: 'running tests...\n', timestamp: 1 },
+                { stream: 'stdout', content: 'PASS\n', timestamp: 2 },
+              ],
+            },
+          ],
+        },
+      ] as any,
+    }))
+
+    useSessionStore.getState().handleServerMessage({
+      type: 'chat.tool_result',
+      sessionId: 'session-1',
+      payload: {
+        messageId: 'msg-1',
+        callId: 'call-1',
+        result: { success: true, output: 'PASS\n', durationMs: 10, truncated: false },
+      },
+    } as any)
+
+    const toolCall = useSessionStore.getState().messages[0]?.toolCalls?.[0] as any
+    expect(toolCall.result).toEqual({ success: true, output: 'PASS\n', durationMs: 10, truncated: false })
+    expect(toolCall.streamingOutput).toBeUndefined()
+  })
+
+  it('leaves other tool calls on the same message untouched', async () => {
+    const useSessionStore = await loadSessionStore()
+
+    useSessionStore.setState((state) => ({
+      ...state,
+      currentSession: { id: 'session-1' } as any,
+      messages: [
+        {
+          id: 'msg-1',
+          role: 'assistant',
+          content: '',
+          toolCalls: [
+            {
+              id: 'call-1',
+              name: 'run_command',
+              arguments: {},
+              streamingOutput: [{ stream: 'stdout', content: 'a', timestamp: 1 }],
+            },
+            {
+              id: 'call-2',
+              name: 'run_command',
+              arguments: {},
+              streamingOutput: [{ stream: 'stdout', content: 'b', timestamp: 1 }],
+            },
+          ],
+        },
+      ] as any,
+    }))
+
+    useSessionStore.getState().handleServerMessage({
+      type: 'chat.tool_result',
+      sessionId: 'session-1',
+      payload: {
+        messageId: 'msg-1',
+        callId: 'call-1',
+        result: { success: true, output: 'a', durationMs: 1, truncated: false },
+      },
+    } as any)
+
+    const toolCalls = useSessionStore.getState().messages[0]?.toolCalls as any[]
+    expect(toolCalls[0].streamingOutput).toBeUndefined()
+    expect(toolCalls[1].streamingOutput).toEqual([{ stream: 'stdout', content: 'b', timestamp: 1 }])
   })
 })

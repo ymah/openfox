@@ -21,6 +21,7 @@ export function emptyPane(): SessionPane {
     llmRetry: null,
     liveTurnStats: null,
     sessionStats: null,
+    contextStatus: null,
   }
 }
 
@@ -45,6 +46,7 @@ export function paneFromFlat(state: SessionState): SessionPane {
     llmRetry: state.llmRetry,
     liveTurnStats: state.liveTurnStats,
     sessionStats: state.sessionStats,
+    contextStatus: state.contextStatus,
   }
 }
 
@@ -69,6 +71,7 @@ export function mirror(pane: SessionPane): Partial<SessionState> {
     llmRetry: pane.llmRetry,
     liveTurnStats: pane.liveTurnStats,
     sessionStats: pane.sessionStats,
+    contextStatus: pane.contextStatus,
   }
 }
 

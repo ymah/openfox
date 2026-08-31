@@ -1,5 +1,6 @@
 import WebSocket from 'ws'
 import { terminalManager } from '../terminal/manager.js'
+import { logger } from '../utils/logger.js'
 
 interface TerminalMessage {
   type: 'terminal.subscribe' | 'terminal.write' | 'terminal.resize' | 'terminal.kill'
@@ -22,6 +23,19 @@ const subscriptions = new Set<TerminalSubscription>()
 let outputHandlerRegistered = false
 let exitHandlerRegistered = false
 
+// These callbacks all run outside any Promise chain (raw PTY event emitter
+// callbacks, or a bare setTimeout below) — a throw from ws.send() on a socket
+// in a borderline state (readyState checked, but closing between the check
+// and the call is possible) would otherwise be an uncaught exception that
+// kills the whole server, not just this one terminal subscription.
+function safeSend(ws: WebSocket, payload: unknown): void {
+  try {
+    ws.send(JSON.stringify(payload))
+  } catch (error) {
+    logger.error('terminal WS send failed', { error: error instanceof Error ? error.message : String(error) })
+  }
+}
+
 function registerOutputHandler(): void {
   if (outputHandlerRegistered) return
   outputHandlerRegistered = true
@@ -31,12 +45,7 @@ function registerOutputHandler(): void {
       (s) => s.sessionId === output.sessionId && s.ws.readyState === WebSocket.OPEN,
     )
     for (const sub of subs) {
-      sub.ws.send(
-        JSON.stringify({
-          type: 'terminal.output',
-          payload: { sessionId: output.sessionId, data: output.data },
-        }),
-      )
+      safeSend(sub.ws, { type: 'terminal.output', payload: { sessionId: output.sessionId, data: output.data } })
     }
   })
 }
@@ -50,12 +59,7 @@ function registerExitHandler(): void {
       (s) => s.sessionId === sessionId && s.ws.readyState === WebSocket.OPEN,
     )
     for (const sub of subs) {
-      sub.ws.send(
-        JSON.stringify({
-          type: 'terminal.exit',
-          payload: { sessionId, exitCode },
-        }),
-      )
+      safeSend(sub.ws, { type: 'terminal.exit', payload: { sessionId, exitCode } })
     }
     for (const sub of subscriptions) {
       if (sub.sessionId === sessionId) {
@@ -82,12 +86,7 @@ export function handleTerminalMessage(ws: WebSocket, message: TerminalMessage): 
         const history = terminalManager.getOutputHistory(sessionId)
         if (history) {
           setTimeout(() => {
-            ws.send(
-              JSON.stringify({
-                type: 'terminal.output',
-                payload: { sessionId, data: history },
-              }),
-            )
+            safeSend(ws, { type: 'terminal.output', payload: { sessionId, data: history } })
           }, 100)
         }
       }

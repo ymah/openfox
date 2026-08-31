@@ -331,6 +331,21 @@ export async function* streamLLMPure(options: PureStreamOptions): AsyncGenerator
   const returnValueArgs = new Map<number, string>()
   // Track accumulated tool arguments by index (for streaming partial args)
   const toolArgs = new Map<number, string>()
+  // Length of toolArgs last emitted per index, for the size-sensitive tools
+  // below (edit_file/write_file can carry a whole file's content — resending
+  // the full accumulated string on every single delta would be O(n²) bytes
+  // over the session's lifetime; run_command/return_value stay unthrottled,
+  // their payloads are short).
+  //
+  // Throttling only kicks in once a call's arguments have grown past
+  // PREPARING_THROTTLE_AFTER_BYTES: short payloads — every ordinary command and
+  // small edit — keep emitting on every delta, so the live preview stays as
+  // responsive as it is without throttling, and the final complete arguments
+  // are never withheld. It is only the long tail of a big file write, where the
+  // quadratic cost actually bites, that gets batched.
+  const lastPreparingEmitLength = new Map<number, number>()
+  const PREPARING_THROTTLE_AFTER_BYTES = 2048
+  const THROTTLED_PREPARING_MIN_GROWTH = 512
 
   let result: Awaited<ReturnType<typeof stream.next>>['value'] = null
   let aborted = false
@@ -403,6 +418,7 @@ export async function* streamLLMPure(options: PureStreamOptions): AsyncGenerator
             // If the tool name is a sub-agent alias, show call_sub_agent instead
             const displayName = options.subAgentAliases?.has(fullName) ? 'call_sub_agent' : fullName
             const accumulatedArgs = toolArgs.get(value.index)
+            if (accumulatedArgs) lastPreparingEmitLength.set(value.index, accumulatedArgs.length)
             yield {
               type: 'tool.preparing',
               data: {
@@ -427,9 +443,16 @@ export async function* streamLLMPure(options: PureStreamOptions): AsyncGenerator
             ) {
               const accumulatedArgs = toolArgs.get(value.index)
               if (accumulatedArgs) {
-                yield {
-                  type: 'tool.preparing',
-                  data: { messageId, index: value.index, name, arguments: accumulatedArgs },
+                const sizeSensitive = name === 'edit_file' || name === 'write_file'
+                const lastLength = lastPreparingEmitLength.get(value.index) ?? 0
+                const throttled = sizeSensitive && accumulatedArgs.length > PREPARING_THROTTLE_AFTER_BYTES
+                const grew = accumulatedArgs.length - lastLength
+                if (!throttled || grew >= THROTTLED_PREPARING_MIN_GROWTH) {
+                  lastPreparingEmitLength.set(value.index, accumulatedArgs.length)
+                  yield {
+                    type: 'tool.preparing',
+                    data: { messageId, index: value.index, name, arguments: accumulatedArgs },
+                  }
                 }
               }
             }
