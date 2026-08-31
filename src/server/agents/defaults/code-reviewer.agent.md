@@ -4,6 +4,7 @@ name: Code Reviewer
 description: Review code changes for quality, bugs, and best practices
 subagent: true
 color: '#ef4444'
+category: dev
 allowedTools:
   - read_file
   - run_command

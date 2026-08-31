@@ -4,6 +4,7 @@ name: Verifier
 description: Verifies completed criteria against actual code changes
 subagent: true
 color: '#22c55e'
+category: dev
 allowedTools:
   - read_file
   - run_command

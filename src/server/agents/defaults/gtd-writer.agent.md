@@ -4,6 +4,7 @@ name: GTD Writer
 description: Drafts or rewrites a document for a GTD project deliverable
 subagent: true
 color: '#a855f7'
+category: gtd
 allowedTools:
   - read_file
   - write_file

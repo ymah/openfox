@@ -53,6 +53,16 @@ describe('loadDefaultAgents', () => {
     expect(ids).toContain('gtd-reviewer')
   })
 
+  it('tags built-in agents with a dev/gtd category for UI grouping', async () => {
+    const agents = await loadDefaultAgents()
+    const byId = new Map(agents.map((a) => [a.metadata.id, a.metadata]))
+
+    expect(byId.get('builder')?.category).toBe('dev')
+    expect(byId.get('planner')?.category).toBe('dev')
+    expect(byId.get('gtd-secretary')?.category).toBe('gtd')
+    expect(byId.get('gtd-planner')?.category).toBe('gtd')
+  })
+
   it('should parse agent metadata correctly', async () => {
     const agents = await loadDefaultAgents()
     const verifier = agents.find((a) => a.metadata.id === 'verifier')!

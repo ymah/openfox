@@ -4,6 +4,7 @@ name: GTD Researcher
 description: Researches a topic and writes a sourced synthesis note for a GTD project deliverable
 subagent: true
 color: '#0ea5e9'
+category: gtd
 allowedTools:
   - read_file
   - write_file

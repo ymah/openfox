@@ -47,6 +47,42 @@ describe('project store mutations', () => {
     expect(readProjects()?.projects[0]?.id).toBe('proj-a')
   })
 
+  it('createProject sets defaultAgent via a follow-up PUT when given one (GTD project choice)', async () => {
+    mockedAuthFetch.mockImplementation(async (url: string, init?: RequestInit) => {
+      if (url === '/api/projects' && init?.method === 'POST') return jsonResponse({ project })
+      if (url === '/api/projects/proj-a' && init?.method === 'PUT') {
+        return jsonResponse({ project: { ...project, defaultAgent: 'gtd-secretary' } })
+      }
+      return jsonResponse({ projects: [project] })
+    })
+
+    const created = await useProjectStore.getState().createProject('Alpha', '/repo/a', 'gtd-secretary')
+
+    expect(mockedAuthFetch).toHaveBeenNthCalledWith(
+      1,
+      '/api/projects',
+      expect.objectContaining({ method: 'POST', body: JSON.stringify({ name: 'Alpha', workdir: '/repo/a' }) }),
+    )
+    expect(mockedAuthFetch).toHaveBeenNthCalledWith(
+      2,
+      '/api/projects/proj-a',
+      expect.objectContaining({ method: 'PUT', body: JSON.stringify({ defaultAgent: 'gtd-secretary' }) }),
+    )
+    expect(created).toMatchObject({ id: 'proj-a', defaultAgent: 'gtd-secretary' })
+  })
+
+  it('createProject does not PUT when no defaultAgent is given (plain dev project)', async () => {
+    mockedAuthFetch.mockImplementation(async (url: string, init?: RequestInit) => {
+      if (url === '/api/projects' && init?.method === 'POST') return jsonResponse({ project })
+      return jsonResponse({ projects: [project] })
+    })
+
+    await useProjectStore.getState().createProject('Alpha', '/repo/a')
+
+    expect(mockedAuthFetch).toHaveBeenCalledTimes(2)
+    expect(mockedAuthFetch).not.toHaveBeenCalledWith('/api/projects/proj-a', expect.anything())
+  })
+
   it('createProject surfaces a permission error object for EACCES', async () => {
     mockedAuthFetch.mockImplementation(async () => {
       return {

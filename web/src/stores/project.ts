@@ -17,6 +17,7 @@ interface ProjectState {
   createProject: (
     name: string,
     workdir: string,
+    defaultAgent?: string,
   ) => Promise<Project | { error: { code: string; path?: string; message?: string } } | null>
   updateProject: (
     projectId: string,
@@ -38,7 +39,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
 
   clearProject: () => set({ currentProjectId: null }),
 
-  createProject: async (name, workdir) => {
+  createProject: async (name, workdir, defaultAgent) => {
     try {
       const res = await authFetch('/api/projects', {
         method: 'POST',
@@ -52,8 +53,12 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
         } as const
       }
       const data = await res.json()
+      let project = (data.project as Project) ?? null
+      if (project && defaultAgent) {
+        project = (await get().updateProject(project.id, { defaultAgent })) ?? project
+      }
       await projectsResource.refresh()
-      return (data.project as Project) ?? null
+      return project
     } catch {
       return null
     }

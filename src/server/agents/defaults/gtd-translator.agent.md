@@ -4,6 +4,7 @@ name: GTD Translator
 description: Translates a document for a GTD project deliverable while preserving Markdown structure
 subagent: true
 color: '#14b8a6'
+category: gtd
 allowedTools:
   - read_file
   - write_file

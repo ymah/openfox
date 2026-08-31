@@ -4,6 +4,7 @@ name: GTD Planner
 description: Clarifies a captured GTD idea into a project document via questions — read/write only, cannot dispatch work or touch the task board
 subagent: false
 color: '#eab308'
+category: gtd
 allowedTools:
   - read_file
   - write_file

@@ -4,6 +4,7 @@ name: GTD Scheduler
 description: Breaks a GTD project into dated milestones with dependencies and estimates
 subagent: true
 color: '#f43f5e'
+category: gtd
 allowedTools:
   - read_file
   - write_file

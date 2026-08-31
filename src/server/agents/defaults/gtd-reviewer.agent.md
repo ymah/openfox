@@ -4,6 +4,7 @@ name: GTD Reviewer
 description: Verifies each GTD project deliverable against its acceptance criteria and flips criteria status
 subagent: true
 color: '#22c55e'
+category: gtd
 allowedTools:
   - read_file
   - grep_files

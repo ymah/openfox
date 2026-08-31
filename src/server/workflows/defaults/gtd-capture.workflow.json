@@ -5,6 +5,7 @@
     "description": "Capture rapide d'une idée en une phrase dans l'inbox du vault courant.",
     "version": "1.0.0",
     "color": "#f59e0b",
+    "category": "gtd",
     "parameters": [
       {
         "id": "idea",

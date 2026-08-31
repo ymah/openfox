@@ -11,6 +11,7 @@ import { shouldAutofocus } from '../lib/device'
 import { validateProjectName } from './shared/validation'
 import { PlusMdIcon } from './shared/icons'
 import { PermissionDeniedModal } from './PermissionDeniedModal'
+import { ProjectTypeToggle, type ProjectType } from './shared/ProjectTypeToggle'
 
 interface CreateProjectModalProps {
   isOpen: boolean
@@ -26,6 +27,7 @@ export function CreateProjectModal({ isOpen, onClose }: CreateProjectModalProps)
   const [loading, setLoading] = useState(false)
   const [workdir, setWorkdir] = useState<string>('')
   const [permissionDeniedPath, setPermissionDeniedPath] = useState<string | null>(null)
+  const [projectType, setProjectType] = useState<ProjectType>('dev')
   const inputRef = useRef<HTMLInputElement>(null)
 
   // Fetch workdir from config when modal opens
@@ -38,6 +40,7 @@ export function CreateProjectModal({ isOpen, onClose }: CreateProjectModalProps)
       setError(null)
       setLoading(false)
       setPermissionDeniedPath(null)
+      setProjectType('dev')
       // Focus the input after modal renders
       setTimeout(() => {
         if (shouldAutofocus()) inputRef.current?.focus()
@@ -95,6 +98,14 @@ export function CreateProjectModal({ isOpen, onClose }: CreateProjectModalProps)
 
       const data = await response.json()
       const project = data.project
+
+      if (projectType === 'gtd') {
+        await authFetch(`/api/projects/${project.id}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ defaultAgent: 'gtd-secretary' }),
+        })
+      }
 
       onClose()
       await projectsResource.refresh()
@@ -174,6 +185,10 @@ export function CreateProjectModal({ isOpen, onClose }: CreateProjectModalProps)
                 {t({ en: 'Full path:', fr: 'Chemin complet :' })} <span className="font-mono">{fullPath}</span>
               </div>
             )}
+
+            <div className="mt-4">
+              <ProjectTypeToggle value={projectType} onChange={setProjectType} />
+            </div>
 
             {/* Error message */}
             {error && (

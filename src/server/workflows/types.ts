@@ -20,6 +20,7 @@ export interface WorkflowMetadata {
   description: string
   version: string
   color?: string
+  category?: string
   parameters?: WorkflowParameter[]
 }
 
