@@ -5,6 +5,7 @@
     "description": "Clarifie une idée d'inbox, produit PROJECT.md, fait valider par l'utilisateur, puis lance les sous-agents en lot.",
     "version": "1.0.0",
     "color": "#a371f7",
+    "category": "gtd",
     "parameters": [
       {
         "id": "item",

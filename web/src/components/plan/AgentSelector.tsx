@@ -1,6 +1,7 @@
-import { useState, useRef } from 'react'
+import { Fragment, useState, useRef } from 'react'
 import { ChevronDownIcon, CheckIcon } from '../shared/icons'
 import { getAgentColor } from '../../lib/agents-actions'
+import { groupByCategory, hasMultipleCategories } from '../../lib/category-groups'
 import { useT } from '../../hooks/useT'
 import { AgentsModal } from '../settings/AgentsModal'
 import { useKeybindings } from '../../hooks/useKeybindings'
@@ -41,7 +42,8 @@ export function AgentSelector() {
 
   if (!currentMode) return null
 
-  const topLevelAgents = agents.filter((a) => !a.subagent)
+  const topLevelAgents = groupByCategory(agents.filter((a) => !a.subagent)).flatMap((g) => g.items)
+  const showCategoryHeaders = hasMultipleCategories(topLevelAgents)
   const currentAgent = topLevelAgents.find((a) => a.id === currentMode)
   const displayName = currentAgent?.name ?? currentMode
   const currentColor = getAgentColor(agents, currentMode)
@@ -76,32 +78,41 @@ export function AgentSelector() {
             const color = getAgentColor(agents, agent.id)
             const binding = keybindings.agentSwitching[index]
             const shortcut = binding ? formatKeybinding(binding) : null
+            const category = agent.category?.trim() || null
+            const prevCategory = index > 0 ? topLevelAgents[index - 1]!.category?.trim() || null : undefined
+            const isNewGroup = showCategoryHeaders && category !== null && category !== prevCategory
             return (
-              <div
-                key={agent.id}
-                className={`flex items-center gap-2 px-3 py-2 text-sm transition-colors group ${
-                  isActive ? 'bg-bg-tertiary' : 'hover:bg-bg-tertiary cursor-pointer'
-                }`}
-              >
-                <button
-                  type="button"
-                  onClick={() => {
-                    void handleAgentClick(agent)
-                    setIsOpen(false)
-                  }}
-                  className="flex-1 text-left flex items-center gap-2 min-w-0"
-                >
-                  <span className="font-medium truncate" style={{ color }}>
-                    {agent.name}
-                  </span>
-                  {isActive && <CheckIcon className="w-3.5 h-3.5 text-text-muted shrink-0" />}
-                </button>
-                {shortcut && (
-                  <span className="shrink-0 px-1.5 py-0.5 text-[10px] bg-bg-tertiary text-text-muted rounded">
-                    {shortcut}
-                  </span>
+              <Fragment key={agent.id}>
+                {isNewGroup && (
+                  <div className="px-3 pt-2 pb-1 text-xs font-medium text-text-secondary uppercase tracking-wide">
+                    {category}
+                  </div>
                 )}
-              </div>
+                <div
+                  className={`flex items-center gap-2 px-3 py-2 text-sm transition-colors group ${
+                    isActive ? 'bg-bg-tertiary' : 'hover:bg-bg-tertiary cursor-pointer'
+                  }`}
+                >
+                  <button
+                    type="button"
+                    onClick={() => {
+                      void handleAgentClick(agent)
+                      setIsOpen(false)
+                    }}
+                    className="flex-1 text-left flex items-center gap-2 min-w-0"
+                  >
+                    <span className="font-medium truncate" style={{ color }}>
+                      {agent.name}
+                    </span>
+                    {isActive && <CheckIcon className="w-3.5 h-3.5 text-text-muted shrink-0" />}
+                  </button>
+                  {shortcut && (
+                    <span className="shrink-0 px-1.5 py-0.5 text-[10px] bg-bg-tertiary text-text-muted rounded">
+                      {shortcut}
+                    </span>
+                  )}
+                </div>
+              </Fragment>
             )
           })}
 

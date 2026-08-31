@@ -13,6 +13,7 @@ import { CreateProjectModal } from './CreateProjectModal.js'
 import { DirectoryBrowser } from './shared/DirectoryBrowser.js'
 import { PermissionDeniedModal } from './PermissionDeniedModal.js'
 import { useWorkdir } from '../hooks/useWorkdir.js'
+import { ProjectTypeToggle } from './shared/ProjectTypeToggle.js'
 
 interface OpenProjectModalProps {
   isOpen: boolean
@@ -31,6 +32,7 @@ export function OpenProjectModal({ isOpen, onClose }: OpenProjectModalProps) {
   const deleteProject = useProjectStore((state) => state.deleteProject)
   const [projectToDelete, setProjectToDelete] = useState<{ id: string; name: string } | null>(null)
   const [permissionDeniedPath, setPermissionDeniedPath] = useState<string | null>(null)
+  const [projectType, setProjectType] = useState<'dev' | 'gtd'>('dev')
 
   const handleProjectClick = (projectId: string) => {
     navigate(`/p/${projectId}`)
@@ -67,7 +69,7 @@ export function OpenProjectModal({ isOpen, onClose }: OpenProjectModalProps) {
 
   async function handleProjectCreation(path: string): Promise<boolean> {
     const basename = pathBasename(path)
-    const result = await createProject(basename, path)
+    const result = await createProject(basename, path, projectType === 'gtd' ? 'gtd-secretary' : undefined)
     if (isPermissionDenied(result)) {
       setPermissionDeniedPath((result.error as { path?: string }).path || path)
       return false
@@ -159,6 +161,9 @@ export function OpenProjectModal({ isOpen, onClose }: OpenProjectModalProps) {
 
         <div className="w-full sm:w-1/2 flex flex-col items-center justify-center p-6 sm:p-8 text-center">
           <div className="flex flex-col gap-3 w-full max-w-sm">
+            <div className="text-left">
+              <ProjectTypeToggle value={projectType} onChange={setProjectType} />
+            </div>
             <Button variant="primary" onClick={() => setShowBrowser(true)}>
               {t({ en: 'Select existing project', fr: 'Sélectionner un projet existant' })}
             </Button>

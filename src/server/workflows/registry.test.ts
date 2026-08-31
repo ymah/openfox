@@ -177,6 +177,18 @@ describe('loadDefaultWorkflows', () => {
     expect(defaults.some((w) => w.metadata.id === 'gtd-build')).toBe(true)
   })
 
+  it('tags built-in workflows with a dev/gtd category, and gives gtd-build its own color', async () => {
+    const defaults = await loadDefaultWorkflows()
+    const byId = new Map(defaults.map((w) => [w.metadata.id, w.metadata]))
+
+    expect(byId.get('default')?.category).toBe('dev')
+    expect(byId.get('gtd-build')?.category).toBe('gtd')
+    expect(byId.get('gtd-capture')?.category).toBe('gtd')
+    // Regression: gtd-build and default used to share the exact same color,
+    // making them indistinguishable by their dot in the workflow list.
+    expect(byId.get('gtd-build')?.color).not.toBe(byId.get('default')?.color)
+  })
+
   it('default Build & Verify workflow starts with a user step offering work-here vs start-a-workspace', async () => {
     const defaults = await loadDefaultWorkflows()
     const wf = defaults.find((w) => w.metadata.id === 'default')

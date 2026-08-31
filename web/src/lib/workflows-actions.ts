@@ -21,6 +21,7 @@ export interface WorkflowInfo {
   description: string
   version: string
   color?: string
+  category?: string
   startCondition?: WorkflowCondition
   subGroups?: string[]
   parameters?: WorkflowParameter[]

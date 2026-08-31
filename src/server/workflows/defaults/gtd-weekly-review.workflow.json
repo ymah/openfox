@@ -4,7 +4,8 @@
     "name": "GTD — Revue hebdomadaire",
     "description": "Balaie le vault courant, propose des décisions de rangement, applique celles approuvées.",
     "version": "1.0.0",
-    "color": "#0ea5e9"
+    "color": "#0ea5e9",
+    "category": "gtd"
   },
   "entryStep": "scan",
   "settings": { "maxIterations": 10 },

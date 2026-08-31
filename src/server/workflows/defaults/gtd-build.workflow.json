@@ -4,7 +4,8 @@
     "name": "GTD — Build (planner → builder → verifier → code_reviewer)",
     "description": "Réalise une tâche de code issue d'un PROJECT.md GTD, en reprenant la boucle build/verify standard d'OpenFox.",
     "version": "1.0.0",
-    "color": "#3b82f6",
+    "color": "#22c55e",
+    "category": "gtd",
     "parameters": [
       {
         "id": "project_doc",

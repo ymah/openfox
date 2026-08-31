@@ -1,5 +1,6 @@
 import { ScrollArea } from '../shared/ScrollArea'
-import { useEffect, useState, useRef } from 'react'
+import { Fragment, useEffect, useState, useRef } from 'react'
+import { groupByCategory, hasMultipleCategories } from '../../lib/category-groups'
 import { MoreIcon, AttachIcon } from '../shared/icons'
 import { useT } from '../../hooks/useT'
 import { useSessionStore } from '../../stores/session'
@@ -70,8 +71,11 @@ export function MoreMenu({
     ? dedupById(dedupById(commandData.defaults, commandData.userItems), commandData.projectItems)
     : []
   // Workflows: keep every scope visible so same-id workflows in different scopes
-  // are distinguishable instead of silently collapsed.
-  const { workflows } = useWorkflows(currentWorkdir)
+  // are distinguishable instead of silently collapsed. Grouped by category (GTD
+  // vs classic dev) so the two don't read as one flat, ambiguous list.
+  const { workflows: unsortedWorkflows } = useWorkflows(currentWorkdir)
+  const workflows = groupByCategory(unsortedWorkflows).flatMap((g) => g.items)
+  const showWorkflowCategoryHeaders = hasMultipleCategories(workflows)
 
   useEffect(() => {
     if (isOpen) {
@@ -266,51 +270,60 @@ export function MoreMenu({
                 filteredWorkflows.map((workflow, index) => {
                   const condMet = isConditionMet(workflow)
                   const color = workflow.color ?? '#3b82f6'
+                  const category = workflow.category?.trim() || null
+                  const prevCategory = index > 0 ? filteredWorkflows[index - 1]!.category?.trim() || null : undefined
+                  const isNewGroup = showWorkflowCategoryHeaders && category !== null && category !== prevCategory
                   return (
-                    <div
-                      key={`${workflow.id}-${workflow.scope}`}
-                      className={`flex items-center gap-2 px-3 py-2 rounded transition-colors group ${
-                        index === selectedIndex ? 'bg-accent-primary/20' : 'hover:bg-bg-tertiary'
-                      }`}
-                    >
-                      <button
-                        type="button"
-                        onClick={() => handleSelectWorkflowLocal(workflow.id, workflow.scope)}
-                        className="flex-1 text-left flex items-center gap-2"
+                    <Fragment key={`${workflow.id}-${workflow.scope}`}>
+                      {isNewGroup && (
+                        <div className="px-3 pt-2 pb-1 text-xs font-medium text-text-secondary uppercase tracking-wide">
+                          {category}
+                        </div>
+                      )}
+                      <div
+                        className={`flex items-center gap-2 px-3 py-2 rounded transition-colors group ${
+                          index === selectedIndex ? 'bg-accent-primary/20' : 'hover:bg-bg-tertiary'
+                        }`}
                       >
-                        <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: color }} />
-                        <span className="text-sm text-text-primary font-medium flex-1">{workflow.name}</span>
-                        <span className="text-[10px] text-text-muted bg-bg-tertiary px-1.5 py-0.5 rounded whitespace-nowrap">
-                          {SCOPE_LABELS[workflow.scope]}
-                        </span>
-                        {condMet !== null && (
-                          <span
-                            className="w-1.5 h-1.5 rounded-full flex-shrink-0"
-                            style={{ backgroundColor: condMet ? '#22c55e' : '#6b7280' }}
-                            title={
-                              condMet
-                                ? t({ en: 'Entry condition met', fr: 'Condition d’entrée satisfaite' })
-                                : t({ en: 'Entry condition not met', fr: 'Condition d’entrée non satisfaite' })
-                            }
+                        <button
+                          type="button"
+                          onClick={() => handleSelectWorkflowLocal(workflow.id, workflow.scope)}
+                          className="flex-1 text-left flex items-center gap-2"
+                        >
+                          <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: color }} />
+                          <span className="text-sm text-text-primary font-medium flex-1">{workflow.name}</span>
+                          <span className="text-[10px] text-text-muted bg-bg-tertiary px-1.5 py-0.5 rounded whitespace-nowrap">
+                            {SCOPE_LABELS[workflow.scope]}
+                          </span>
+                          {condMet !== null && (
+                            <span
+                              className="w-1.5 h-1.5 rounded-full flex-shrink-0"
+                              style={{ backgroundColor: condMet ? '#22c55e' : '#6b7280' }}
+                              title={
+                                condMet
+                                  ? t({ en: 'Entry condition met', fr: 'Condition d’entrée satisfaite' })
+                                  : t({ en: 'Entry condition not met', fr: 'Condition d’entrée non satisfaite' })
+                              }
+                            />
+                          )}
+                        </button>
+                        <div className="flex items-center gap-1">
+                          {workflow.subGroups && workflow.subGroups.length > 0 && (
+                            <WorkflowSubGroupMenu
+                              subGroups={workflow.subGroups}
+                              onSelect={(subGroup) => {
+                                setIsOpen(false)
+                                onSelectWorkflowWithSubGroup(workflow.id, subGroup, workflow.scope)
+                              }}
+                            />
+                          )}
+                          <EditButton
+                            className="opacity-0 group-hover:opacity-100"
+                            onClick={(e) => handleEditWorkflow(workflow.id, e)}
                           />
-                        )}
-                      </button>
-                      <div className="flex items-center gap-1">
-                        {workflow.subGroups && workflow.subGroups.length > 0 && (
-                          <WorkflowSubGroupMenu
-                            subGroups={workflow.subGroups}
-                            onSelect={(subGroup) => {
-                              setIsOpen(false)
-                              onSelectWorkflowWithSubGroup(workflow.id, subGroup, workflow.scope)
-                            }}
-                          />
-                        )}
-                        <EditButton
-                          className="opacity-0 group-hover:opacity-100"
-                          onClick={(e) => handleEditWorkflow(workflow.id, e)}
-                        />
+                        </div>
                       </div>
-                    </div>
+                    </Fragment>
                   )
                 })
               )
