@@ -1,0 +1,99 @@
+{
+  "metadata": {
+    "id": "gtd-clarify",
+    "name": "GTD — Clarifier",
+    "description": "Clarifie une idée d'inbox, produit PROJECT.md, fait valider par l'utilisateur, puis lance les sous-agents en lot.",
+    "version": "1.0.0",
+    "color": "#a371f7",
+    "parameters": [
+      {
+        "id": "item",
+        "label": "Item d'inbox",
+        "description": "Chemin ou id de l'item à clarifier (laisser vide pour choisir dans l'inbox)",
+        "position": 0,
+        "required": false
+      }
+    ]
+  },
+  "entryStep": "clarify",
+  "settings": { "maxIterations": 30 },
+  "steps": [
+    {
+      "id": "clarify",
+      "name": "Clarifier",
+      "type": "agent",
+      "phase": "plan",
+      "agentId": "gtd-planner",
+      "prompt": "Clarifie l'idée suivante : {{item}}\n\nSi aucun item n'est précisé, liste 00-inbox/ et demande à l'utilisateur lequel traiter via ask_user. Suis l'arbre de décision GTD du skill. Si c'est un projet, pose les questions nécessaires (une à la fois) puis écris 10-projects/<slug>/PROJECT.md avec un critère session_metadata par livrable. Résume le document produit en français dans le chat pour la validation à venir. Puis appelle step_done().",
+      "nudgePrompt": "Le document de projet n'est pas encore prêt pour validation. Termine la clarification (questions restantes, écriture de PROJECT.md, critères) puis appelle step_done().",
+      "transitions": [{ "when": { "type": "always" }, "goto": "approve" }]
+    },
+    {
+      "id": "approve",
+      "name": "Valider le projet",
+      "type": "user",
+      "phase": "waiting",
+      "transitions": [
+        { "when": { "type": "step_result", "result": "Valider" }, "goto": "dispatch" },
+        { "when": { "type": "step_result", "result": "Affiner" }, "goto": "clarify" },
+        { "when": { "type": "step_result", "result": "Reporter" }, "goto": "defer" },
+        { "when": { "type": "always" }, "goto": "dispatch" }
+      ]
+    },
+    {
+      "id": "dispatch",
+      "name": "Lancer les sous-agents",
+      "type": "agent",
+      "phase": "build",
+      "agentId": "gtd-secretary",
+      "prompt": "Le projet a été validé. Relis 10-projects/<slug>/PROJECT.md et, dans ce même tour, lance en parallèle tous les call_sub_agent des tâches dont les dépendances sont satisfaites (routage donné par le skill gtd). Pour toute tâche agent: code, applique la logique à deux cas décrite dans ton prompt (project_tasks si le dépôt visé est ce projet, sinon un rappel écrit + indication en chat). Écris chaque retour dans deliverables/, marque le critère correspondant completed. Puis appelle step_done().",
+      "nudgePrompt": "Certaines tâches n'ont pas encore de livrable. Relance les tâches restantes dont les dépendances sont désormais satisfaites, puis appelle step_done().",
+      "transitions": [
+        {
+          "when": {
+            "type": "metadata_all_in",
+            "key": "criteria",
+            "field": "status",
+            "values": ["completed", "passed"]
+          },
+          "goto": "review"
+        },
+        { "when": { "type": "always" }, "goto": "dispatch" }
+      ]
+    },
+    {
+      "id": "review",
+      "name": "Vérifier les livrables",
+      "type": "sub_agent",
+      "phase": "verification",
+      "subAgentType": "gtd-reviewer",
+      "prompt": "## Projet\n{{stepOutput.content}}\n\nVérifie chaque livrable déclaré dans 10-projects/<slug>/PROJECT.md par rapport à ses critères d'acceptation, et mets à jour le statut de chaque critère (session_metadata, clé criteria) en passed ou failed.",
+      "transitions": [
+        {
+          "when": { "type": "metadata_all_match", "key": "criteria", "field": "status", "value": "passed" },
+          "goto": "report"
+        },
+        { "when": { "type": "always" }, "goto": "dispatch" }
+      ]
+    },
+    {
+      "id": "report",
+      "name": "Clôturer",
+      "type": "agent",
+      "phase": "done",
+      "agentId": "gtd-secretary",
+      "prompt": "Tous les livrables sont validés. Passe PROJECT.md en status: done, ajoute les actions restantes dans 20-next-actions.md et les éventuelles attentes dans 30-waiting-for.md, puis déplace l'item d'inbox d'origine vers 90-archive/. Résume en français ce qui a été livré. Puis appelle step_done().",
+      "transitions": [{ "when": { "type": "always" }, "goto": "$done" }]
+    },
+    {
+      "id": "defer",
+      "name": "Reporter",
+      "type": "agent",
+      "phase": "done",
+      "agentId": "gtd-secretary",
+      "prompt": "L'utilisateur a choisi de reporter cette idée. Déplace-la vers 40-someday-maybe/ avec status: someday. Puis appelle step_done().",
+      "transitions": [{ "when": { "type": "always" }, "goto": "$done" }]
+    }
+  ],
+  "startCondition": { "type": "always" }
+}

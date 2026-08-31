@@ -1,0 +1,99 @@
+{
+  "metadata": {
+    "id": "gtd-build",
+    "name": "GTD — Build (planner → builder → verifier → code_reviewer)",
+    "description": "Réalise une tâche de code issue d'un PROJECT.md GTD, en reprenant la boucle build/verify standard d'OpenFox.",
+    "version": "1.0.0",
+    "color": "#3b82f6",
+    "parameters": [
+      {
+        "id": "project_doc",
+        "label": "Document de projet",
+        "description": "Chemin absolu du PROJECT.md GTD validé (peut être hors de ce dépôt)",
+        "position": 0,
+        "required": true
+      }
+    ]
+  },
+  "entryStep": "plan",
+  "settings": { "maxIterations": 30 },
+  "steps": [
+    {
+      "id": "plan",
+      "name": "Planifier",
+      "type": "agent",
+      "phase": "plan",
+      "agentId": "planner",
+      "prompt": "Lis {{project_doc}} (document de projet issu d'un vault GTD). Traduis ses critères d'acceptation et livrables de code en criteria (session_metadata, statut pending) pour ce dépôt. Tu es en lecture seule : n'implémente rien ici. Puis appelle step_done().",
+      "transitions": [{ "when": { "type": "always" }, "goto": "workspace" }]
+    },
+    {
+      "id": "workspace",
+      "name": "Préparer le workspace",
+      "type": "agent",
+      "phase": "build",
+      "agentId": "builder",
+      "subGroup": "code",
+      "prompt": "Utilise l'outil workspace (action switch) pour créer/choisir un workspace dédié à cette tâche, nommé d'après {{project_doc}}. N'implémente rien d'autre ici. Puis appelle step_done().",
+      "transitions": [{ "when": { "type": "always" }, "goto": "build" }]
+    },
+    {
+      "id": "build",
+      "name": "Implémenter",
+      "type": "agent",
+      "phase": "build",
+      "agentId": "builder",
+      "subGroup": "code",
+      "prompt": "Implémente les {{criteriaCount}} critères issus de {{project_doc}}. Mets à jour chaque critère avec session_metadata (status completed) au fur et à mesure. Puis appelle step_done().",
+      "nudgePrompt": "{{reason}}. Continue l'implémentation des critères restants, puis appelle step_done().",
+      "transitions": [
+        {
+          "when": {
+            "type": "metadata_all_in",
+            "field": "status",
+            "key": "criteria",
+            "values": ["passed", "completed"]
+          },
+          "goto": "verify"
+        },
+        { "when": { "type": "always" }, "goto": "build" }
+      ]
+    },
+    {
+      "id": "verify",
+      "name": "Vérifier",
+      "type": "sub_agent",
+      "phase": "verification",
+      "subAgentType": "verifier",
+      "prompt": "## Critères\n{{criteriaList}}\n\nVérifie chaque critère par rapport aux changements réels de code. Marque chacun passed ou failed via session_metadata.",
+      "transitions": [
+        {
+          "when": { "type": "metadata_all_match", "key": "criteria", "field": "status", "value": "passed" },
+          "goto": "review"
+        },
+        { "when": { "type": "always" }, "goto": "build", "subGroup": "code" }
+      ]
+    },
+    {
+      "id": "review",
+      "name": "Revue de code",
+      "type": "sub_agent",
+      "phase": "verification",
+      "subAgentType": "code_reviewer",
+      "prompt": "Fais une revue de code des changements liés à {{project_doc}}. Consigne chaque problème trouvé via session_metadata (clé review_findings, status open).",
+      "transitions": [
+        {
+          "when": {
+            "type": "metadata_all_in",
+            "key": "review_findings",
+            "field": "status",
+            "values": ["resolved", "dismissed"]
+          },
+          "goto": "$done"
+        },
+        { "when": { "type": "always" }, "goto": "build" }
+      ]
+    }
+  ],
+  "startCondition": { "type": "always" }
+}
