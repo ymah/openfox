@@ -12,6 +12,7 @@ import { writeSplitLayout, isSplitRoute } from '../../lib/splitPersistence'
 import type { SessionState, SessionPane, PendingPathConfirmation } from './types'
 import { getBuffer, setFlushFn, cancelStreamingFlush, releaseStreamingBuffer } from './streamingBuffer'
 import { handleServerMessage as handleMessage } from './messageHandler'
+import { clearPhaseTracking } from './sounds'
 import {
   emptyPane,
   paneFromFlat,
@@ -32,6 +33,46 @@ const loadingSessionIds = new Set<string>()
 const loadedSessionIds = new Set<string>()
 const listingSessionsForProject = new Map<string, Promise<void>>()
 let fullSessionListPromise: Promise<void> | null = null
+
+// Panes for sessions visited outside the split view are cached indefinitely
+// otherwise (single-session navigation never drops a pane) — this bounds
+// that cache to the most recently visited sessions. Most-recent-first.
+const MAX_CACHED_PANES = 8
+const paneAccessOrder: string[] = []
+
+// Tool-output chunks that never match a tool call on the message are kept
+// only as a short tail — see the flush loop below.
+const MAX_UNMATCHED_TOOL_OUTPUT = 200
+
+function touchPaneAccess(sessionId: string): void {
+  const idx = paneAccessOrder.indexOf(sessionId)
+  if (idx !== -1) paneAccessOrder.splice(idx, 1)
+  paneAccessOrder.unshift(sessionId)
+}
+
+/** Evict the least-recently-visited cached panes beyond MAX_CACHED_PANES, skipping split-view panes and the focused session. */
+function evictStalePanes(
+  get: () => SessionState,
+  set: (fn: (state: SessionState) => Partial<SessionState> | SessionState) => void,
+): void {
+  const state = get()
+  const protectedIds = new Set(state.openSessionIds)
+  const focusedId = effectiveFocusedId(state)
+  if (focusedId) protectedIds.add(focusedId)
+
+  const evictable = paneAccessOrder.filter((id) => !protectedIds.has(id))
+  const toEvict = evictable.slice(MAX_CACHED_PANES)
+
+  for (const id of toEvict) {
+    cancelStreamingFlush(id)
+    releaseStreamingBuffer(id)
+    clearPhaseTracking(id)
+    set((s) => dropPane(s, id))
+    loadedSessionIds.delete(id)
+    const idx = paneAccessOrder.indexOf(id)
+    if (idx !== -1) paneAccessOrder.splice(idx, 1)
+  }
+}
 
 interface SessionLoadData {
   session: Session
@@ -173,8 +214,13 @@ export const useSessionStore = create<SessionState>((set, get) => {
         if (hasToolOutput) {
           const matchedCallIds = new Set<string>()
           updated.toolCalls = applyToolOutputs(updated.toolCalls, buf.toolOutput, matchedCallIds)
+          // Chunks whose callId never appears on the message would otherwise
+          // be re-buffered forever: re-filtered on every flush (~60/s) and
+          // blocking the buffer from ever being released. Keep only the most
+          // recent ones so a stray callId cannot pin memory for the session.
           const unmatched = buf.toolOutput.filter((o) => !matchedCallIds.has(o.callId))
-          buf.toolOutput = unmatched
+          buf.toolOutput =
+            unmatched.length > MAX_UNMATCHED_TOOL_OUTPUT ? unmatched.slice(-MAX_UNMATCHED_TOOL_OUTPUT) : unmatched
           applied = true
         }
         if (!applied) return pane
@@ -226,6 +272,8 @@ export const useSessionStore = create<SessionState>((set, get) => {
           }
         })
       }
+      touchPaneAccess(sessionId)
+      evictStalePanes(get, set)
       return
     }
 
@@ -261,6 +309,7 @@ export const useSessionStore = create<SessionState>((set, get) => {
           crossSessionConfirmations: crossCleanup,
           sessionsWithPendingConfirmations: Object.keys(crossCleanup),
           llmRetry: null,
+          contextStatus: null,
           pendingSessionCreate: false as boolean | string,
         }
       })
@@ -315,6 +364,7 @@ export const useSessionStore = create<SessionState>((set, get) => {
           pendingQuestions: (data.pendingQuestions ?? []) as PendingQuestionPayload[],
           activeWorkflowExecution: (data.activeWorkflowExecution as WorkflowExecution | undefined) ?? null,
           llmRetry: null,
+          contextStatus: null,
         }
         return {
           ...replacePane(s, sessionId, nextPane),
@@ -335,6 +385,8 @@ export const useSessionStore = create<SessionState>((set, get) => {
         /* empty */
       }
       loadedSessionIds.add(sessionId)
+      touchPaneAccess(sessionId)
+      evictStalePanes(get, set)
     } catch {
       /* empty */
     } finally {
@@ -368,6 +420,7 @@ export const useSessionStore = create<SessionState>((set, get) => {
     activeWorkflowExecution: null,
     llmRetry: null,
     liveTurnStats: null,
+    contextStatus: null,
     sessionsHasMore: true,
     sessionsPaginationLoading: false,
     pendingSessionCreate: false as boolean | string,
@@ -575,7 +628,11 @@ export const useSessionStore = create<SessionState>((set, get) => {
     closePane: (sessionId) => {
       cancelStreamingFlush(sessionId)
       releaseStreamingBuffer(sessionId)
+      clearPhaseTracking(sessionId)
       set((s) => dropPane(s, sessionId))
+      loadedSessionIds.delete(sessionId)
+      const idx = paneAccessOrder.indexOf(sessionId)
+      if (idx !== -1) paneAccessOrder.splice(idx, 1)
       persistSplit()
     },
 

@@ -16,8 +16,48 @@ export interface LogChunk {
 }
 
 const MAX_LOG_CHUNKS = 2000
+// A chunk is a raw WS payload, not a line: a stack trace or a sourcemap dump
+// can be megabytes on its own, so a count-only cap bounds nothing in memory.
+const MAX_LOG_BYTES = 2 * 1024 * 1024
+// Entries are keyed by workdir and were never pruned, so every project ever
+// visited kept its full buffer alive for the tab's lifetime.
+const MAX_TRACKED_WORKDIRS = 5
 
-const capLogs = (logs: LogChunk[]): LogChunk[] => (logs.length > MAX_LOG_CHUNKS ? logs.slice(-MAX_LOG_CHUNKS) : logs)
+const capLogs = (logs: LogChunk[]): LogChunk[] => {
+  const capped = logs.length > MAX_LOG_CHUNKS ? logs.slice(-MAX_LOG_CHUNKS) : logs
+  let bytes = 0
+  let firstKept = capped.length
+  // Walk back from the newest chunk, keeping as much recent output as fits.
+  for (let i = capped.length - 1; i >= 0; i--) {
+    bytes += capped[i]!.content.length
+    if (bytes > MAX_LOG_BYTES) break
+    firstKept = i
+  }
+  return firstKept === 0 ? capped : capped.slice(firstKept)
+}
+
+/**
+ * Set a workdir's logs, re-inserting its key last (object key order is
+ * insertion order) and evicting the least-recently-touched workdirs beyond
+ * MAX_TRACKED_WORKDIRS — logsByWorkdir is the only state left in this store
+ * (status/config moved to the resource cache), so it's the only thing left
+ * that can grow with every project ever visited.
+ */
+const setWorkdirLogs = (
+  logsByWorkdir: Record<string, LogChunk[]>,
+  workdir: string,
+  logs: LogChunk[],
+): Record<string, LogChunk[]> => {
+  const { [workdir]: _existing, ...rest } = logsByWorkdir
+  const next = { ...rest, [workdir]: logs }
+  const keys = Object.keys(next)
+  if (keys.length <= MAX_TRACKED_WORKDIRS) return next
+  const evictable = keys.filter((key) => key !== workdir)
+  for (const key of evictable.slice(0, keys.length - MAX_TRACKED_WORKDIRS)) {
+    delete next[key]
+  }
+  return next
+}
 
 interface DevServerStore {
   logsByWorkdir: Record<string, LogChunk[]>
@@ -52,7 +92,7 @@ export const useDevServerStore = create<DevServerStore>()((set, get) => {
       let logsByWorkdir = state.logsByWorkdir
       for (const [workdir, newLogs] of grouped) {
         const existing = logsByWorkdir[workdir] ?? []
-        logsByWorkdir = { ...logsByWorkdir, [workdir]: capLogs([...existing, ...newLogs]) }
+        logsByWorkdir = setWorkdirLogs(logsByWorkdir, workdir, capLogs([...existing, ...newLogs]))
       }
       return { logsByWorkdir }
     })
@@ -66,7 +106,7 @@ export const useDevServerStore = create<DevServerStore>()((set, get) => {
     try {
       const res = await authFetch(devServerUrl(workdir, path), { method: 'POST' })
       devServerStatusResource.write((await res.json()) as DevServerStatus, workdir)
-      set((state) => ({ logsByWorkdir: { ...state.logsByWorkdir, [workdir]: [] } }))
+      set((state) => ({ logsByWorkdir: setWorkdirLogs(state.logsByWorkdir, workdir, []) }))
     } catch {
       // ignore
     }
@@ -80,7 +120,7 @@ export const useDevServerStore = create<DevServerStore>()((set, get) => {
       try {
         const res = await authFetch(devServerUrl(workdir, 'logs'))
         const data = (await res.json()) as { logs: LogChunk[] }
-        set((state) => ({ logsByWorkdir: { ...state.logsByWorkdir, [workdir]: capLogs(data.logs ?? []) } }))
+        set((state) => ({ logsByWorkdir: setWorkdirLogs(state.logsByWorkdir, workdir, capLogs(data.logs ?? [])) }))
       } catch {
         // ignore
       }
@@ -90,7 +130,7 @@ export const useDevServerStore = create<DevServerStore>()((set, get) => {
       if (!workdir) return
       try {
         await authFetch(devServerUrl(workdir, 'clear-logs'), { method: 'POST' })
-        set((state) => ({ logsByWorkdir: { ...state.logsByWorkdir, [workdir]: [] } }))
+        set((state) => ({ logsByWorkdir: setWorkdirLogs(state.logsByWorkdir, workdir, []) }))
       } catch {
         // ignore
       }

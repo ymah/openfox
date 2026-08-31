@@ -44,6 +44,7 @@ import { clearSessionsForDeletedProvider, reconcileSessionProviders } from './se
 import { toClientSession } from './session/client-session.js'
 import { setRuntimeConfig } from './runtime-config.js'
 import { createSkillRoutes } from './routes/skills.js'
+import { createInstructionsRoutes } from './routes/instructions.js'
 import { createCommandRoutes } from './routes/commands.js'
 import { createAgentRoutes } from './routes/agents.js'
 import { loadAllAgentsDefault, getTopLevelAgents } from './agents/registry.js'
@@ -1023,7 +1024,9 @@ export async function createServerHandle(config: Config): Promise<ServerHandle> 
     const { cancelQuestionsForSession, cancelPathConfirmationsForSession } = await import('./tools/index.js')
 
     sessionManager.clearMessageQueue(sessionId)
-    stopSessionExecution(sessionId, sessionManager)
+    // Awaited: deleteSession below FK-cascades the session's events, so any
+    // in-flight turn must actually settle first — see stopSessionExecution.
+    await stopSessionExecution(sessionId, sessionManager)
     abortSession(sessionId)
     cancelQuestionsForSession(sessionId, 'Session deleted')
     cancelPathConfirmationsForSession(sessionId, 'Session deleted')
@@ -3351,6 +3354,7 @@ export async function createServerHandle(config: Config): Promise<ServerHandle> 
       (p) => p.workdir === config.workdir || (config.workdir && p.workdir.startsWith(config.workdir + '/')),
     )?.workdir ?? config.workdir
   app.use('/api/skills', createSkillRoutes(configDir, projectDir))
+  app.use('/api/instructions', createInstructionsRoutes(projectDir))
   app.use('/api/commands', createCommandRoutes(configDir, projectDir))
   app.use('/api/agents', createAgentRoutes(configDir, projectDir))
   app.use('/api/workflows', createWorkflowRoutes(configDir, config, projectDir))
@@ -3570,6 +3574,22 @@ export async function createServerHandle(config: Config): Promise<ServerHandle> 
         })
     })
   }
+
+  // Centralized error handler — must be registered after all routes.
+  // Without this, Express 5's default handler responds with its own generic
+  // error page/shape (and can include stack traces outside development)
+  // instead of a consistent JSON error the web UI already knows how to
+  // parse. Doesn't change process-crash risk either way (Express 5 already
+  // forwards a rejected async route handler here rather than crashing).
+  app.use((err: unknown, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
+    const message = err instanceof Error ? err.message : 'Internal server error'
+    logger.error('Unhandled route error', {
+      message,
+      ...(err instanceof Error && config.mode === 'development' ? { stack: err.stack } : {}),
+    })
+    if (res.headersSent) return
+    res.status(500).json({ error: config.mode === 'development' ? message : 'Internal server error' })
+  })
 
   // Create HTTP server from Express app
   const httpServer = createHttpServer(app)
@@ -3821,6 +3841,14 @@ export async function createServerHandle(config: Config): Promise<ServerHandle> 
           stopAllInspectProxies()
           const { cleanupAllProcesses } = await import('./tools/background-process/store.js')
           cleanupAllProcesses()
+          // Per-session cleanup for terminals/LSP already happens on session
+          // delete — this is the missing global sweep for whatever is still
+          // live (open sessions) when the server itself shuts down. Both
+          // functions existed unused before this fix.
+          const { terminalManager } = await import('./terminal/manager.js')
+          await terminalManager.killAll()
+          const { shutdownAllLspManagers } = await import('./lsp/manager.js')
+          await shutdownAllLspManagers()
           viteServer?.close()
 
           // Clean up isolated config file if one was created
@@ -3868,6 +3896,23 @@ export async function createServer(config: Config): Promise<void> {
     const errorInfo =
       reason instanceof Error ? { message: reason.message, stack: reason.stack } : { message: String(reason) }
     logger.error('Unhandled promise rejection', errorInfo)
+  })
+
+  // Last-resort safety net. Unlike unhandledRejection, Node's own guidance is
+  // explicit that it is NOT safe to resume normal operation after a truly
+  // uncaught synchronous exception — the process may be in an inconsistent
+  // state. Individual hot paths (WS callbacks, background-process event
+  // listeners, terminal sends) already isolate their own errors locally so
+  // one bad session/connection degrades instead of reaching here; this
+  // handler only fires for genuinely unexpected bugs, and a clean shutdown
+  // (restarted by a process supervisor) beats leaving the server running in
+  // an unknown state.
+  let handlingFatalError = false
+  process.on('uncaughtException', (error) => {
+    if (handlingFatalError) return
+    handlingFatalError = true
+    logger.error('Uncaught exception — shutting down', { message: error.message, stack: error.stack })
+    shutdown()
   })
 
   process.on('SIGINT', shutdown)

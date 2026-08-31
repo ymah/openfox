@@ -1,9 +1,8 @@
 import { Router } from 'express'
 import multer from 'multer'
-import { access, mkdir, realpath, stat } from 'node:fs/promises'
-import { constants } from 'node:fs'
-import { homedir } from 'node:os'
-import { isAbsolute, join, resolve } from 'node:path'
+import { mkdir, realpath } from 'node:fs/promises'
+import { resolve } from 'node:path'
+import { resolveLocalDirectory } from './local-directory.js'
 import {
   loadDefaultSkills,
   loadUserSkills,
@@ -22,6 +21,7 @@ import {
   getDefaultSkillIds,
   updateOwnedSkill,
   deleteOwnedSkill,
+  importSkillsFromDirectory,
 } from '../skills/registry.js'
 import { installSkillPackage, SkillInstallError } from '../skills/installer.js'
 import { deleteSetting, getSetting, setSetting } from '../db/settings.js'
@@ -34,11 +34,6 @@ const upload = multer({
   storage: multer.memoryStorage(),
   limits: { files: 1000, fileSize: 25 * 1024 * 1024, fields: 4 },
 })
-
-function expandHome(path: string): string {
-  if (path === '~') return homedir()
-  return path.startsWith('~/') ? join(homedir(), path.slice(2)) : path
-}
 
 function configuredDirectory(): string | null {
   const raw = getSetting(SKILL_DIRECTORIES_SETTING)
@@ -57,12 +52,7 @@ function defaultLibrary(configDir: string) {
 }
 
 async function resolveLibrary(path: string): Promise<{ configuredPath: string; resolvedPath: string }> {
-  const expanded = expandHome(path)
-  if (!isAbsolute(expanded)) throw new Error('Selected path must be absolute')
-  const absolute = resolve(expanded)
-  const info = await stat(absolute)
-  if (!info.isDirectory()) throw new Error('Selected path is not a directory')
-  await access(absolute, constants.R_OK)
+  const absolute = await resolveLocalDirectory(path)
   return { configuredPath: path, resolvedPath: await realpath(absolute) }
 }
 
@@ -212,6 +202,26 @@ export function createSkillRoutes(configDir: string, projectDir?: string): Route
         })
       }
     })
+  })
+
+  router.post('/import-to-project', async (req, res) => {
+    // jscpd:ignore-start — structurally mirrors instructions.ts's
+    // /import-to-project (same validate-resolve-import-respond shape), but
+    // calls a different import function over a different result type; not
+    // worth a shared higher-order route factory for two call sites.
+    if (!projectDir) return res.status(400).json({ error: 'No active project' })
+    const sourcePath = (req.body as { sourcePath?: unknown }).sourcePath
+    if (typeof sourcePath !== 'string' || !sourcePath.trim()) {
+      return res.status(400).json({ error: 'sourcePath is required' })
+    }
+    try {
+      const resolvedPath = await resolveLocalDirectory(sourcePath)
+      const result = await importSkillsFromDirectory(resolvedPath, projectDir)
+      res.json(result)
+    } catch (error) {
+      res.status(400).json({ error: error instanceof Error ? error.message : 'Import failed' })
+    }
+    // jscpd:ignore-end
   })
 
   router.post('/:id/toggle', async (req, res) => {

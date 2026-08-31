@@ -205,18 +205,22 @@ export const runCommandTool = createTool<RunCommandArgs>(
     // (e.g. from npm test) doesn't consume the byte/line budget invisibly.
     const visible = stripAnsi(output)
 
+    // Truncation keeps the END of the output, not the start: for build/test/lint
+    // runs the exit code and failure summary are always at the tail, while the
+    // start is warm-up noise. Dropping the head and keeping the tail means the
+    // model actually sees whether the command succeeded.
     let truncated = false
     if (visible.length > OUTPUT_LIMITS.run_command.maxBytes) {
-      output = output.slice(0, OUTPUT_LIMITS.run_command.maxBytes)
-      output += '\n\n[Output truncated due to size limit]'
+      const keepFrom = Math.max(0, output.length - OUTPUT_LIMITS.run_command.maxBytes)
+      output = '[Output truncated due to size limit]\n\n' + output.slice(keepFrom)
       truncated = true
     }
 
     const linesCount = visible.split('\n').length
     if (linesCount > OUTPUT_LIMITS.run_command.maxLines) {
-      const limitedLines = output.split('\n').slice(0, OUTPUT_LIMITS.run_command.maxLines)
-      output = limitedLines.join('\n')
-      output += '\n\n[Output truncated due to line limit]'
+      const allLines = output.split('\n')
+      const keptLines = allLines.slice(-OUTPUT_LIMITS.run_command.maxLines)
+      output = '[Output truncated due to line limit]\n\n' + keptLines.join('\n')
       truncated = true
     }
 

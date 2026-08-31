@@ -13,6 +13,9 @@ import { finalizeTurnCompletion } from '../utils/session-utils.js'
 
 const activeAgents = new Map<string, AbortController>()
 const abortedSessions = new Set<string>()
+// Tracks the in-flight turn's async completion (event appends, tool calls,
+// and any chained follow-up turn) per session — see stopSessionExecution.
+const turnCompletionPromises = new Map<string, Promise<void>>()
 
 export interface ChatHandlerDeps {
   sessionManager: SessionManager
@@ -109,7 +112,7 @@ export async function startChatSession(
 function startTurnWithCompletionChain(sessionId: string, controller: AbortController, deps: ChatHandlerDeps): void {
   const { sessionManager, llmClient, statsIdentity, broadcastForSession } = deps
 
-  runChatTurn(
+  const chainPromise = runChatTurn(
     buildRunChatTurnParams({
       sessionManager,
       sessionId,
@@ -160,9 +163,11 @@ function startTurnWithCompletionChain(sessionId: string, controller: AbortContro
       sessionManager.clearMessageQueue(sessionId)
       finalizeTurnCompletion(sessionId, sessionManager, broadcastForSession)
     })
+
+  turnCompletionPromises.set(sessionId, chainPromise)
 }
 
-export function stopSessionExecution(sessionId: string, sessionManager: SessionManager): void {
+export async function stopSessionExecution(sessionId: string, sessionManager: SessionManager): Promise<void> {
   abortedSessions.add(sessionId)
   const controller = activeAgents.get(sessionId)
   if (controller) {
@@ -174,4 +179,17 @@ export function stopSessionExecution(sessionId: string, sessionManager: SessionM
   // this gives the UI instant feedback on Stop).
   sessionManager.clearPauseState(sessionId)
   sessionManager.setRunning(sessionId, false)
+
+  // Abort is fire-and-forget from the turn's perspective — it only takes
+  // effect once the turn next checks its signal. A caller that immediately
+  // deletes the session (EventStore rows are FK-CASCADE'd to the sessions
+  // row) can otherwise race an in-flight tool call/event append that hasn't
+  // observed the abort yet, throwing a foreign-key error that's only ever
+  // caught by the top-level unhandledRejection handler — silently dropping
+  // the turn's last events. Wait for the turn to actually settle, bounded so
+  // a turn that never reacts to the signal can't hang the caller forever.
+  const pending = turnCompletionPromises.get(sessionId)
+  if (pending) {
+    await Promise.race([pending, new Promise<void>((resolve) => setTimeout(resolve, 5000))])
+  }
 }

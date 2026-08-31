@@ -3,6 +3,7 @@ import * as store from './store.js'
 import { spawnShell } from '../../utils/shell.js'
 import { killProcessTree } from '../../utils/process-tree.js'
 import { createUtf8StreamDecoder } from '../../utils/utf8.js'
+import { logger } from '../../utils/logger.js'
 
 type ProcessEventListener = (processId: string, msg: ServerMessage) => void
 const listeners = new Set<ProcessEventListener>()
@@ -15,8 +16,19 @@ export function onProcessEvent(callback: ProcessEventListener): () => void {
 }
 
 function emitProcessEvent(processId: string, msg: ServerMessage): void {
+  // Called from raw child_process 'data'/'exit'/'error' event callbacks — not
+  // inside any Promise chain, so a throw here (e.g. a WS broadcast failing on
+  // a socket in a bad state) would be an uncaught exception that kills the
+  // whole server, not just this background process's event delivery.
   for (const listener of listeners) {
-    listener(processId, msg)
+    try {
+      listener(processId, msg)
+    } catch (error) {
+      logger.error('background-process event listener failed', {
+        processId,
+        error: error instanceof Error ? error.message : String(error),
+      })
+    }
   }
 }
 

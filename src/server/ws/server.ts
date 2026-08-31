@@ -672,7 +672,12 @@ export function createWebSocketServer(
       broadcastForSession(event.sessionId, createSessionPauseMessage(event.pauseState))
       return
     }
-    if (event.type === 'session_updated') {
+    if (event.type !== 'session_updated') return
+    // This callback runs synchronously outside any Promise chain — a throw
+    // here (e.g. a DB error from getEventsSinceSnapshot) would otherwise be
+    // an uncaught exception that kills the whole server, not just this
+    // session's update. Isolate the fault to this one broadcast instead.
+    try {
       const updatedSession = event.session
       const eventStore = getEventStore()
       const { snapshot, events: eventsSinceSnapshot } = eventStore.getEventsSinceSnapshot(updatedSession.id)
@@ -726,6 +731,11 @@ export function createWebSocketServer(
           broadcastForSession(updatedSession.id, createGitStatusMessage(branch, files))
         })()
       }
+    } catch (error) {
+      logger.error('session_updated subscriber failed', {
+        sessionId: event.session.id,
+        error: error instanceof Error ? error.message : String(error),
+      })
     }
   })
 
@@ -808,9 +818,20 @@ export function createWebSocketServer(
         return
       }
 
-      // Handle terminal messages separately
+      // Handle terminal messages separately — this dispatch runs before the
+      // try/catch below that wraps handleClientMessage, so isolate it here
+      // too: a throw would otherwise be silently swallowed by the top-level
+      // unhandledRejection handler (this listener is `async`) with no signal
+      // to the client and no structured log.
       if (message.type.startsWith('terminal.')) {
-        handleTerminalMessage(ws, message as unknown as Parameters<typeof handleTerminalMessage>[1])
+        try {
+          handleTerminalMessage(ws, message as unknown as Parameters<typeof handleTerminalMessage>[1])
+        } catch (error) {
+          logger.error('terminal message handling failed', {
+            messageType: message.type,
+            error: error instanceof Error ? error.message : String(error),
+          })
+        }
         return
       }
 

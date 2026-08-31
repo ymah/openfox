@@ -11,9 +11,12 @@ import { serverT } from '../i18n.js'
 // Per-file mutex to serialize parallel edits on the same file.
 // Prevents the read-modify-write race condition where concurrent edits
 // all read the same original content and only the last write survives.
+// Shared with write.ts (exported) — a validate-then-write in write_file needs
+// the same serialization, or a concurrent edit_file/write_file pair on the
+// same path can silently lose one of the two writes.
 const fileLocks = new Map<string, Promise<void>>()
 
-async function withFileLock<T>(filePath: string, fn: () => Promise<T>): Promise<T> {
+export async function withFileLock<T>(filePath: string, fn: () => Promise<T>): Promise<T> {
   const prev = fileLocks.get(filePath) ?? Promise.resolve()
   const next = prev.then(fn, fn)
   fileLocks.set(

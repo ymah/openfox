@@ -64,6 +64,7 @@ beforeEach(() => {
     pendingPathConfirmations: [],
     activeWorkflowExecution: null,
     abortInProgress: false,
+    contextStatus: null,
   })
 })
 
@@ -115,6 +116,29 @@ describe('RunningIndicator — factually-derived state from existing client data
     expect(el?.getAttribute('data-state')).toBe('running')
     expect(el?.textContent).toContain('Running')
     expect(el?.textContent).not.toContain('Verification')
+  })
+
+  it('shows the context status message instead of "Running" while it is set', () => {
+    useSessionStore.setState({
+      currentSession: makeSession({ phase: 'build', isRunning: true }),
+      contextStatus: 'Context: ~500 / 128000 tokens (0%) — sending to model…',
+    })
+    const container = render()
+    const el = container.querySelector('[data-testid="session-status-indicator"]')
+    expect(el?.textContent).toContain('Context: ~500 / 128000 tokens (0%) — sending to model…')
+    expect(el?.textContent).not.toContain('Running')
+    // The elapsed-time hint stays visible alongside the context status.
+    expect(el?.textContent).toContain('esc to interrupt')
+  })
+
+  it('falls back to "Running" once contextStatus is cleared', () => {
+    useSessionStore.setState({
+      currentSession: makeSession({ phase: 'build', isRunning: true }),
+      contextStatus: null,
+    })
+    const container = render()
+    const el = container.querySelector('[data-testid="session-status-indicator"]')
+    expect(el?.textContent).toContain('Running')
   })
 
   it('renders "Waiting for input" when there are pending questions (no phase suffix)', () => {

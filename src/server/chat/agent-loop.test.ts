@@ -1241,6 +1241,10 @@ describe('maxTokens clamping', () => {
     const callArgs = completeMock.mock.calls[0]?.[0]
     expect(callArgs).toBeDefined()
     expect(callArgs.skipClientReasoningEffort).toBeUndefined()
+    // A local backend that accepts the connection but never responds must
+    // not hang this call forever — every .complete() call site is expected
+    // to pass a bound signal (see name-generator.ts for the same pattern).
+    expect(callArgs.signal).toBeInstanceOf(AbortSignal)
     expect(streamLLMPure).not.toHaveBeenCalled()
   })
 
@@ -1912,6 +1916,138 @@ describe('runTopLevelAgentLoop live stats', () => {
     )
 
     expect(chatStatsCount(onMessage)).toBe(0)
+  })
+})
+
+describe('runTopLevelAgentLoop context status', () => {
+  let mockEventStore: EventStore
+  let mockSessionManager: SessionManager
+  let mockLLMClient: any
+  let mockTurnMetrics: TurnMetrics
+  let assembleRequestMock: ReturnType<typeof vi.fn>
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+
+    mockEventStore = {
+      append: vi.fn(),
+      getEvents: vi.fn().mockReturnValue([]),
+      getLatestSeq: vi.fn().mockReturnValue(0),
+      cleanupOldEvents: vi.fn().mockReturnValue(0),
+    } as unknown as EventStore
+    ;(getEventStore as any).mockReturnValue(mockEventStore)
+
+    mockLLMClient = {
+      getModel: vi.fn().mockReturnValue('test-model'),
+    }
+
+    mockTurnMetrics = {
+      addToolTime: vi.fn(),
+      addLLMCall: vi.fn(),
+      buildStats: vi.fn().mockReturnValue({}),
+    } as unknown as TurnMetrics
+
+    assembleRequestMock = vi.fn().mockReturnValue({
+      systemPrompt: 'test-system-prompt',
+      messages: [{ role: 'user', content: 'hello' }],
+      tools: [{ name: 'read_file' }],
+    })
+    ;(getAllInstructions as any).mockResolvedValue({ content: 'test instructions', files: [] })
+    ;(getEnabledSkillMetadata as any).mockResolvedValue([])
+    ;(consumeStreamGenerator as any).mockResolvedValue({
+      content: 'done',
+      toolCalls: [],
+      segments: [],
+      usage: { promptTokens: 10, completionTokens: 5 },
+      timing: { ttft: 0.1, completionTime: 0.5, tps: 10, prefillTps: 100 },
+      aborted: false,
+      finishReason: 'stop',
+      modelParams: {},
+    })
+
+    mockSessionManager = {
+      requireSession: vi.fn().mockReturnValue({
+        workdir: '/test',
+        projectId: 'test-project',
+        executionState: null,
+        criteria: [],
+        isRunning: false,
+      }),
+      getEffectiveWorkdir: vi.fn().mockReturnValue('/test'),
+      getProjectWorkdir: vi.fn().mockReturnValue('/test'),
+      getContextState: vi.fn().mockReturnValue({
+        currentTokens: 0,
+        maxTokens: 200000,
+        compactionCount: 0,
+        dangerZone: false,
+        canCompact: false,
+        dynamicContextChanged: false,
+      }),
+      getCurrentModelContext: vi.fn().mockReturnValue(200000),
+      getCurrentModelSettings: vi.fn().mockReturnValue({}),
+      getModelCompactionThreshold: vi.fn().mockReturnValue(undefined),
+      setCurrentContextSize: vi.fn(),
+      getDynamicContextChanged: vi.fn().mockReturnValue(false),
+      setDynamicContextChanged: vi.fn(),
+      getCachedPrompt: vi.fn().mockReturnValue(undefined),
+      setCachedPrompt: vi.fn(),
+      getLspManager: vi.fn(),
+      drainAsapMessages: vi.fn().mockReturnValue([]),
+      getCurrentWindowMessages: vi.fn().mockReturnValue([]),
+      updateMessage: vi.fn(),
+    } as any
+  })
+
+  function makeConfig(overrides?: Partial<TopLevelLoopConfig>): TopLevelLoopConfig {
+    return {
+      mode: 'planner',
+      append: vi.fn(),
+      sessionManager: mockSessionManager,
+      sessionId: 'test-session',
+      llmClient: mockLLMClient,
+      statsIdentity: { providerId: 'test', providerName: 'Test', backend: 'unknown' as const, model: 'test-model' },
+      assembleRequest: assembleRequestMock as any,
+      getToolRegistry: () => ({ tools: [], definitions: [], execute: vi.fn() }) as any,
+      getConversationMessages: vi.fn().mockResolvedValue([]),
+      ...overrides,
+    }
+  }
+
+  it('emits chat.progress with the estimated context size before the LLM call', async () => {
+    const onMessage = vi.fn()
+    const callOrder: string[] = []
+    ;(consumeStreamGenerator as any).mockImplementation(async () => {
+      callOrder.push('stream')
+      return {
+        content: 'done',
+        toolCalls: [],
+        segments: [],
+        usage: { promptTokens: 10, completionTokens: 5 },
+        timing: { ttft: 0.1, completionTime: 0.5, tps: 10, prefillTps: 100 },
+        aborted: false,
+        finishReason: 'stop',
+        modelParams: {},
+      }
+    })
+
+    await runTopLevelAgentLoop(
+      makeConfig({
+        onMessage: (msg: any) => {
+          if (msg.type === 'chat.progress') callOrder.push('progress')
+          onMessage(msg)
+        },
+      }),
+      mockTurnMetrics,
+    )
+
+    const progressMessage = onMessage.mock.calls
+      .map((args: unknown[]) => args[0] as { type: string; payload: { message: string; phase?: string } })
+      .find((msg) => msg.type === 'chat.progress')
+
+    expect(progressMessage).toBeDefined()
+    expect(progressMessage?.payload.phase).toBe('starting')
+    expect(progressMessage?.payload.message).toMatch(/tokens/)
+    expect(callOrder).toEqual(['progress', 'stream'])
   })
 })
 
