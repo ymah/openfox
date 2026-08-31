@@ -201,3 +201,65 @@ describe('AgentSelector — effort-change gate (case 2a)', () => {
     expect(mockAuthFetch).toHaveBeenCalledTimes(1)
   })
 })
+
+describe('AgentSelector — dev/gtd category grouping', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    clearCache()
+    mockSessionMode = 'builder'
+    mockWarmCache = true
+  })
+
+  afterEach(() => {
+    cleanup()
+    document.body.innerHTML = ''
+  })
+
+  async function renderWithAgents(defaults: { id: string; name: string; category?: string }[]) {
+    mockAuthFetch.mockImplementation(async () => ({
+      ok: true,
+      json: async () => ({
+        defaults: defaults.map((d) => ({ ...d, subagent: false, allowedTools: [], description: '' })),
+        userItems: [],
+        projectItems: [],
+        modelOverrides: {},
+      }),
+    }))
+    render(
+      <EffortChangeGateProvider>
+        <AgentSelector />
+      </EffortChangeGateProvider>,
+    )
+    await waitFor(() => expect(readAgents()?.defaults.length).toBe(defaults.length))
+    await userEvent.click(screen.getByTitle('Switch agent'))
+  }
+
+  it('shows no section headers when every agent shares the same category (no visual change for pure-dev projects)', async () => {
+    await renderWithAgents([
+      { id: 'builder', name: 'Builder', category: 'dev' },
+      { id: 'planner', name: 'Planner', category: 'dev' },
+    ])
+    expect(screen.queryByText('dev')).toBeNull()
+  })
+
+  it('shows no section headers when nothing is categorized (pre-existing default agents, no category field)', async () => {
+    await renderWithAgents([
+      { id: 'builder', name: 'Builder' },
+      { id: 'planner', name: 'Planner' },
+    ])
+    expect(screen.queryByText('dev')).toBeNull()
+    expect(screen.queryByText('gtd')).toBeNull()
+  })
+
+  it('groups agents under Dev/GTD headers, dev first, when both categories are present', async () => {
+    await renderWithAgents([
+      { id: 'gtd-secretary', name: 'GTD Secretary', category: 'gtd' },
+      { id: 'builder', name: 'Builder', category: 'dev' },
+    ])
+    expect(screen.getByText('dev')).toBeTruthy()
+    expect(screen.getByText('gtd')).toBeTruthy()
+
+    const headers = screen.getAllByText(/^(dev|gtd)$/)
+    expect(headers.map((h) => h.textContent)).toEqual(['dev', 'gtd'])
+  })
+})

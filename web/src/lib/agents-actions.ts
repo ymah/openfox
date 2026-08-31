@@ -9,6 +9,7 @@ export interface AgentInfo {
   subagent: boolean
   allowedTools: string[]
   color?: string
+  category?: string
   results?: string[]
 }
 
@@ -20,6 +21,7 @@ export interface AgentFull {
     subagent: boolean
     allowedTools: string[]
     color?: string
+    category?: string
     results?: string[]
   }
   prompt: string

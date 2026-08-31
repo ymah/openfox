@@ -57,6 +57,7 @@ function parseAgentFile(raw: string, filename: string): AgentDefinition | undefi
     subagent: meta['subagent'] === true,
     allowedTools: Array.isArray(meta['allowedTools']) ? meta['allowedTools'].map(String) : [],
     ...(typeof meta['color'] === 'string' ? { color: meta['color'] } : {}),
+    ...(typeof meta['category'] === 'string' ? { category: meta['category'] } : {}),
     ...(Array.isArray(meta['results']) ? { results: meta['results'].map(String) } : {}),
   }
 

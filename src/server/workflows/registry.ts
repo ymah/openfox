@@ -120,6 +120,7 @@ export interface WorkflowCatalogEntry {
   name: string
   description?: string
   color?: string
+  category?: string
   scope: WorkflowScope
   parameters?: import('../../shared/types.js').WorkflowParameter[]
 }
@@ -146,6 +147,7 @@ export async function listAvailableWorkflows(configDir: string, projectDir?: str
     name: workflow.metadata.name,
     description: workflow.metadata.description,
     ...(workflow.metadata.color ? { color: workflow.metadata.color } : {}),
+    ...(workflow.metadata.category ? { category: workflow.metadata.category } : {}),
     scope: projectIds.has(workflow.metadata.id)
       ? ('project' as const)
       : userIds.has(workflow.metadata.id)

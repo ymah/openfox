@@ -4,6 +4,7 @@ name: GTD Secretary
 description: Primary GTD agent — captures ideas and, once a project is approved, dispatches the work to specialized sub-agents and closes it out
 subagent: false
 color: '#f59e0b'
+category: gtd
 allowedTools:
   - read_file
   - write_file

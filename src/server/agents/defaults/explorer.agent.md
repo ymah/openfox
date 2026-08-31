@@ -4,6 +4,7 @@ name: Explorer
 description: Explore codebase, understand structure, and find relevant code
 subagent: true
 color: '#8b5cf6'
+category: dev
 allowedTools:
   - read_file
   - grep_files
