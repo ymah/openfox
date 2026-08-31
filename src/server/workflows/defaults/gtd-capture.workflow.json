@@ -1,0 +1,32 @@
+{
+  "metadata": {
+    "id": "gtd-capture",
+    "name": "GTD — Capture",
+    "description": "Capture rapide d'une idée en une phrase dans l'inbox du vault courant.",
+    "version": "1.0.0",
+    "color": "#f59e0b",
+    "parameters": [
+      {
+        "id": "idea",
+        "label": "Idée",
+        "description": "L'idée en une phrase",
+        "position": 0,
+        "required": true
+      }
+    ]
+  },
+  "entryStep": "capture",
+  "settings": { "maxIterations": 5 },
+  "steps": [
+    {
+      "id": "capture",
+      "name": "Capturer",
+      "type": "agent",
+      "phase": "build",
+      "agentId": "gtd-secretary",
+      "prompt": "Capture cette idée dans l'inbox : {{idea}}\n\nÉcris-la telle quelle (une phrase), sans poser de questions ni la clarifier — ce n'est que la capture. Puis appelle step_done().",
+      "transitions": [{ "when": { "type": "always" }, "goto": "$done" }]
+    }
+  ],
+  "startCondition": { "type": "always" }
+}
