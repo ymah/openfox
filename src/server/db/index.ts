@@ -14,6 +14,11 @@ export function initDatabase(config: Config): Database.Database {
   db = new Database(config.database.path)
   db.pragma('journal_mode = WAL')
   db.pragma('foreign_keys = ON')
+  // Explicit rather than relying on better-sqlite3's default (5000ms): under
+  // WAL, concurrent writers (multiple sessions' event appends) can contend
+  // for the write lock — without this, a busy connection throws SQLITE_BUSY
+  // immediately instead of waiting briefly for the lock to free up.
+  db.pragma('busy_timeout = 5000')
 
   runMigrations(db)
 

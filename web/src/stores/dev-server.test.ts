@@ -100,6 +100,40 @@ describe('useDevServerStore per-workdir isolation', () => {
     expect(logs.at(-1)?.content).toBe('line-2499')
   })
 
+  it('caps logs by total bytes, not just chunk count', async () => {
+    // A chunk is a raw WS payload, not a line — a handful of megabyte-sized
+    // chunks stays far under the 2000-chunk cap while pinning a lot of memory.
+    const oneMb = 'x'.repeat(1024 * 1024)
+    for (let i = 0; i < 6; i++) {
+      useDevServerStore.getState().handleMessage({
+        type: 'devServer.output',
+        payload: { workdir: WORKDIR_A, stream: 'stdout', content: oneMb },
+      })
+    }
+    await nextFrame()
+
+    const logs = entryOf(WORKDIR_A)?.logs ?? []
+    expect(logs.length).toBeLessThan(6)
+    const totalBytes = logs.reduce((sum, log) => sum + log.content.length, 0)
+    expect(totalBytes).toBeLessThanOrEqual(2 * 1024 * 1024)
+  })
+
+  it('evicts least-recently-used workdirs so byWorkdir cannot grow forever', async () => {
+    for (let i = 0; i < 8; i++) {
+      useDevServerStore.getState().handleMessage({
+        type: 'devServer.output',
+        payload: { workdir: `/projects/w${i}`, stream: 'stdout', content: `out-${i}` },
+      })
+      await nextFrame()
+    }
+
+    const keys = Object.keys(useDevServerStore.getState().byWorkdir)
+    expect(keys.length).toBeLessThanOrEqual(5)
+    // The most recently written workdir is always retained.
+    expect(keys).toContain('/projects/w7')
+    expect(keys).not.toContain('/projects/w0')
+  })
+
   it('saveConfig persists config for the targeted workdir only', async () => {
     vi.mocked(authFetch).mockResolvedValue({
       ok: true,

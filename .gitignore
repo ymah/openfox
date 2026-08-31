@@ -58,9 +58,18 @@ logs/
 coverage/
 test-results/
 
+# Eval harness output (scripts/eval) — run-local, machine/model-specific
+scripts/eval/results/
+
 .playwright-cli/
 e2e-test-project/
 tmp/
 worktrees/
 
 plugins/
+
+# Local MCP tool config/cache, not part of the project
+.serena/
+
+# Personal session scratch notes, never part of the project
+SESSION-NOTES.md

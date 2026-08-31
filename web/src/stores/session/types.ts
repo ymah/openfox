@@ -80,6 +80,8 @@ export interface SessionPane {
   llmRetry: LLMRetryState | null
   /** Cumulative turn stats streamed while a turn is running; null when idle. */
   liveTurnStats: MessageStats | null
+  /** Status shown before the first response chunk arrives (e.g. context size about to be sent); null once streaming starts or idle. */
+  contextStatus: string | null
 }
 
 export interface SessionState {
@@ -110,6 +112,8 @@ export interface SessionState {
   llmRetry: LLMRetryState | null
   /** Cumulative turn stats streamed while a turn is running; null when idle. */
   liveTurnStats: MessageStats | null
+  /** Status shown before the first response chunk arrives (e.g. context size about to be sent); null once streaming starts or idle. */
+  contextStatus: string | null
   sessionsHasMore: boolean
   sessionsPaginationLoading: boolean
   pendingSessionCreate: boolean | string

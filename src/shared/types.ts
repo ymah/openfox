@@ -302,7 +302,7 @@ export interface ModelSessionStats extends StatsIdentity {
 export interface InjectedFile {
   path: string // File path or identifier
   content: string // File content
-  source: 'agents-md' | 'global' | 'project' // Where the file came from
+  source: 'agents-md' | 'global' | 'project' | 'directory' // Where the file came from
 }
 
 // Preparing tool call (temporary, replaced by full ToolCall when complete)

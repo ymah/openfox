@@ -53,6 +53,7 @@ import {
   getDefaultSkillIds,
   saveSkillToProject,
   deleteProjectSkill,
+  importSkillsFromDirectory,
 } from './registry.js'
 import { getSetting } from '../db/settings.js'
 
@@ -126,6 +127,7 @@ describe('loadDefaultSkills', () => {
     expect(defaults.length).toBeGreaterThanOrEqual(1)
     expect(defaults.some((s) => s.metadata.id === 'browser')).toBe(true)
     expect(defaults.some((s) => s.metadata.id === 'workflows')).toBe(true)
+    expect(defaults.some((s) => s.metadata.id === 'gtd')).toBe(true)
   })
 })
 
@@ -559,5 +561,95 @@ describe('getDefaultSkillIds', () => {
     expect(ids.length).toBeGreaterThan(0)
     expect(ids).toContain('browser')
     expect(ids).toContain('workflows')
+  })
+})
+
+describe('importSkillsFromDirectory', () => {
+  it('imports every valid skill package from a source directory into .openfox/skills/', async () => {
+    const sourceDir = await mkdtemp(join(tmpdir(), 'skill-import-source-'))
+    try {
+      await createPortableInRoot(sourceDir, 'foo-skill', 'Do the foo thing.')
+      await createPortableInRoot(sourceDir, 'bar-skill', 'Do the bar thing.')
+
+      const result = await importSkillsFromDirectory(sourceDir, tempDir)
+
+      expect(result.imported.sort()).toEqual(['bar-skill', 'foo-skill'])
+      expect(result.skipped).toEqual([])
+
+      const imported = await loadProjectSkills(tempDir)
+      const ids = imported.map((s) => s.metadata.id).sort()
+      expect(ids).toEqual(['bar-skill', 'foo-skill'])
+    } finally {
+      await rm(sourceDir, { recursive: true, force: true })
+    }
+  })
+
+  it('copies auxiliary files alongside SKILL.md, not just the frontmatter/prompt', async () => {
+    const sourceDir = await mkdtemp(join(tmpdir(), 'skill-import-source-'))
+    try {
+      await createPortableInRoot(sourceDir, 'with-asset', 'Uses an asset.')
+      await writeFile(join(sourceDir, 'with-asset', 'template.txt'), 'auxiliary content')
+
+      await importSkillsFromDirectory(sourceDir, tempDir)
+
+      const assetContent = await readFile(join(tempDir, '.openfox', 'skills', 'with-asset', 'template.txt'), 'utf-8')
+      expect(assetContent).toBe('auxiliary content')
+    } finally {
+      await rm(sourceDir, { recursive: true, force: true })
+    }
+  })
+
+  it('reports, but does not throw on, malformed skill packages', async () => {
+    const sourceDir = await mkdtemp(join(tmpdir(), 'skill-import-source-'))
+    try {
+      await createPortableInRoot(sourceDir, 'good-skill', 'Works fine.')
+      // Missing description
+      await mkdir(join(sourceDir, 'no-description'), { recursive: true })
+      await writeFile(join(sourceDir, 'no-description', 'SKILL.md'), '---\nname: no-description\n---\n\nBody.\n')
+      // Missing body
+      await mkdir(join(sourceDir, 'empty-body'), { recursive: true })
+      await writeFile(
+        join(sourceDir, 'empty-body', 'SKILL.md'),
+        '---\nname: empty-body\ndescription: has no body\n---\n',
+      )
+      // Not a skill at all — no SKILL.md, must be ignored without appearing in skipped
+      await mkdir(join(sourceDir, 'not-a-skill'), { recursive: true })
+      await writeFile(join(sourceDir, 'not-a-skill', 'README.md'), 'irrelevant')
+
+      const result = await importSkillsFromDirectory(sourceDir, tempDir)
+
+      expect(result.imported).toEqual(['good-skill'])
+      expect(result.skipped).toHaveLength(2)
+      expect(result.skipped.find((s) => s.name === 'no-description')?.reason).toContain('description')
+      expect(result.skipped.find((s) => s.name === 'empty-body')?.reason).toContain('instructions body')
+      expect(result.skipped.some((s) => s.name === 'not-a-skill')).toBe(false)
+    } finally {
+      await rm(sourceDir, { recursive: true, force: true })
+    }
+  })
+
+  it('skips (does not overwrite) a skill that already exists in the project', async () => {
+    const sourceDir = await mkdtemp(join(tmpdir(), 'skill-import-source-'))
+    try {
+      await createProjectSkillFile(tempDir, 'existing', 'Existing', 'Original content.')
+      await createPortableInRoot(sourceDir, 'existing', 'Imported content.')
+
+      const result = await importSkillsFromDirectory(sourceDir, tempDir)
+
+      expect(result.imported).toEqual([])
+      expect(result.skipped[0]).toMatchObject({ name: 'existing' })
+      expect(result.skipped[0]?.reason).toContain('already exists')
+
+      const skills = await loadProjectSkills(tempDir)
+      expect(skills[0]!.prompt).toBe('Original content.')
+    } finally {
+      await rm(sourceDir, { recursive: true, force: true })
+    }
+  })
+
+  it('throws a clear error when the source directory does not exist', async () => {
+    await expect(importSkillsFromDirectory(join(tempDir, 'does-not-exist'), tempDir)).rejects.toThrow(
+      'Cannot read directory',
+    )
   })
 })

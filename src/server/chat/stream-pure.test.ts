@@ -169,6 +169,101 @@ describe('stream-pure', () => {
     expect(preparingEvents[2]!).toMatchObject({ data: { name: 'run_command', arguments: '{"command":"echo hello"}' } })
   })
 
+  it('streams partial arguments for edit_file (large deltas, no throttling)', async () => {
+    const client = createMockClient([
+      { type: 'tool_call_delta', index: 0, name: 'edit_file' },
+      { type: 'tool_call_delta', index: 0, arguments: '{"path":"src/foo.ts","old_string":"function foo() {' },
+      { type: 'tool_call_delta', index: 0, arguments: '\\n  return 1\\n}","new_string":"function foo() {' },
+      { type: 'tool_call_delta', index: 0, arguments: '\\n  return 2\\n}"}' },
+      {
+        type: 'done',
+        response: {
+          id: 'resp-1',
+          content: '',
+          toolCalls: [
+            {
+              id: 'call-1',
+              name: 'edit_file',
+              arguments: { path: 'src/foo.ts', old_string: 'function foo() {\n  return 1\n}', new_string: 'x' },
+            },
+          ],
+          finishReason: 'tool_calls',
+          usage: { promptTokens: 10, completionTokens: 10, totalTokens: 20 },
+        },
+      },
+    ])
+
+    const gen = streamLLMPure({
+      messageId: 'msg-1',
+      systemPrompt: 'sys',
+      llmClient: client,
+      messages: [{ role: 'user', content: 'edit' }],
+      tools: [{ type: 'function', function: { name: 'edit_file', description: 'Edit', parameters: {} } }],
+    })
+
+    const events: Array<{ type: string; data: unknown }> = []
+    await consumeStreamGenerator(gen, (event) => {
+      events.push(event)
+    })
+
+    const preparingEvents = events.filter((e) => e.type === 'tool.preparing')
+    // Delta 1: name only. Delta 2 (51 chars) and delta 3 (47 chars) each clear
+    // the 40-char throttle threshold on their own and are emitted. Delta 4
+    // (17 chars) does not clear it and is skipped — 3 total, not 4.
+    expect(preparingEvents).toHaveLength(3)
+    expect(preparingEvents[0]!).toMatchObject({ data: { name: 'edit_file' } })
+    expect(preparingEvents[2]!).toMatchObject({
+      data: { name: 'edit_file', arguments: expect.stringContaining('"new_string":"function foo() {') },
+    })
+  })
+
+  it('throttles small partial-argument deltas for write_file, emitting once enough has accumulated', async () => {
+    const client = createMockClient([
+      { type: 'tool_call_delta', index: 0, name: 'write_file' },
+      // 32 chars — below the 40-char threshold on its own, skipped.
+      { type: 'tool_call_delta', index: 0, arguments: '{"path":"src/foo.ts","content":"' },
+      // 48 chars — cumulative growth (32+48=80) clears the threshold, emitted
+      // with the FULL accumulated string (not just this delta's chunk).
+      { type: 'tool_call_delta', index: 0, arguments: 'hello world this is a growing file content chunk' },
+      // 2 chars — growth since the last emission (80→82) doesn't clear the
+      // threshold again, skipped.
+      { type: 'tool_call_delta', index: 0, arguments: '!!' },
+      {
+        type: 'done',
+        response: {
+          id: 'resp-1',
+          content: '',
+          toolCalls: [{ id: 'call-1', name: 'write_file', arguments: { path: 'src/foo.ts', content: 'x' } }],
+          finishReason: 'tool_calls',
+          usage: { promptTokens: 10, completionTokens: 10, totalTokens: 20 },
+        },
+      },
+    ])
+
+    const gen = streamLLMPure({
+      messageId: 'msg-1',
+      systemPrompt: 'sys',
+      llmClient: client,
+      messages: [{ role: 'user', content: 'write' }],
+      tools: [{ type: 'function', function: { name: 'write_file', description: 'Write', parameters: {} } }],
+    })
+
+    const events: Array<{ type: string; data: unknown }> = []
+    await consumeStreamGenerator(gen, (event) => {
+      events.push(event)
+    })
+
+    const preparingEvents = events.filter((e) => e.type === 'tool.preparing')
+    expect(preparingEvents).toHaveLength(2)
+    expect(preparingEvents[0]!).toMatchObject({ data: { name: 'write_file' } })
+    expect(preparingEvents[1]!).toMatchObject({
+      data: {
+        name: 'write_file',
+        arguments: '{"path":"src/foo.ts","content":"hello world this is a growing file content chunk',
+      },
+    })
+  })
+
   it('treats AbortError as an aborted result', async () => {
     const controller = new AbortController()
     controller.abort()

@@ -497,6 +497,8 @@ describe('SubAgentManager', () => {
 
     expect(findAgentById('explorer', agents)?.metadata.allowedTools).toEqual([
       'read_file',
+      'grep_files',
+      'glob_files',
       'run_command',
       'web_fetch',
       'load_skill',

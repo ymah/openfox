@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
-import { mkdir, writeFile, rm } from 'node:fs/promises'
+import { mkdir, writeFile, rm, readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { loadConfig } from '../config.js'
@@ -9,8 +9,10 @@ import { setSetting, SETTINGS_KEYS } from '../db/settings.js'
 import {
   buildLanguageInstruction,
   findInstructionFiles,
+  findProjectInstructionsDirectory,
   getAllInstructions,
   getInstructionsForWorkdir,
+  importInstructionsFromDirectory,
   loadInstructions,
   type InstructionFile,
 } from './instructions.js'
@@ -243,6 +245,120 @@ describe('instructions', () => {
 
       expect(result.content).toBe('')
       expect(result.files).toEqual([])
+    })
+  })
+
+  describe('findProjectInstructionsDirectory', () => {
+    it('returns an empty array when .openfox/instructions/ does not exist', async () => {
+      const files = await findProjectInstructionsDirectory(testDir)
+      expect(files).toEqual([])
+    })
+
+    it('returns .md files sorted, ignoring non-.md files and subdirectories', async () => {
+      const dir = join(testDir, '.openfox', 'instructions')
+      await mkdir(dir, { recursive: true })
+      await writeFile(join(dir, 'zeta.md'), 'Zeta content')
+      await writeFile(join(dir, 'alpha.md'), 'Alpha content')
+      await writeFile(join(dir, 'notes.txt'), 'ignored')
+      await mkdir(join(dir, 'assets'), { recursive: true })
+
+      const files = await findProjectInstructionsDirectory(testDir)
+
+      expect(files).toEqual([
+        { path: join(dir, 'alpha.md'), source: 'directory' },
+        { path: join(dir, 'zeta.md'), source: 'directory' },
+      ])
+    })
+  })
+
+  describe('getAllInstructions with .openfox/instructions/', () => {
+    it('includes .openfox/instructions/ files in the FILE INSTRUCTIONS section', async () => {
+      const project = createProject('OpenFox', testDir)
+      const dir = join(testDir, '.openfox', 'instructions')
+      await mkdir(dir, { recursive: true })
+      await writeFile(join(dir, 'style.md'), 'Follow the style guide')
+
+      const result = await getAllInstructions(testDir, project.id)
+
+      expect(result.content).toContain('## FILE INSTRUCTIONS')
+      expect(result.content).toContain('Follow the style guide')
+      expect(result.files.some((f) => f.source === 'directory' && f.content === 'Follow the style guide')).toBe(true)
+    })
+
+    it('combines AGENTS.md and .openfox/instructions/ files in the same section', async () => {
+      const project = createProject('OpenFox', testDir)
+      await writeFile(join(testDir, 'AGENTS.md'), '# Agent rules')
+      const dir = join(testDir, '.openfox', 'instructions')
+      await mkdir(dir, { recursive: true })
+      await writeFile(join(dir, 'extra.md'), 'Extra rules')
+
+      const result = await getAllInstructions(testDir, project.id)
+
+      expect(result.content).toContain('# Agent rules')
+      expect(result.content).toContain('Extra rules')
+      expect(result.files.map((f) => f.source)).toEqual(['agents-md', 'directory'])
+    })
+  })
+
+  describe('importInstructionsFromDirectory', () => {
+    let sourceDir: string
+
+    beforeEach(async () => {
+      sourceDir = join(
+        tmpdir(),
+        `openfox-instructions-import-source-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+      )
+      await mkdir(sourceDir, { recursive: true })
+    })
+
+    afterEach(async () => {
+      await rm(sourceDir, { recursive: true, force: true })
+    })
+
+    it('imports .md files into .openfox/instructions/', async () => {
+      await writeFile(join(sourceDir, 'foo.md'), 'Foo content')
+      await writeFile(join(sourceDir, 'bar.md'), 'Bar content')
+
+      const result = await importInstructionsFromDirectory(sourceDir, testDir)
+
+      expect(result.imported.sort()).toEqual(['bar.md', 'foo.md'])
+      expect(result.skipped).toEqual([])
+
+      const files = await findProjectInstructionsDirectory(testDir)
+      expect(files.map((f) => f.path.split('/').pop())).toEqual(['bar.md', 'foo.md'])
+    })
+
+    it('reports non-.md files as skipped instead of importing them', async () => {
+      await writeFile(join(sourceDir, 'notes.md'), 'Notes')
+      await writeFile(join(sourceDir, 'image.png'), 'not markdown')
+
+      const result = await importInstructionsFromDirectory(sourceDir, testDir)
+
+      expect(result.imported).toEqual(['notes.md'])
+      expect(result.skipped).toEqual([{ name: 'image.png', reason: 'Not a .md file' }])
+    })
+
+    it('skips (does not overwrite) a file that already exists in the project', async () => {
+      const dir = join(testDir, '.openfox', 'instructions')
+      await mkdir(dir, { recursive: true })
+      await writeFile(join(dir, 'existing.md'), 'Original content')
+      await writeFile(join(sourceDir, 'existing.md'), 'Imported content')
+
+      const result = await importInstructionsFromDirectory(sourceDir, testDir)
+
+      expect(result.imported).toEqual([])
+      expect(result.skipped).toEqual([
+        { name: 'existing.md', reason: 'A file with this name already exists in the project' },
+      ])
+
+      const content = await readFile(join(dir, 'existing.md'), 'utf-8')
+      expect(content).toBe('Original content')
+    })
+
+    it('throws a clear error when the source directory does not exist', async () => {
+      await expect(importInstructionsFromDirectory(join(testDir, 'does-not-exist'), testDir)).rejects.toThrow(
+        'Cannot read directory',
+      )
     })
   })
 })

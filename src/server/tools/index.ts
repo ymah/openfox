@@ -6,6 +6,8 @@ import { readFileTool } from './read.js'
 import { writeFileTool } from './write.js'
 import { editFileTool } from './edit.js'
 import { runCommandTool } from './shell.js'
+import { grepFilesTool } from './grep.js'
+import { globFilesTool } from './glob.js'
 import { askUserTool, AskUserInterrupt } from './ask.js'
 import { PathAccessDeniedError } from './path-security.js'
 import { sessionMetadataTool } from './session-metadata.js'
@@ -45,6 +47,8 @@ function getBuiltInTools(): Tool[] {
       writeFileTool,
       editFileTool,
       runCommandTool,
+      grepFilesTool,
+      globFilesTool,
       askUserTool,
       sessionMetadataTool,
       callSubAgentTool,

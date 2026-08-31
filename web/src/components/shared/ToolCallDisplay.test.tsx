@@ -238,6 +238,7 @@ describe('ToolCallDisplay — PathConfirmationButtons placement', () => {
           error: null,
           llmRetry: null,
           liveTurnStats: null,
+          contextStatus: null,
         },
       },
     })
@@ -307,7 +308,20 @@ describe('ToolCallDisplay — default expansion', () => {
 
   afterEach(cleanup)
 
-  it('expands large results by default', () => {
+  it('collapses large results by default', () => {
+    // collapseLargeToolCalls defaults ON: a fully-expanded feed retains the
+    // highlighted markup for every large result at once, which is what drove
+    // the browser tab into multi-GB territory.
+    const bigResult = 'x'.repeat(10_000)
+    const { container } = render(
+      <ToolCallDisplay tool="custom_tool" args={{}} status="success" result={bigResult} variant="expandable" />,
+    )
+
+    expect(container.querySelector('pre')).toBeNull()
+  })
+
+  it('still expands large results when collapseLargeToolCalls is turned off', () => {
+    settingResource.write('false', SETTINGS_KEYS.DISPLAY_COLLAPSE_LARGE_TOOL_CALLS)
     const bigResult = 'x'.repeat(10_000)
     const { container } = render(
       <ToolCallDisplay tool="custom_tool" args={{}} status="success" result={bigResult} variant="expandable" />,
@@ -348,7 +362,22 @@ describe('ToolCallDisplay — default expansion', () => {
     expect(container.textContent).toContain('command output content')
   })
 
-  it('expands large write_file content by default', () => {
+  it('collapses large write_file content by default', () => {
+    const bigContent = 'z'.repeat(10_000)
+    const { container } = render(
+      <ToolCallDisplay
+        tool="write_file"
+        args={{ path: '/tmp/x.ts', content: bigContent }}
+        status="success"
+        variant="expandable"
+      />,
+    )
+
+    expect(container.querySelector('[data-testid="file-preview"]')).toBeNull()
+  })
+
+  it('still expands large write_file content when collapseLargeToolCalls is turned off', () => {
+    settingResource.write('false', SETTINGS_KEYS.DISPLAY_COLLAPSE_LARGE_TOOL_CALLS)
     const bigContent = 'z'.repeat(10_000)
     const { container } = render(
       <ToolCallDisplay

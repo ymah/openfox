@@ -306,4 +306,54 @@ describe('skill library routes', () => {
 
     expect(response.status).toBe(400)
   })
+
+  describe('POST /import-to-project', () => {
+    it('bulk-imports every valid skill package from a local directory into the project', async () => {
+      const sourceDir = join(rootDir, 'external-skills')
+      await mkdir(join(sourceDir, 'foo-skill'), { recursive: true })
+      await writeFile(
+        join(sourceDir, 'foo-skill', 'SKILL.md'),
+        '---\nname: foo-skill\ndescription: Foo\n---\n\nDo the foo thing.',
+      )
+      await mkdir(join(sourceDir, 'bar-skill'), { recursive: true })
+      await writeFile(
+        join(sourceDir, 'bar-skill', 'SKILL.md'),
+        '---\nname: bar-skill\ndescription: Bar\n---\n\nDo the bar thing.',
+      )
+
+      const response = await fetch(`${baseUrl}/api/skills/import-to-project`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ sourcePath: sourceDir }),
+      })
+
+      expect(response.status).toBe(200)
+      const body = (await response.json()) as { imported: string[]; skipped: unknown[] }
+      expect(body.imported.sort()).toEqual(['bar-skill', 'foo-skill'])
+      expect(body.skipped).toEqual([])
+      expect(
+        await readFile(join(rootDir, 'project', '.openfox', 'skills', 'foo-skill', 'SKILL.md'), 'utf-8'),
+      ).toContain('Do the foo thing.')
+    })
+
+    it('returns 400 for a source path that does not exist', async () => {
+      const response = await fetch(`${baseUrl}/api/skills/import-to-project`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ sourcePath: join(rootDir, 'does-not-exist') }),
+      })
+
+      expect(response.status).toBe(400)
+    })
+
+    it('returns 400 when sourcePath is missing', async () => {
+      const response = await fetch(`${baseUrl}/api/skills/import-to-project`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({}),
+      })
+
+      expect(response.status).toBe(400)
+    })
+  })
 })

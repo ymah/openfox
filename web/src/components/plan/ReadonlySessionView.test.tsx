@@ -11,20 +11,23 @@ vi.mock('../../lib/api', () => ({
   authFetch: vi.fn(),
 }))
 
-vi.mock('../../hooks/useDisplaySettings', () => ({
-  useDisplaySettings: () => ({
-    showThinking: true,
-    showVerboseToolOutput: true,
-    showStats: true,
-    showAgentDefinitions: true,
-    showWorkflowBars: true,
-    showSyntaxHighlighting: true,
-    maxVisibleItems: 300,
-  }),
+const useDisplaySettingsMock = vi.fn(() => ({
+  showThinking: true,
+  showVerboseToolOutput: true,
+  showStats: true,
+  showAgentDefinitions: true,
+  showWorkflowBars: true,
+  showSyntaxHighlighting: true,
+  maxVisibleItems: 300,
 }))
 
+vi.mock('../../hooks/useDisplaySettings', () => ({
+  useDisplaySettings: () => useDisplaySettingsMock(),
+}))
+
+const chatFeedItemsMock = vi.fn((_props: { displayItems: unknown[] }) => <div>ChatFeedItems</div>)
 vi.mock('./ChatFeedItems', () => ({
-  ChatFeedItems: () => <div>ChatFeedItems</div>,
+  ChatFeedItems: (props: { displayItems: unknown[] }) => chatFeedItemsMock(props),
 }))
 
 vi.mock('../shared/Spinner', () => ({
@@ -61,5 +64,47 @@ describe('ReadonlySessionView — server-side truncation', () => {
     await waitFor(() => {
       expect(screen.getByText(/5 older hidden/)).toBeDefined()
     })
+  })
+
+  it('caps rendered items at maxVisibleItems, unlike the previous unbounded render', async () => {
+    chatFeedItemsMock.mockClear()
+    // mockReturnValue (not -Once): the component re-renders multiple times as
+    // the fetch resolves, and every render must see the lowered cap.
+    useDisplaySettingsMock.mockReturnValue({
+      showThinking: true,
+      showVerboseToolOutput: true,
+      showStats: true,
+      showAgentDefinitions: true,
+      showWorkflowBars: true,
+      showSyntaxHighlighting: true,
+      maxVisibleItems: 3,
+    })
+    const messages = Array.from({ length: 5 }, (_, i) => ({
+      id: `msg-${i}`,
+      role: 'user',
+      content: `message ${i}`,
+      timestamp: new Date().toISOString(),
+    }))
+
+    vi.mocked(authFetch).mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          session: { id: 'session-1', metadata: { title: 'Test' } },
+          messages,
+          hiddenCount: 0,
+        }),
+        { status: 200, headers: { 'Content-Type': 'application/json' } },
+      ),
+    )
+
+    render(<ReadonlySessionView />)
+
+    // maxVisibleItems is mocked to 3 — 5 messages in means only the last 3
+    // reach ChatFeedItems, and the header reports the other 2 as hidden.
+    await waitFor(() => {
+      expect(screen.getByText(/2 older hidden/)).toBeDefined()
+    })
+    const lastCallProps = chatFeedItemsMock.mock.calls.at(-1)?.[0] as { displayItems: unknown[] }
+    expect(lastCallProps.displayItems).toHaveLength(3)
   })
 })

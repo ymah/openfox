@@ -229,6 +229,13 @@ export async function* streamLLMPure(options: PureStreamOptions): AsyncGenerator
   const returnValueArgs = new Map<number, string>()
   // Track accumulated tool arguments by index (for streaming partial args)
   const toolArgs = new Map<number, string>()
+  // Length of toolArgs last emitted per index, for the size-sensitive tools
+  // below (edit_file/write_file can carry a whole file's content — resending
+  // the full accumulated string on every single delta would be O(n²) bytes
+  // over the session's lifetime; run_command/return_value stay unthrottled,
+  // their payloads are short).
+  const lastPreparingEmitLength = new Map<number, number>()
+  const THROTTLED_PREPARING_MIN_GROWTH = 40
 
   let result: Awaited<ReturnType<typeof stream.next>>['value'] = null
   let aborted = false
@@ -293,6 +300,7 @@ export async function* streamLLMPure(options: PureStreamOptions): AsyncGenerator
             // If the tool name is a sub-agent alias, show call_sub_agent instead
             const displayName = options.subAgentAliases?.has(fullName) ? 'call_sub_agent' : fullName
             const accumulatedArgs = toolArgs.get(value.index)
+            if (accumulatedArgs) lastPreparingEmitLength.set(value.index, accumulatedArgs.length)
             yield {
               type: 'tool.preparing',
               data: {
@@ -303,15 +311,22 @@ export async function* streamLLMPure(options: PureStreamOptions): AsyncGenerator
               },
             }
           } else if (seenToolIndices.has(value.index) && value.arguments) {
-            // Only stream partial arguments for tools that display them live
-            // (run_command shows the command text, return_value shows sub-agent output)
+            // Only stream partial arguments for tools that display them live —
+            // run_command shows the command text, return_value shows sub-agent
+            // output, edit_file/write_file show a live diff/preview.
             const name = toolNames.get(value.index)
-            if (name === 'run_command' || name === 'return_value') {
+            if (name === 'run_command' || name === 'return_value' || name === 'edit_file' || name === 'write_file') {
               const accumulatedArgs = toolArgs.get(value.index)
               if (accumulatedArgs) {
-                yield {
-                  type: 'tool.preparing',
-                  data: { messageId, index: value.index, name, arguments: accumulatedArgs },
+                const throttled = name === 'edit_file' || name === 'write_file'
+                const lastLength = lastPreparingEmitLength.get(value.index) ?? 0
+                const grew = accumulatedArgs.length - lastLength
+                if (!throttled || grew >= THROTTLED_PREPARING_MIN_GROWTH) {
+                  lastPreparingEmitLength.set(value.index, accumulatedArgs.length)
+                  yield {
+                    type: 'tool.preparing',
+                    data: { messageId, index: value.index, name, arguments: accumulatedArgs },
+                  }
                 }
               }
             }

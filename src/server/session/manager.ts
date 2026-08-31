@@ -64,6 +64,7 @@ import { logger } from '../utils/logger.js'
 import { EventEmitter, type Unsubscribe } from '../utils/async.js'
 import { getLspManager as getOrCreateLspManager, shutdownLspManager, type LspManager } from '../lsp/index.js'
 import { devServerManager } from '../dev-server/manager.js'
+import { getSessionProcesses, stopProcess as stopBackgroundProcess } from '../tools/background-process/manager.js'
 import { resolveLLMClientForAgent, getAgentModelOverride } from '../agents/model-overrides.js'
 import { parseDefaultModelSelection } from '../provider-manager.js'
 import { getEventStore } from '../events/store.js'
@@ -575,6 +576,15 @@ export class SessionManager {
     shutdownLspManager(id).catch((err) => {
       logger.error('Error shutting down LSP manager', { sessionId: id, error: err })
     })
+
+    // Stop any background processes this session started — otherwise they
+    // keep running (still holding their port/PID) with no server-side record
+    // left to find or kill them once the session is gone.
+    for (const proc of getSessionProcesses(id)) {
+      stopBackgroundProcess(proc.id, id).catch((err) => {
+        logger.error('Error stopping background process', { sessionId: id, processId: proc.id, error: err })
+      })
+    }
 
     // Delete events first
     const eventStore = getEventStore()

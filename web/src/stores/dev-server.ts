@@ -18,8 +18,39 @@ interface DevServerEntry {
 }
 
 const MAX_LOG_CHUNKS = 2000
+// A chunk is a raw WS payload, not a line: a stack trace or a sourcemap dump
+// can be megabytes on its own, so a count-only cap bounds nothing in memory.
+const MAX_LOG_BYTES = 2 * 1024 * 1024
+// Entries are keyed by workdir and were never pruned, so every project ever
+// visited kept its full buffer alive for the tab's lifetime.
+const MAX_TRACKED_WORKDIRS = 5
 
-const capLogs = (logs: LogChunk[]): LogChunk[] => (logs.length > MAX_LOG_CHUNKS ? logs.slice(-MAX_LOG_CHUNKS) : logs)
+const capLogs = (logs: LogChunk[]): LogChunk[] => {
+  const capped = logs.length > MAX_LOG_CHUNKS ? logs.slice(-MAX_LOG_CHUNKS) : logs
+  let bytes = 0
+  let firstKept = capped.length
+  // Walk back from the newest chunk, keeping as much recent output as fits.
+  for (let i = capped.length - 1; i >= 0; i--) {
+    bytes += capped[i]!.content.length
+    if (bytes > MAX_LOG_BYTES) break
+    firstKept = i
+  }
+  return firstKept === 0 ? capped : capped.slice(firstKept)
+}
+
+/** Drop the least-recently-updated workdir entries so byWorkdir cannot grow with every project visited. */
+const capWorkdirs = (byWorkdir: Record<string, DevServerEntry>, keep: string): Record<string, DevServerEntry> => {
+  const keys = Object.keys(byWorkdir)
+  if (keys.length <= MAX_TRACKED_WORKDIRS) return byWorkdir
+  // Object key order is insertion order; upsertEntry re-inserts the touched
+  // workdir last, so the oldest-touched keys sit at the front.
+  const evictable = keys.filter((key) => key !== keep)
+  const next = { ...byWorkdir }
+  for (const key of evictable.slice(0, keys.length - MAX_TRACKED_WORKDIRS)) {
+    delete next[key]
+  }
+  return next
+}
 
 interface DevServerStore {
   byWorkdir: Record<string, DevServerEntry>
@@ -44,10 +75,12 @@ const upsertEntry = (
   byWorkdir: Record<string, DevServerEntry>,
   workdir: string,
   updater: (entry: DevServerEntry) => DevServerEntry,
-): Record<string, DevServerEntry> => ({
-  ...byWorkdir,
-  [workdir]: updater(byWorkdir[workdir] ?? EMPTY_ENTRY),
-})
+): Record<string, DevServerEntry> => {
+  // Re-insert the touched workdir last so key order tracks recency, which is
+  // what lets capWorkdirs evict the least-recently-used entries.
+  const { [workdir]: existing, ...rest } = byWorkdir
+  return capWorkdirs({ ...rest, [workdir]: updater(existing ?? EMPTY_ENTRY) }, workdir)
+}
 
 export const useDevServerStore = create<DevServerStore>()((set, get) => {
   function flushLogBuffer() {
@@ -123,12 +156,12 @@ export const useDevServerStore = create<DevServerStore>()((set, get) => {
     fetchLogs: (workdir) =>
       run(workdir, devServerUrl(workdir, 'logs'), undefined, (data) => (entry) => ({
         ...entry,
-        logs: (data as { logs: { stream: 'stdout' | 'stderr'; content: string; type?: 'marker' }[] }).logs.map(
-          (log) => ({
+        logs: capLogs(
+          (data as { logs: { stream: 'stdout' | 'stderr'; content: string; type?: 'marker' }[] }).logs.map((log) => ({
             stream: log.stream,
             content: log.content,
             ...(log.type ? { type: log.type } : {}),
-          }),
+          })),
         ),
       })),
 

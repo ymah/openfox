@@ -82,6 +82,36 @@ describe('Tool Preparing Events', () => {
     expect(preparingIdx).toBeLessThan(toolCallIdx)
   })
 
+  it('emits chat.tool_preparing with the target path for write_file', async () => {
+    await client.send('chat.send', {
+      content: 'create src/newfile.ts with a greeting',
+    })
+
+    const events = await collectChatEvents(client)
+    assertNoErrors(events)
+
+    const preparingEvents = events.get<ChatToolPreparingPayload>('chat.tool_preparing')
+    const writeFilePreparing = preparingEvents.find((e) => e.payload.name === 'write_file')
+
+    expect(writeFilePreparing).toBeDefined()
+    expect(writeFilePreparing?.payload.arguments).toContain('src/newfile.ts')
+  })
+
+  it('emits chat.tool_preparing with the target path for edit_file', async () => {
+    await client.send('chat.send', {
+      content: 'use edit_file to rename add to sum',
+    })
+
+    const events = await collectChatEvents(client)
+    assertNoErrors(events)
+
+    const preparingEvents = events.get<ChatToolPreparingPayload>('chat.tool_preparing')
+    const editFilePreparing = preparingEvents.find((e) => e.payload.name === 'edit_file')
+
+    expect(editFilePreparing).toBeDefined()
+    expect(editFilePreparing?.payload.arguments).toContain('src/math.ts')
+  })
+
   it('emits chat.tool_preparing with correct payload structure', async () => {
     await client.send('chat.send', {
       content: 'Use glob to find all TypeScript files',

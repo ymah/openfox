@@ -169,8 +169,12 @@ describe('loadAllWorkflows', () => {
 describe('loadDefaultWorkflows', () => {
   it('should load bundled default workflows', async () => {
     const defaults = await loadDefaultWorkflows()
-    expect(defaults.length).toBeGreaterThanOrEqual(1)
+    expect(defaults.length).toBeGreaterThanOrEqual(5)
     expect(defaults.some((w) => w.metadata.id === 'default')).toBe(true)
+    expect(defaults.some((w) => w.metadata.id === 'gtd-capture')).toBe(true)
+    expect(defaults.some((w) => w.metadata.id === 'gtd-clarify')).toBe(true)
+    expect(defaults.some((w) => w.metadata.id === 'gtd-weekly-review')).toBe(true)
+    expect(defaults.some((w) => w.metadata.id === 'gtd-build')).toBe(true)
   })
 
   it('default Build & Verify workflow starts with a user step offering work-here vs start-a-workspace', async () => {

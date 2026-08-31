@@ -6,6 +6,7 @@ import { formatDiagnosticsForLLM, appendLspInstallHint } from './diagnostics.js'
 import { validateFileForWrite, computeFileHash } from './file-tracker.js'
 import { encodeContent } from '../utils/encoding.js'
 import { serverT } from '../i18n.js'
+import { withFileLock } from './edit.js'
 
 interface WriteFileArgs {
   path: string
@@ -46,54 +47,61 @@ export const writeFileTool = createTool<WriteFileArgs>(
     const fullPath = helpers.resolvePath(args.path)
     await helpers.checkPathAccess([fullPath])
 
-    // Validate file was read before writing (only for existing files)
-    const readFiles = context.sessionManager.getReadFiles(context.sessionId)
-    const validation = await validateFileForWrite(fullPath, readFiles, context.workdir)
-    if (!validation.valid) {
-      return helpers.error(
-        validation.error?.message ?? serverT({ en: 'File validation failed', fr: 'Échec de la validation du fichier' }),
+    // Same per-file mutex as edit_file: without it, a concurrent edit_file
+    // (read → diff → write) and write_file (validate → write) on the same
+    // path race — whichever finishes last silently wins, discarding the
+    // other's change with no error.
+    return withFileLock(fullPath, async () => {
+      // Validate file was read before writing (only for existing files)
+      const readFiles = context.sessionManager.getReadFiles(context.sessionId)
+      const validation = await validateFileForWrite(fullPath, readFiles, context.workdir)
+      if (!validation.valid) {
+        return helpers.error(
+          validation.error?.message ??
+            serverT({ en: 'File validation failed', fr: 'Échec de la validation du fichier' }),
+        )
+      }
+
+      // Ensure parent directory exists
+      const dir = dirname(fullPath)
+      await mkdir(dir, { recursive: true })
+
+      // Write file
+      const encoding = args.encoding ?? 'utf-8'
+      const encoded = encodeContent(args.content, encoding)
+      await writeFile(fullPath, encoded)
+
+      const lineCount = args.content.split('\n').length
+      const byteCount = encoded.length
+
+      let output = serverT(
+        {
+          en: 'Successfully wrote {{lines}} lines ({{bytes}} bytes) to {{path}}',
+          fr: '{{lines}} lignes ({{bytes}} octets) écrites avec succès dans {{path}}',
+        },
+        { lines: lineCount, bytes: byteCount, path: args.path },
       )
-    }
+      let diagnostics: Diagnostic[] = []
 
-    // Ensure parent directory exists
-    const dir = dirname(fullPath)
-    await mkdir(dir, { recursive: true })
+      // Get LSP diagnostics if available
+      if (context.lspManager) {
+        diagnostics = await context.lspManager.notifyFileChange(fullPath, args.content)
+        output += formatDiagnosticsForLLM(diagnostics)
+        output = appendLspInstallHint(output, context.lspManager, fullPath)
+      }
 
-    // Write file
-    const encoding = args.encoding ?? 'utf-8'
-    const encoded = encodeContent(args.content, encoding)
-    await writeFile(fullPath, encoded)
+      // Update file hash after write so subsequent writes don't require re-reading
+      const newHash = await computeFileHash(fullPath)
+      if (newHash) {
+        context.sessionManager.updateFileHash(context.sessionId, fullPath, newHash, relative(context.workdir, fullPath))
+      }
 
-    const lineCount = args.content.split('\n').length
-    const byteCount = encoded.length
-
-    let output = serverT(
-      {
-        en: 'Successfully wrote {{lines}} lines ({{bytes}} bytes) to {{path}}',
-        fr: '{{lines}} lignes ({{bytes}} octets) écrites avec succès dans {{path}}',
-      },
-      { lines: lineCount, bytes: byteCount, path: args.path },
-    )
-    let diagnostics: Diagnostic[] = []
-
-    // Get LSP diagnostics if available
-    if (context.lspManager) {
-      diagnostics = await context.lspManager.notifyFileChange(fullPath, args.content)
-      output += formatDiagnosticsForLLM(diagnostics)
-      output = appendLspInstallHint(output, context.lspManager, fullPath)
-    }
-
-    // Update file hash after write so subsequent writes don't require re-reading
-    const newHash = await computeFileHash(fullPath)
-    if (newHash) {
-      context.sessionManager.updateFileHash(context.sessionId, fullPath, newHash, relative(context.workdir, fullPath))
-    }
-
-    // jscpd:ignore-start
-    return helpers.success(output, false, {
-      ...(diagnostics.length > 0 && { diagnostics }),
-      metadata: { path: fullPath },
+      // jscpd:ignore-start
+      return helpers.success(output, false, {
+        ...(diagnostics.length > 0 && { diagnostics }),
+        metadata: { path: fullPath },
+      })
+      // jscpd:ignore-end
     })
-    // jscpd:ignore-end
   },
 )

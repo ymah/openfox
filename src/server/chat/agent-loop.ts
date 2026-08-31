@@ -41,9 +41,10 @@ import {
   createChatLLMRetryMessage,
   createChatLLMRetryFailedMessage,
   createChatStatsMessage,
+  createChatProgressMessage,
 } from '../ws/protocol.js'
 import { executeTools, type ToolBatchContext } from './execute-tools.js'
-import { estimateToolResultTokens, isContextLengthError } from './token-budget.js'
+import { estimateToolResultTokens, estimatePromptTokens, isContextLengthError } from './token-budget.js'
 import { loadAllAgentsDefault, getSubAgents } from '../agents/registry.js'
 import { createRetryLimiter, type RetryLimiter } from './retry-limiter.js'
 import { drainQueue } from './drain-queue.js'
@@ -251,11 +252,19 @@ export async function runTopLevelAgentLoop(
 
       const modelSettings = sessionManager.getCurrentModelSettings(sessionId, config.mode)
 
+      // The only .complete() call site in the codebase without a bound signal
+      // — a local backend that accepts the connection but never responds
+      // (a real llama.cpp/ollama failure mode) hung this indefinitely with
+      // no way to recover. Same pattern as name-generator.ts.
+      const warmupTimeoutSignal = AbortSignal.timeout(30_000)
+      const warmupSignal = signal ? AbortSignal.any([warmupTimeoutSignal, signal]) : warmupTimeoutSignal
+
       await resolveClient().complete({
         messages: [{ role: 'system', content: assembledRequest.systemPrompt }],
         tools: assembledRequest.tools,
         maxTokens: 1,
         temperature: 0,
+        signal: warmupSignal,
         ...(modelSettings ? { modelSettings } : {}),
       })
 
@@ -364,6 +373,25 @@ export async function runTopLevelAgentLoop(
         256,
         contextWindow - contextState.currentTokens - pendingToolResultTokens - OUTPUT_RESERVE_TOKENS,
       )
+
+      // Status shown client-side until the first streamed chunk arrives —
+      // the only honest progress figure available since no integrated LLM
+      // backend reports prompt-eval progress. Emitted on every attempt
+      // (including retries), since each is a genuine new send.
+      {
+        const estimatedTokens = estimatePromptTokens(
+          assembledRequest.systemPrompt,
+          assembledRequest.messages ?? [],
+          assembledRequest.tools ?? [],
+        )
+        const percent = contextWindow > 0 ? Math.round((estimatedTokens / contextWindow) * 100) : 0
+        config.onMessage?.(
+          createChatProgressMessage(
+            `Context: ~${estimatedTokens.toLocaleString('en-US')} / ${contextWindow.toLocaleString('en-US')} tokens (${percent}%) — sending to model…`,
+            'starting',
+          ),
+        )
+      }
 
       let modelSettings = config.modelSettings ?? sessionManager.getCurrentModelSettings(sessionId, config.mode)
       if (modelSettings && currentMaxTokensOverride !== undefined) {

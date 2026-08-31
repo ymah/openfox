@@ -22,6 +22,31 @@ interface BackgroundProcessStore {
 
 let logBuffer: { processId: string; stream: 'stdout' | 'stderr'; content: string }[] = []
 
+// Sliding-window cap so a long-lived background process (a watch task, a
+// tailed log, a dev server started via background_process) can't grow this
+// store without bound — same pattern and limit as dev-server.ts's capLogs.
+const MAX_LOG_LINES = 2000
+// A "line" is really one output chunk of arbitrary length, so the count cap
+// alone bounds nothing in memory — same reasoning as dev-server.ts.
+const MAX_LOG_BYTES = 2 * 1024 * 1024
+// A finished process keeps its logs so the user can still read the outcome,
+// but on a much tighter budget: it will never produce more output, and
+// exited processes otherwise accumulate for the whole session.
+const EXITED_MAX_LOG_LINES = 500
+const EXITED_MAX_LOG_BYTES = 256 * 1024
+
+const capLogs = (lines: LogLine[], maxLines = MAX_LOG_LINES, maxBytes = MAX_LOG_BYTES): LogLine[] => {
+  const capped = lines.length > maxLines ? lines.slice(-maxLines) : lines
+  let bytes = 0
+  let firstKept = capped.length
+  for (let i = capped.length - 1; i >= 0; i--) {
+    bytes += capped[i]!.content.length
+    if (bytes > maxBytes) break
+    firstKept = i
+  }
+  return firstKept === 0 ? capped : capped.slice(firstKept)
+}
+
 export const useBackgroundProcessesStore = create<BackgroundProcessStore>()((set, get) => {
   function flushLogBuffer() {
     if (logBuffer.length === 0) return
@@ -31,10 +56,10 @@ export const useBackgroundProcessesStore = create<BackgroundProcessStore>()((set
       const newLogs = { ...state.logs }
       for (const chunk of chunks) {
         const existing = newLogs[chunk.processId] ?? []
-        newLogs[chunk.processId] = [
+        newLogs[chunk.processId] = capLogs([
           ...existing,
           { offset: existing.length, content: chunk.content, timestamp: Date.now(), stream: chunk.stream },
-        ]
+        ])
       }
       return { logs: newLogs }
     })
@@ -85,7 +110,7 @@ export const useBackgroundProcessesStore = create<BackgroundProcessStore>()((set
 
     setLogs: (processId, logs) =>
       set((state) => ({
-        logs: { ...state.logs, [processId]: logs },
+        logs: { ...state.logs, [processId]: capLogs(logs) },
       })),
 
     clearLogs: (processId) =>
@@ -134,9 +159,17 @@ export const useBackgroundProcessesStore = create<BackgroundProcessStore>()((set
         case 'backgroundProcess.exited': {
           const processId = payload.processId as string
           const exitCode = payload.exitCode as number | null
-          set((state) => ({
-            processes: state.processes.map((p) => (p.id === processId ? { ...p, status: 'exited', exitCode } : p)),
-          }))
+          set((state) => {
+            const existing = state.logs[processId]
+            return {
+              processes: state.processes.map((p) => (p.id === processId ? { ...p, status: 'exited', exitCode } : p)),
+              // Keep the tail (the outcome is what the user reads) on the
+              // tighter exited budget — no more output is coming.
+              logs: existing
+                ? { ...state.logs, [processId]: capLogs(existing, EXITED_MAX_LOG_LINES, EXITED_MAX_LOG_BYTES) }
+                : state.logs,
+            }
+          })
           break
         }
         case 'backgroundProcess.removed': {

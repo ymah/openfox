@@ -1,9 +1,12 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { hasBackgroundAmpersand, runCommandTool, detectGitMutation } from './shell.js'
 import type { ToolContext } from './types.js'
+import { OUTPUT_LIMITS } from './types.js'
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+
+const IS_WIN32 = process.platform === 'win32'
 
 describe('hasBackgroundAmpersand', () => {
   it('detects trailing & as background operator', () => {
@@ -283,5 +286,78 @@ describe('detectGitMutation', () => {
     expect(detectGitMutation('git diff')).toBeNull()
     expect(detectGitMutation('git --version')).toBeNull()
     expect(detectGitMutation('git branch --show-current')).toBeNull()
+  })
+})
+
+describe('run_command output truncation', () => {
+  let tempDir: string
+  let context: ToolContext
+
+  const mockSessionManager = {
+    recordFileRead: vi.fn(),
+    getReadFiles: vi.fn().mockReturnValue({}),
+    updateFileHash: vi.fn(),
+  } as any
+
+  beforeEach(async () => {
+    tempDir = await mkdtemp(join(tmpdir(), 'shell-truncation-test-'))
+    context = {
+      sessionManager: mockSessionManager,
+      workdir: tempDir,
+      sessionId: 'test-session',
+    }
+  })
+
+  afterEach(async () => {
+    await rm(tempDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 })
+  })
+
+  it('leaves short output untouched, with the exit code visible', async () => {
+    const result = await runCommandTool.execute({ command: 'echo hello' }, context)
+
+    expect(result.truncated).toBe(false)
+    expect(result.output).toContain('hello')
+    expect(result.output).toContain('[Exit code: 0]')
+  })
+
+  it.skipIf(IS_WIN32)('keeps the tail — not the head — when the byte limit is exceeded', async () => {
+    // A single long line isolates the byte-limit path from the line-limit path.
+    const filler = 'x'.repeat(OUTPUT_LIMITS.run_command.maxBytes + 10_000)
+    const command = `node -e "process.stdout.write('START-MARKER\\n' + '${filler}' + '\\nEND-MARKER\\n')"`
+
+    const result = await runCommandTool.execute({ command }, context)
+
+    expect(result.truncated).toBe(true)
+    expect(result.output).not.toContain('START-MARKER')
+    expect(result.output).toContain('END-MARKER')
+    expect(result.output).toContain('[Exit code: 0]')
+    expect(result.output).toContain('truncated due to size limit')
+  })
+
+  it.skipIf(IS_WIN32)('keeps the tail — not the head — when the line limit is exceeded', async () => {
+    const totalLines = OUTPUT_LIMITS.run_command.maxLines + 500
+    const script = `for (let i = 0; i < ${totalLines}; i++) console.log('line-' + i)`
+    const command = `node -e "${script}"`
+
+    const result = await runCommandTool.execute({ command }, context)
+
+    expect(result.truncated).toBe(true)
+    expect(result.output).not.toContain('line-0\n')
+    expect(result.output).toContain(`line-${totalLines - 1}`)
+    expect(result.output).toContain('[Exit code: 0]')
+    expect(result.output).toContain('truncated due to line limit')
+  })
+
+  it.skipIf(IS_WIN32)('reports a failing exit code even when output is truncated', async () => {
+    const totalLines = OUTPUT_LIMITS.run_command.maxLines + 50
+    const script = `for (let i = 0; i < ${totalLines}; i++) console.log('line-' + i); process.exit(3)`
+    const command = `node -e "${script}"`
+
+    const result = await runCommandTool.execute({ command }, context)
+
+    expect(result.truncated).toBe(true)
+    expect(result.output).toContain('[Exit code: 3]')
+    expect(result.success).toBe(false)
+    expect(result.error).toContain('exited with code 3')
   })
 })

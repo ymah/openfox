@@ -5,6 +5,11 @@ import type { SessionState } from './types'
 
 const lastSeenPhase = new Map<string, string>()
 
+/** Drop a session's tracked phase once its pane is closed/evicted, so this map doesn't grow forever. */
+export function clearPhaseTracking(sessionId: string): void {
+  lastSeenPhase.delete(sessionId)
+}
+
 export function resolveAgentType(state: SessionState, sessionId?: string): AgentType | undefined {
   const session = sessionId === state.currentSession?.id ? state.currentSession : null
   const summary = state.sessions.find((s) => s.id === sessionId)

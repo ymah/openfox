@@ -3,14 +3,23 @@ import { mkdtemp, rm } from 'node:fs/promises'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 
-const { getLspManagerMock, shutdownLspManagerMock } = vi.hoisted(() => ({
-  getLspManagerMock: vi.fn(() => ({ name: 'mock-lsp' })),
-  shutdownLspManagerMock: vi.fn(async () => {}),
-}))
+const { getLspManagerMock, shutdownLspManagerMock, getSessionProcessesMock, stopBackgroundProcessMock } = vi.hoisted(
+  () => ({
+    getLspManagerMock: vi.fn(() => ({ name: 'mock-lsp' })),
+    shutdownLspManagerMock: vi.fn(async () => {}),
+    getSessionProcessesMock: vi.fn(() => [] as { id: string }[]),
+    stopBackgroundProcessMock: vi.fn(async () => {}),
+  }),
+)
 
 vi.mock('../lsp/index.js', () => ({
   getLspManager: getLspManagerMock,
   shutdownLspManager: shutdownLspManagerMock,
+}))
+
+vi.mock('../tools/background-process/manager.js', () => ({
+  getSessionProcesses: getSessionProcessesMock,
+  stopProcess: stopBackgroundProcessMock,
 }))
 
 const mockGetGitBranch = vi.fn()
@@ -90,6 +99,9 @@ describe('SessionManager', () => {
     manager = new SessionManager(mockProviderManager as any)
     getLspManagerMock.mockClear()
     shutdownLspManagerMock.mockClear()
+    getSessionProcessesMock.mockClear()
+    getSessionProcessesMock.mockReturnValue([])
+    stopBackgroundProcessMock.mockClear()
     mockProviderManager.getCurrentModelContext.mockClear()
     mockGetGitBranch.mockResolvedValue(null) // default: no branch
   })
@@ -124,6 +136,17 @@ describe('SessionManager', () => {
     expect(manager.getActiveSessionId()).toBeNull()
     expect(shutdownLspManagerMock).toHaveBeenCalledWith(first.id)
     expect(events).toEqual(['session_created', 'session_created', 'session_deleted'])
+  })
+
+  it("stops the session's background processes on delete, not just its LSP manager", () => {
+    const session = manager.createSession(projectId)
+    getSessionProcessesMock.mockReturnValue([{ id: 'proc-1' }, { id: 'proc-2' }])
+
+    manager.deleteSession(session.id)
+
+    expect(getSessionProcessesMock).toHaveBeenCalledWith(session.id)
+    expect(stopBackgroundProcessMock).toHaveBeenCalledWith('proc-1', session.id)
+    expect(stopBackgroundProcessMock).toHaveBeenCalledWith('proc-2', session.id)
   })
 
   it('throws when requiring a missing session and resolves lsp managers lazily', () => {

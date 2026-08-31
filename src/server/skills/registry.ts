@@ -7,7 +7,7 @@
  * User items override defaults by ID.
  */
 
-import { writeFile, mkdir, unlink, readdir, readFile, realpath, rm } from 'node:fs/promises'
+import { writeFile, mkdir, unlink, readdir, readFile, realpath, rm, cp } from 'node:fs/promises'
 import { join, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { homedir } from 'node:os'
@@ -54,6 +54,25 @@ function portableVersion(data: Record<string, unknown>): string {
   return data['version'] === undefined ? '' : String(data['version'])
 }
 
+/**
+ * Extract id/description/prompt from a parsed SKILL.md — shared by
+ * loadPortableSkills (silent discovery) and importSkillsFromDirectory
+ * (which needs the same fields but reports per-field validation failures
+ * instead of silently skipping).
+ */
+function parseSkillMdFrontmatter(parsed: ReturnType<typeof matter>): {
+  id: string
+  description: string
+  prompt: string
+  data: Record<string, unknown>
+} {
+  const data = parsed.data as Record<string, unknown>
+  const id = typeof data['name'] === 'string' ? data['name'].trim() : ''
+  const description = typeof data['description'] === 'string' ? data['description'].trim() : ''
+  const prompt = parsed.content.trim()
+  return { id, description, prompt, data }
+}
+
 async function loadPortableSkills(dir: string, source: SkillSource): Promise<SkillDefinition[]> {
   let entries
   try {
@@ -69,11 +88,7 @@ async function loadPortableSkills(dir: string, source: SkillSource): Promise<Ski
     const entrypoint = join(packageDir, 'SKILL.md')
     try {
       const content = await readFile(entrypoint, 'utf-8')
-      const parsed = matter(content)
-      const data = parsed.data as Record<string, unknown>
-      const id = typeof data['name'] === 'string' ? data['name'].trim() : ''
-      const description = typeof data['description'] === 'string' ? data['description'].trim() : ''
-      const prompt = parsed.content.trim()
+      const { id, description, prompt, data } = parseSkillMdFrontmatter(matter(content))
       if (!id || !description || !prompt) continue
       const resolvedDirectory = await realpath(packageDir)
       const warnings: string[] = []
@@ -289,6 +304,98 @@ export async function saveSkill(configDir: string, skill: SkillDefinition): Prom
 
 export async function saveSkillToProject(projectDir: string, skill: SkillDefinition): Promise<void> {
   await savePortableSkill(getProjectSkillsDir(projectDir), skill)
+}
+
+export interface ImportSkillsResult {
+  imported: string[]
+  skipped: Array<{ name: string; reason: string }>
+}
+
+/**
+ * Bulk-import skill packages from an arbitrary local directory (e.g. a
+ * cloned external repo's skills/ folder) into this project's .openfox/skills/.
+ * Unlike loadPortableSkills (silent discovery — invalid packages are just
+ * skipped), an import must report WHY each package was or wasn't imported,
+ * since the user is acting on a one-time action, not passively browsing.
+ *
+ * Copies the whole source subdirectory as-is (not a parse-then-re-serialize
+ * round-trip like savePortableSkill) so auxiliary files referenced from
+ * SKILL.md (scripts, templates, assets) survive the import unchanged.
+ */
+export async function importSkillsFromDirectory(sourceDir: string, projectDir: string): Promise<ImportSkillsResult> {
+  // jscpd:ignore-start — same setup shape as importInstructionsFromDirectory
+  // (context/instructions.ts): init result arrays, readdir the source,
+  // mkdir the target. The per-entry validation below is where the two
+  // genuinely diverge (frontmatter parsing + directory copy vs extension
+  // check + file copy), so only this shared preamble is marked.
+  const imported: string[] = []
+  const skipped: Array<{ name: string; reason: string }> = []
+
+  let entries
+  try {
+    entries = await readdir(sourceDir, { withFileTypes: true })
+  } catch {
+    throw new Error(`Cannot read directory: ${sourceDir}`)
+  }
+
+  const targetDir = getProjectSkillsDir(projectDir)
+  await mkdir(targetDir, { recursive: true })
+  // jscpd:ignore-end
+
+  for (const entry of entries) {
+    if (!entry.isDirectory() && !entry.isSymbolicLink()) continue
+    const packageDir = join(sourceDir, entry.name)
+    const entrypoint = join(packageDir, 'SKILL.md')
+
+    let content: string
+    try {
+      content = await readFile(entrypoint, 'utf-8')
+    } catch {
+      // No SKILL.md in this subdirectory — not a skill package at all
+      // (e.g. .git, node_modules), not a malformed one. Skip silently,
+      // same as loadPortableSkills does for non-skill subdirectories.
+      continue
+    }
+
+    let parsed: ReturnType<typeof matter>
+    try {
+      parsed = matter(content)
+    } catch {
+      skipped.push({ name: entry.name, reason: 'SKILL.md could not be parsed (invalid YAML frontmatter)' })
+      continue
+    }
+
+    const { id, description, prompt } = parseSkillMdFrontmatter(parsed)
+
+    if (!id) {
+      skipped.push({ name: entry.name, reason: 'SKILL.md is missing a "name" field' })
+      continue
+    }
+    if (!description) {
+      skipped.push({ name: id, reason: 'SKILL.md is missing a "description" field' })
+      continue
+    }
+    if (!prompt) {
+      skipped.push({ name: id, reason: 'SKILL.md has no instructions body' })
+      continue
+    }
+    if (id.length > 64 || !PORTABLE_NAME_REGEX.test(id)) {
+      skipped.push({ name: id, reason: 'Skill name must use 1-64 lowercase letters, numbers, and single hyphens' })
+      continue
+    }
+
+    const destination = join(targetDir, id)
+    const legacyDestination = join(targetDir, `${id}${SKILL_EXTENSION}`)
+    if ((await pathExists(destination)) || (await pathExists(legacyDestination))) {
+      skipped.push({ name: id, reason: 'A skill with this name already exists in the project' })
+      continue
+    }
+
+    await cp(packageDir, destination, { recursive: true })
+    imported.push(id)
+  }
+
+  return { imported, skipped }
 }
 
 function asRecord(value: unknown): Record<string, unknown> {

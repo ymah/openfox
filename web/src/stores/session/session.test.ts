@@ -2979,3 +2979,81 @@ describe('connect session-list refresh', () => {
     expect(urls.some((url) => url === '/api/sessions')).toBe(false)
   })
 })
+
+describe('pane cache eviction', () => {
+  beforeEach(() => {
+    wsSendMock.mockClear()
+    wsSubscribeMock.mockClear()
+    wsConnectMock.mockClear()
+    wsDisconnectMock.mockClear()
+    wsStatusMock.mockClear()
+    playNotificationMock.mockClear()
+    playAchievementMock.mockClear()
+    playInterventionMock.mockClear()
+    playWaitingForUserMock.mockClear()
+    playNewMessageMock.mockClear()
+    fetchMock.mockClear()
+  })
+
+  function queueSessionResponse(id: string) {
+    fetchMock.mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      json: () =>
+        Promise.resolve({
+          success: true,
+          session: {
+            id,
+            projectId: 'project-1',
+            workdir: '/tmp/project-1',
+            mode: 'planner',
+            phase: 'plan',
+            isRunning: false,
+            criteria: [],
+            summary: null,
+            messages: [],
+          },
+          messages: [],
+          contextState: null,
+          queueState: [],
+          pendingQuestions: [],
+        }),
+    })
+  }
+
+  it('caps cached panes for single-session navigation and evicts the least-recently-visited ones', async () => {
+    const useSessionStore = await loadSessionStore()
+
+    // MAX_CACHED_PANES (8, store.ts) applies to background panes only — the
+    // focused session is separately protected, so steady-state resident
+    // count is 9 (8 background + 1 focused).
+    for (let i = 1; i <= 10; i++) {
+      queueSessionResponse(`session-${i}`)
+      await useSessionStore.getState().loadSession(`session-${i}`)
+    }
+
+    const state = useSessionStore.getState()
+    expect(Object.keys(state.panes)).toHaveLength(9)
+    // The two oldest visits are gone; everything from session-2 onward survives.
+    expect(state.panes['session-1']).toBeUndefined()
+    expect(state.panes['session-2']).toBeDefined()
+    expect(state.panes['session-10']).toBeDefined()
+    expect(state.currentSession?.id).toBe('session-10')
+  })
+
+  it('never evicts a pane that is open in the split view, regardless of recency', async () => {
+    const useSessionStore = await loadSessionStore()
+
+    queueSessionResponse('split-pane')
+    await useSessionStore.getState().openPane('split-pane')
+
+    // Push well past the cap with unrelated single-session navigation.
+    for (let i = 1; i <= 12; i++) {
+      queueSessionResponse(`session-${i}`)
+      await useSessionStore.getState().loadSession(`session-${i}`)
+    }
+
+    expect(useSessionStore.getState().panes['split-pane']).toBeDefined()
+    expect(useSessionStore.getState().openSessionIds).toContain('split-pane')
+  })
+})
