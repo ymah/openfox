@@ -1,0 +1,43 @@
+{
+  "metadata": {
+    "id": "gtd-weekly-review",
+    "name": "GTD — Revue hebdomadaire",
+    "description": "Balaie le vault courant, propose des décisions de rangement, applique celles approuvées.",
+    "version": "1.0.0",
+    "color": "#0ea5e9"
+  },
+  "entryStep": "scan",
+  "settings": { "maxIterations": 10 },
+  "steps": [
+    {
+      "id": "scan",
+      "name": "Analyser le vault",
+      "type": "agent",
+      "phase": "plan",
+      "agentId": "gtd-secretary",
+      "prompt": "Fais la revue hebdomadaire GTD : balaie 00-inbox/, 10-projects/, 20-next-actions.md et 30-waiting-for.md. Pour chaque item stagnant, incohérent ou terminé, propose une décision (archiver, reporter en someday-maybe, relancer, clarifier). Écris le rapport en français dans 50-reference/reviews/<année>-W<semaine>.md, avec une liste claire des décisions proposées. Résume-le dans le chat. Puis appelle step_done().",
+      "transitions": [{ "when": { "type": "always" }, "goto": "approve" }]
+    },
+    {
+      "id": "approve",
+      "name": "Approuver les décisions",
+      "type": "user",
+      "phase": "waiting",
+      "transitions": [
+        { "when": { "type": "step_result", "result": "Appliquer" }, "goto": "apply" },
+        { "when": { "type": "step_result", "result": "Ignorer" }, "goto": "$done" },
+        { "when": { "type": "always" }, "goto": "$done" }
+      ]
+    },
+    {
+      "id": "apply",
+      "name": "Appliquer les décisions",
+      "type": "agent",
+      "phase": "build",
+      "agentId": "gtd-secretary",
+      "prompt": "Applique les décisions proposées dans la dernière revue (50-reference/reviews/). Déplace effectivement les fichiers concernés (archive, someday-maybe) et mets à jour leur frontmatter status. Puis appelle step_done().",
+      "transitions": [{ "when": { "type": "always" }, "goto": "$done" }]
+    }
+  ],
+  "startCondition": { "type": "always" }
+}
