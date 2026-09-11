@@ -32,6 +32,7 @@ function createSessionManager(): SessionManager {
     getContextState: vi.fn(() => ({ currentTokens: 0, maxTokens: 1000 })),
     clearMessageQueue: vi.fn(),
     drainCompletionMessages: vi.fn(() => []),
+    clearPauseState: vi.fn(),
   } as unknown as SessionManager
 }
 
