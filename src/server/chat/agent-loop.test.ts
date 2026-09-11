@@ -2192,6 +2192,7 @@ describe('runTopLevelAgentLoop context status', () => {
       drainAsapMessages: vi.fn().mockReturnValue([]),
       getCurrentWindowMessages: vi.fn().mockReturnValue([]),
       updateMessage: vi.fn(),
+      enterPauseGate: vi.fn().mockResolvedValue('released'),
     } as any
   })
 
