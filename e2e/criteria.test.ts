@@ -295,4 +295,39 @@ describe('Criteria System', () => {
       }
     })
   })
+
+  describe('Mode Switch', () => {
+    it('clears cached prompt when mode changes, ensuring new agent tools work', async () => {
+      const sessionId = client.getSession()!.id
+
+      // First: in planner mode, add a criterion
+      await client.send('chat.send', {
+        content:
+          'Add a criterion using session_metadata with action "add", key "criteria", and description "Test criterion 1".',
+      })
+      await client.waitForChatDone()
+
+      let session = client.getSession()!
+      let criteria = getCriteria(session)
+      expect(criteria.length).toBeGreaterThanOrEqual(1)
+
+      // Switch mode from planner to builder
+      await setSessionMode(server.url, sessionId, 'builder', server.wsUrl)
+      await new Promise((r) => setTimeout(r, 100))
+
+      // Second: in builder mode, add another criterion
+      // This should work correctly with the builder's tools
+      // (previously would fail due to stale cached prompt with planner tools)
+      await client.send('chat.send', {
+        content:
+          'Add a criterion using session_metadata with action "add", key "criteria", and description "Test criterion 2".',
+      })
+      await client.waitForChatDone()
+
+      session = client.getSession()!
+      criteria = getCriteria(session)
+      // Verify that we have at least 2 criteria and can still use session_metadata
+      expect(criteria.length).toBeGreaterThanOrEqual(2)
+    })
+  })
 })

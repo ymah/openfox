@@ -312,6 +312,17 @@ export function getSessionCachedPrompt(id: string): {
   }
 }
 
+export function clearSessionCachedPrompt(id: string): void {
+  const db = getDatabase()
+  const now = new Date().toISOString()
+
+  db.prepare(
+    `
+    UPDATE sessions SET cached_system_prompt = NULL, cached_tools = NULL, cached_hash = NULL, cached_prompt_hash = NULL, updated_at = ? WHERE id = ?
+  `,
+  ).run(now, id)
+}
+
 export function updateSessionMessageCount(id: string, delta: number): void {
   try {
     const db = getDatabase()
