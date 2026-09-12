@@ -23,6 +23,8 @@ import { AutoUpdateModal } from '../AutoUpdateModal'
 import { PluginZone } from '../plugins/PluginZone'
 import { WorkspaceBranchSection } from './WorkspaceBranchSection'
 import { ContextPopover } from './ContextPopover'
+import { useCurrentProject } from '../../hooks/useCurrentProject'
+import { getProjectMode } from '../../lib/project-modes'
 import type { SessionStatsSummary } from '@shared/types.js'
 
 interface SessionSidebarProps {
@@ -36,6 +38,8 @@ export function SessionSidebar({ workdir }: SessionSidebarProps) {
   const [activeMetadataKey, setActiveMetadataKey] = useState<string | null>(null)
 
   const { branch } = useGitStatus()
+  const project = useCurrentProject()
+  const showsDevChrome = getProjectMode(project?.type).showsDevChrome
   const version = useConfig().config?.version ?? null
   const { currentSession: session, sessionId } = useScopedContext()
   const sessionStats = useScopedPaneState(
@@ -155,21 +159,25 @@ export function SessionSidebar({ workdir }: SessionSidebarProps) {
         </div>
       </ScrollArea>
 
-      {/* Workspace & branch info — only shown for git repos. */}
-      <WorkspaceBranchSection
-        workspaceName={workspaceName ?? 'original'}
-        branch={branch}
-        workdir={workdir}
-        showEditorLink={showEditorLink}
-        sessionId={session?.id ?? ''}
-        projectId={session?.projectId ?? ''}
-      />
+      {showsDevChrome && (
+        <>
+          {/* Workspace & branch info — only shown for git repos. */}
+          <WorkspaceBranchSection
+            workspaceName={workspaceName ?? 'original'}
+            branch={branch}
+            workdir={workdir}
+            showEditorLink={showEditorLink}
+            sessionId={session?.id ?? ''}
+            projectId={session?.projectId ?? ''}
+          />
 
-      {/* Dev Server — below separator */}
-      <DevServerFooter workdir={workdir} />
+          {/* Dev Server — below separator */}
+          <DevServerFooter workdir={workdir} />
 
-      {/* Background Processes */}
-      <BackgroundProcesses sessionId={session?.id} />
+          {/* Background Processes */}
+          <BackgroundProcesses sessionId={session?.id} />
+        </>
+      )}
 
       {/* Version footer */}
       <PluginZone id="session.footer" context={{ sessionId: session?.id, workdir }}>

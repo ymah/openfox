@@ -30,7 +30,6 @@ function createSessionManager(): SessionManager {
     addMessage: vi.fn((_id: string, msg: unknown) => ({ id: 'msg-1', ...(msg as object) })),
     setPhase: vi.fn(),
     getContextState: vi.fn(() => ({ currentTokens: 0, maxTokens: 1000 })),
-    clearPauseState: vi.fn(),
     clearMessageQueue: vi.fn(),
     drainCompletionMessages: vi.fn(() => []),
     clearPauseState: vi.fn(),

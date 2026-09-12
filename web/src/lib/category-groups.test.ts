@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { groupByCategory, hasMultipleCategories } from './category-groups'
+import { groupByCategory, hasMultipleCategories, filterByProjectType } from './category-groups'
 
 interface Item {
   id: string
@@ -68,5 +68,22 @@ describe('hasMultipleCategories', () => {
 
   it('is true when one item is categorized and another is not', () => {
     expect(hasMultipleCategories<Item>([{ id: 'a', category: 'gtd' }, { id: 'b' }])).toBe(true)
+  })
+})
+
+describe('filterByProjectType', () => {
+  const items: Item[] = [
+    { id: 'builder', category: 'dev' },
+    { id: 'gtd-secretary', category: 'gtd' },
+    { id: 'custom-legacy' },
+  ]
+
+  it('keeps only items matching the project type, plus uncategorized items', () => {
+    expect(filterByProjectType(items, 'dev').map((i) => i.id)).toEqual(['builder', 'custom-legacy'])
+    expect(filterByProjectType(items, 'gtd').map((i) => i.id)).toEqual(['gtd-secretary', 'custom-legacy'])
+  })
+
+  it('returns everything unfiltered when the project type is unknown/not yet loaded', () => {
+    expect(filterByProjectType(items, undefined)).toEqual(items)
   })
 })

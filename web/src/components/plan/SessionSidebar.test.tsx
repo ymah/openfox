@@ -38,6 +38,12 @@ vi.mock('../../hooks/useGitStatus', () => ({
   useGitStatus: (...args: unknown[]) => mockUseGitStatus(...args),
 }))
 
+const mockUseCurrentProject = vi.fn() as Mock
+
+vi.mock('../../hooks/useCurrentProject', () => ({
+  useCurrentProject: () => mockUseCurrentProject(),
+}))
+
 /* ------------------------------------------------------------------ */
 /*  Child component mocks                                             */
 /* ------------------------------------------------------------------ */
@@ -74,6 +80,7 @@ beforeEach(() => {
 
   mockConfigStore.mockReturnValue({ version: '1.0.0' })
   mockUpdateStore.mockReturnValue({ status: 'idle', check: vi.fn() })
+  mockUseCurrentProject.mockReturnValue({ id: 'p1', type: 'dev' })
 })
 
 describe('SessionSidebar — git repo guards', () => {
@@ -89,6 +96,15 @@ describe('SessionSidebar — git repo guards', () => {
 
   it('[AUTOMATED] hides Edit buttons when project is not a git repository', () => {
     mockUseGitStatus.mockReturnValue({ branch: null, diff: { files: [], loading: false, error: null } })
+
+    const html = renderToStaticMarkup(<SessionSidebar />)
+
+    expect(html).not.toContain('Edit')
+  })
+
+  it('hides workspace/branch chrome for a GTD project even when it is a git repository', () => {
+    mockUseGitStatus.mockReturnValue({ branch: 'main', diff: { files: [], loading: false, error: null } })
+    mockUseCurrentProject.mockReturnValue({ id: 'p1', type: 'gtd' })
 
     const html = renderToStaticMarkup(<SessionSidebar />)
 

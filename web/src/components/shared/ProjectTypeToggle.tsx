@@ -1,6 +1,7 @@
 import { useT } from '../../hooks/useT'
+import type { ProjectType } from '@shared/types.js'
 
-export type ProjectType = 'dev' | 'gtd'
+export type { ProjectType }
 
 interface ProjectTypeToggleProps {
   value: ProjectType
@@ -8,9 +9,10 @@ interface ProjectTypeToggleProps {
 }
 
 /**
- * Dev vs GTD choice shown at project creation — sets the project's
- * defaultAgent so the very first session opens in the right mode instead of
- * always starting in `planner` (dev), even for a folder meant as a GTD vault.
+ * Dev vs GTD choice shown at project creation — persists as the project's
+ * `type`, which scopes which agents/workflows/UI chrome the project sees
+ * from then on (see web/src/lib/project-modes.ts), and seeds `defaultAgent`
+ * so the very first session opens in the right mode.
  */
 export function ProjectTypeToggle({ value, onChange }: ProjectTypeToggleProps) {
   const t = useT()

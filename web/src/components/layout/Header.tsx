@@ -37,6 +37,7 @@ import { NotificationBell } from '../notifications/NotificationBell'
 import { useNotificationMenuItems } from '../notifications/NotificationCenter'
 import { useIsSplit } from '../../lib/splitPersistence'
 import { DropdownMenu, type DropdownMenuItem } from '../shared/DropdownMenu'
+import { getProjectMode } from '../../lib/project-modes'
 
 interface HeaderProps {
   onMenuClick?: () => void
@@ -66,6 +67,8 @@ export function Header({ onMenuClick, onCriteriaToggle }: HeaderProps) {
   const session = useSessionStore((state) => state.currentSession)
   const sessions = useSessionStore((state) => state.sessions)
   const project = useCurrentProject()
+  const showsDevChrome = getProjectMode(project?.type).showsDevChrome
+
   const sessionContext = {
     ...(session?.id ? { sessionId: session.id } : {}),
     ...(session?.workdir ? { workdir: session.workdir } : {}),
@@ -324,7 +327,7 @@ export function Header({ onMenuClick, onCriteriaToggle }: HeaderProps) {
               </button>
             )}
 
-            {isProjectPage && (
+            {isProjectPage && showsDevChrome && (
               <button
                 onClick={() => setTerminalOpen(!terminalIsOpen)}
                 className={`p-2.5 rounded hover:bg-bg-tertiary transition-colors ${
@@ -345,7 +348,7 @@ export function Header({ onMenuClick, onCriteriaToggle }: HeaderProps) {
             />
             <NotificationBell />
 
-            {isProjectPage && project && (
+            {isProjectPage && showsDevChrome && project && (
               <button
                 onClick={() => authFetch(`/api/projects/${project.id}/open-folder`).catch(() => {})}
                 className="p-2.5 rounded hover:bg-bg-tertiary text-text-muted hover:text-text-primary transition-colors"

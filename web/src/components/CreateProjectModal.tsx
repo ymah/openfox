@@ -16,9 +16,10 @@ import { ProjectTypeToggle, type ProjectType } from './shared/ProjectTypeToggle'
 interface CreateProjectModalProps {
   isOpen: boolean
   onClose: () => void
+  initialProjectType?: ProjectType
 }
 
-export function CreateProjectModal({ isOpen, onClose }: CreateProjectModalProps) {
+export function CreateProjectModal({ isOpen, onClose, initialProjectType = 'dev' }: CreateProjectModalProps) {
   const t = useT()
   const [, navigate] = useLocation()
   const { config } = useConfig()
@@ -40,13 +41,13 @@ export function CreateProjectModal({ isOpen, onClose }: CreateProjectModalProps)
       setError(null)
       setLoading(false)
       setPermissionDeniedPath(null)
-      setProjectType('dev')
+      setProjectType(initialProjectType)
       // Focus the input after modal renders
       setTimeout(() => {
         if (shouldAutofocus()) inputRef.current?.focus()
       }, 100)
     }
-  }, [isOpen, config?.workdir])
+  }, [isOpen, config?.workdir, initialProjectType])
 
   const handleSubmit = useCallback(
     async (e: React.FormEvent<HTMLFormElement>) => {
@@ -103,7 +104,7 @@ export function CreateProjectModal({ isOpen, onClose }: CreateProjectModalProps)
         await authFetch(`/api/projects/${project.id}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ defaultAgent: 'gtd-secretary' }),
+          body: JSON.stringify({ type: 'gtd', defaultAgent: 'gtd-secretary' }),
         })
       }
 

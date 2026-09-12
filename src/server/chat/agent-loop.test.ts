@@ -2186,7 +2186,6 @@ describe('runTopLevelAgentLoop context status', () => {
       getDynamicContextChanged: vi.fn().mockReturnValue(false),
       setDynamicContextChanged: vi.fn(),
       getCachedPrompt: vi.fn().mockReturnValue(undefined),
-      enterPauseGate: vi.fn().mockResolvedValue('released'),
       setCachedPrompt: vi.fn(),
       getLspManager: vi.fn(),
       drainAsapMessages: vi.fn().mockReturnValue([]),
