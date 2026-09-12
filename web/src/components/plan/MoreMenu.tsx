@@ -1,6 +1,6 @@
 import { ScrollArea } from '../shared/ScrollArea'
 import { Fragment, useEffect, useState, useRef } from 'react'
-import { groupByCategory, hasMultipleCategories } from '../../lib/category-groups'
+import { groupByCategory, hasMultipleCategories, filterByProjectType } from '../../lib/category-groups'
 import { MoreIcon, AttachIcon } from '../shared/icons'
 import { useT } from '../../hooks/useT'
 import { useSessionStore } from '../../stores/session'
@@ -16,6 +16,7 @@ import { shouldAutofocus } from '../../lib/device'
 import { EditButton } from '../shared/IconButton'
 import { Portal } from '../shared/Portal'
 import { useClickOutside } from '../../hooks/useClickOutside'
+import { useCurrentProject } from '../../hooks/useCurrentProject'
 import type { Attachment, WorkflowScope } from '@shared/types.js'
 
 interface MoreMenuProps {
@@ -76,7 +77,8 @@ export function MoreMenu({
   // are distinguishable instead of silently collapsed. Grouped by category (GTD
   // vs classic dev) so the two don't read as one flat, ambiguous list.
   const { workflows: unsortedWorkflows } = useWorkflows(currentWorkdir)
-  const workflows = groupByCategory(unsortedWorkflows).flatMap((g) => g.items)
+  const project = useCurrentProject()
+  const workflows = groupByCategory(filterByProjectType(unsortedWorkflows, project?.type)).flatMap((g) => g.items)
   const showWorkflowCategoryHeaders = hasMultipleCategories(workflows)
 
   useEffect(() => {

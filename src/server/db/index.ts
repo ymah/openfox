@@ -164,6 +164,16 @@ function runMigrations(db: Database.Database): void {
     db.exec(`ALTER TABLE projects ADD COLUMN default_agent TEXT`)
   }
 
+  if (!projectColumnNames.includes('type')) {
+    logger.info('Migrating projects table: adding type column')
+    db.exec(`ALTER TABLE projects ADD COLUMN type TEXT`)
+    // Backfill: infer 'gtd' for projects already using a GTD default agent (pre-dates this
+    // column), everything else becomes 'dev' — the original OpenFox function.
+    db.exec(
+      `UPDATE projects SET type = CASE WHEN default_agent IN ('gtd-secretary', 'gtd-planner') THEN 'gtd' ELSE 'dev' END WHERE type IS NULL`,
+    )
+  }
+
   if (!projectColumnNames.includes('workspace_root_dir')) {
     logger.info('Migrating projects table: adding workspace_root_dir column')
     db.exec(`ALTER TABLE projects ADD COLUMN workspace_root_dir TEXT`)

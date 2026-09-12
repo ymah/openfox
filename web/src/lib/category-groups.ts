@@ -1,3 +1,5 @@
+import type { ProjectType } from '@shared/types.js'
+
 /**
  * Groups items with an optional `category` string for display in a flat
  * selector list — used by AgentSelector and the MoreMenu workflows tab to
@@ -38,4 +40,22 @@ export function groupByCategory<T extends { category?: string }>(
  * looks exactly as it did before this field existed. */
 export function hasMultipleCategories<T extends { category?: string }>(items: T[]): boolean {
   return new Set(items.map((i) => i.category?.trim() || '')).size > 1
+}
+
+/**
+ * Scope a flat agent/workflow list to a project's function: keep items whose
+ * `category` matches the project's `type`, plus uncategorized items (custom
+ * user/project agents predating this field) which stay visible everywhere.
+ * This is what actually isolates dev vs GTD — `groupByCategory` above only
+ * ever labels a flat list, it never hides anything.
+ */
+export function filterByProjectType<T extends { category?: string }>(
+  items: T[],
+  projectType: ProjectType | undefined,
+): T[] {
+  if (!projectType) return items
+  return items.filter((item) => {
+    const category = item.category?.trim()
+    return !category || category === projectType
+  })
 }

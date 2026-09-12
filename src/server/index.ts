@@ -6,7 +6,7 @@ import { dirname, resolve, join } from 'node:path'
 import { readFile } from 'node:fs/promises'
 import { createServer as createViteServer, type ViteDevServer } from 'vite'
 
-import type { Config, ModelConfig, ProviderBackend } from '../shared/types.js'
+import type { Config, ModelConfig, ProviderBackend, ProjectType } from '../shared/types.js'
 import type { ServerHandle } from './context.js'
 import type { VisionBackend } from './llm/vision-fallback.js'
 import { initDatabase } from './db/index.js'
@@ -484,17 +484,19 @@ export async function createServerHandle(config: Config): Promise<ServerHandle> 
 
   app.put('/api/projects/:id', async (req, res) => {
     const { updateProject } = await import('./db/projects.js')
-    const { name, customInstructions, dangerLevel, defaultAgent } = req.body
+    const { name, customInstructions, dangerLevel, defaultAgent, type } = req.body
     const updates: {
       name?: string
       customInstructions?: string | null
       dangerLevel?: 'normal' | 'dangerous' | null
       defaultAgent?: string | null
+      type?: ProjectType | null
     } = {}
     if (name !== undefined) updates.name = name
     if (customInstructions !== undefined) updates.customInstructions = customInstructions
     if (dangerLevel !== undefined) updates.dangerLevel = dangerLevel as 'normal' | 'dangerous' | null
     if (defaultAgent !== undefined) updates.defaultAgent = defaultAgent as string | null
+    if (type !== undefined) updates.type = type as ProjectType | null
     const updated = updateProject(req.params.id, updates)
     if (!updated) {
       return res.status(404).json({ error: 'Project not found' })

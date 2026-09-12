@@ -33,6 +33,7 @@ import { useTasksStore } from '../../stores/tasks'
 import { TasksIcon, ArrowRightIcon } from '../shared/icons'
 import { useIsSplit } from '../../lib/splitPersistence'
 import { DropdownMenu, type DropdownMenuItem } from '../shared/DropdownMenu'
+import { getProjectMode } from '../../lib/project-modes'
 
 interface HeaderProps {
   onMenuClick?: () => void
@@ -61,6 +62,7 @@ export function Header({ onMenuClick, onCriteriaToggle }: HeaderProps) {
   const session = useSessionStore((state) => state.currentSession)
   const sessions = useSessionStore((state) => state.sessions)
   const project = useCurrentProject()
+  const showsDevChrome = getProjectMode(project?.type).showsDevChrome
   const { projects } = useProjects()
   const { data: countsData } = useResource(summariesResource, project?.id ?? '')
   const runningTaskCount = countsData?.counts.running ?? 0
@@ -269,7 +271,7 @@ export function Header({ onMenuClick, onCriteriaToggle }: HeaderProps) {
             </button>
           )}
 
-          {isProjectPage && (
+          {isProjectPage && showsDevChrome && (
             <button
               onClick={() => setTerminalOpen(!terminalIsOpen)}
               className={`p-2.5 rounded hover:bg-bg-tertiary transition-colors ${
@@ -281,7 +283,7 @@ export function Header({ onMenuClick, onCriteriaToggle }: HeaderProps) {
             </button>
           )}
 
-          {isProjectPage && project && (
+          {isProjectPage && showsDevChrome && project && (
             <button
               onClick={() => authFetch(`/api/projects/${project.id}/open-folder`).catch(() => {})}
               className="p-2.5 rounded hover:bg-bg-tertiary text-text-muted hover:text-text-primary transition-colors"

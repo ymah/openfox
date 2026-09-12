@@ -23,6 +23,8 @@ import { ReloadIcon } from '../shared/icons'
 import { AutoUpdateModal } from '../AutoUpdateModal'
 import { WorkspaceBranchSection } from './WorkspaceBranchSection'
 import { ContextPopover } from './ContextPopover'
+import { useCurrentProject } from '../../hooks/useCurrentProject'
+import { getProjectMode } from '../../lib/project-modes'
 import type { Message } from '@shared/types.js'
 
 interface SessionSidebarProps {
@@ -38,6 +40,8 @@ export function SessionSidebar({ messages, workdir }: SessionSidebarProps) {
 
   const aggregateStats = useSessionStats(messages)
   const { branch } = useGitStatus()
+  const project = useCurrentProject()
+  const showsDevChrome = getProjectMode(project?.type).showsDevChrome
   const version = useConfig().config?.version ?? null
   const { currentSession: session, sessionId } = useScopedContext()
   const liveTurnStats = useScopedPaneState(
@@ -151,21 +155,25 @@ export function SessionSidebar({ messages, workdir }: SessionSidebarProps) {
         </div>
       </ScrollArea>
 
-      {/* Workspace & branch info — only shown for git repos. */}
-      <WorkspaceBranchSection
-        workspaceName={workspaceName ?? 'original'}
-        branch={branch}
-        workdir={workdir}
-        showEditorLink={showEditorLink}
-        sessionId={session?.id ?? ''}
-        projectId={session?.projectId ?? ''}
-      />
+      {showsDevChrome && (
+        <>
+          {/* Workspace & branch info — only shown for git repos. */}
+          <WorkspaceBranchSection
+            workspaceName={workspaceName ?? 'original'}
+            branch={branch}
+            workdir={workdir}
+            showEditorLink={showEditorLink}
+            sessionId={session?.id ?? ''}
+            projectId={session?.projectId ?? ''}
+          />
 
-      {/* Dev Server — below separator */}
-      <DevServerFooter workdir={workdir} />
+          {/* Dev Server — below separator */}
+          <DevServerFooter workdir={workdir} />
 
-      {/* Background Processes */}
-      <BackgroundProcesses sessionId={session?.id} />
+          {/* Background Processes */}
+          <BackgroundProcesses sessionId={session?.id} />
+        </>
+      )}
 
       {/* Version footer */}
       {version && (

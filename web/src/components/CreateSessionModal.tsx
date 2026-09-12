@@ -14,13 +14,15 @@ import { DirectoryBrowser } from './shared/DirectoryBrowser.js'
 import { PermissionDeniedModal } from './PermissionDeniedModal.js'
 import { useWorkdir } from '../hooks/useWorkdir.js'
 import { ProjectTypeToggle } from './shared/ProjectTypeToggle.js'
+import type { ProjectType } from '@shared/types.js'
 
 interface OpenProjectModalProps {
   isOpen: boolean
   onClose: () => void
+  initialProjectType?: ProjectType
 }
 
-export function OpenProjectModal({ isOpen, onClose }: OpenProjectModalProps) {
+export function OpenProjectModal({ isOpen, onClose, initialProjectType = 'dev' }: OpenProjectModalProps) {
   const t = useT()
   const [, navigate] = useLocation()
   const [showCreateModal, setShowCreateModal] = useState(false)
@@ -32,7 +34,7 @@ export function OpenProjectModal({ isOpen, onClose }: OpenProjectModalProps) {
   const deleteProject = useProjectStore((state) => state.deleteProject)
   const [projectToDelete, setProjectToDelete] = useState<{ id: string; name: string } | null>(null)
   const [permissionDeniedPath, setPermissionDeniedPath] = useState<string | null>(null)
-  const [projectType, setProjectType] = useState<'dev' | 'gtd'>('dev')
+  const [projectType, setProjectType] = useState<ProjectType>(initialProjectType)
 
   const handleProjectClick = (projectId: string) => {
     navigate(`/p/${projectId}`)
@@ -69,7 +71,7 @@ export function OpenProjectModal({ isOpen, onClose }: OpenProjectModalProps) {
 
   async function handleProjectCreation(path: string): Promise<boolean> {
     const basename = pathBasename(path)
-    const result = await createProject(basename, path, projectType === 'gtd' ? 'gtd-secretary' : undefined)
+    const result = await createProject(basename, path, projectType === 'gtd' ? 'gtd-secretary' : undefined, projectType)
     if (isPermissionDenied(result)) {
       setPermissionDeniedPath((result.error as { path?: string }).path || path)
       return false
@@ -178,7 +180,13 @@ export function OpenProjectModal({ isOpen, onClose }: OpenProjectModalProps) {
         </div>
       </div>
 
-      {showCreateModal && <CreateProjectModal isOpen={showCreateModal} onClose={() => setShowCreateModal(false)} />}
+      {showCreateModal && (
+        <CreateProjectModal
+          isOpen={showCreateModal}
+          onClose={() => setShowCreateModal(false)}
+          initialProjectType={projectType}
+        />
+      )}
       {projectToDelete && (
         <DeleteProjectConfirmationModal
           isOpen={true}

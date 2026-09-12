@@ -1,4 +1,4 @@
-import type { Project } from '../../shared/types.js'
+import type { Project, ProjectType } from '../../shared/types.js'
 import { getDatabase } from './index.js'
 
 // ============================================================================
@@ -19,15 +19,16 @@ export function createProject(name: string, workdir: string): Project {
 
   db.prepare(
     `
-    INSERT INTO projects (id, name, workdir, created_at, updated_at)
-    VALUES (?, ?, ?, ?, ?)
+    INSERT INTO projects (id, name, workdir, type, created_at, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?)
   `,
-  ).run(id, name, workdir, now, now)
+  ).run(id, name, workdir, 'dev', now, now)
 
   return {
     id,
     name,
     workdir,
+    type: 'dev',
     createdAt: now,
     updatedAt: now,
   }
@@ -92,6 +93,7 @@ export function updateProject(
     defaultAgent?: string | null
     workspaceRootDir?: string | null
     mcpOverrides?: Record<string, { disabled?: boolean; disabledTools?: string[] }> | null
+    type?: ProjectType | null
   },
 ): Project | null {
   const db = getDatabase()
@@ -128,6 +130,11 @@ export function updateProject(
   if (updates.mcpOverrides !== undefined) {
     sets.push('mcp_overrides = ?')
     values.push(updates.mcpOverrides !== null ? JSON.stringify(updates.mcpOverrides) : null)
+  }
+
+  if (updates.type !== undefined) {
+    sets.push('type = ?')
+    values.push(updates.type)
   }
 
   values.push(id)
@@ -179,6 +186,7 @@ interface ProjectRow {
   id: string
   name: string
   workdir: string
+  type: string | null
   custom_instructions: string | null
   danger_level: string | null
   default_agent: string | null
@@ -194,6 +202,7 @@ function rowToProject(row: ProjectRow): Project {
     id: row.id,
     name: row.name,
     workdir: row.workdir,
+    type: (row.type as ProjectType | null) ?? 'dev',
     ...(row.custom_instructions ? { customInstructions: row.custom_instructions } : {}),
     ...(row.danger_level ? { dangerLevel: row.danger_level as DangerLevel } : {}),
     ...(row.default_agent ? { defaultAgent: row.default_agent } : {}),

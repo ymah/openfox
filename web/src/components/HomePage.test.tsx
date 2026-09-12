@@ -53,7 +53,15 @@ const { deleteProjectMock } = vi.hoisted(() => ({
   deleteProjectMock: vi.fn(),
 }))
 
-const projectFixtures = [
+const projectFixtures: {
+  id: string
+  name: string
+  workdir: string
+  isStarred: boolean
+  createdAt: string
+  updatedAt: string
+  type?: 'dev' | 'gtd'
+}[] = [
   {
     id: 'p1',
     name: 'Project Alpha',
@@ -647,5 +655,40 @@ describe('HomePage', () => {
     await vi.waitFor(() => {
       expect(deleteProjectMock).toHaveBeenCalledWith('p1')
     })
+  })
+})
+
+describe('HomePage — project mode tabs', () => {
+  afterEach(() => {
+    try {
+      localStorage.clear()
+    } catch {
+      // ignore
+    }
+    for (const p of projectFixtures) delete p.type
+  })
+
+  it('defaults to the Dev tab, showing untyped/dev projects only', async () => {
+    projectFixtures[1]!.type = 'gtd' // Project Beta
+    const { HomePage } = await import('./HomePage')
+    const container = render(<HomePage />)
+
+    expect(container.textContent).toContain('Project Alpha')
+    expect(container.textContent).not.toContain('Project Beta')
+    expect(container.textContent).toContain('Project Gamma')
+  })
+
+  it('switching to the GTD tab shows only gtd-typed projects', async () => {
+    projectFixtures[1]!.type = 'gtd' // Project Beta
+    const { HomePage } = await import('./HomePage')
+    const container = render(<HomePage />)
+
+    const gtdTab = Array.from(container.querySelectorAll('[role="tab"]')).find((b) => b.textContent === 'GTD')
+    expect(gtdTab).toBeTruthy()
+    await userEvent.click(gtdTab!)
+
+    expect(container.textContent).toContain('Project Beta')
+    expect(container.textContent).not.toContain('Project Alpha')
+    expect(container.textContent).not.toContain('Project Gamma')
   })
 })

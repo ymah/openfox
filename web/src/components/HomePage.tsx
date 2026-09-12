@@ -12,6 +12,8 @@ import { OpenProjectModal } from './CreateSessionModal'
 import { DeleteProjectConfirmationModal } from './DeleteProjectConfirmationModal'
 import { formatRelativeDate } from '../lib/format-date'
 import { sortProjectsStarredFirst } from '../lib/projects'
+import { PROJECT_MODES, DEFAULT_PROJECT_TYPE } from '../lib/project-modes'
+import type { ProjectType } from '@shared/types.js'
 import { SearchIcon, XCloseIcon, FolderIcon, TrashIcon, TasksIcon, ColumnsIcon, StarFilledIcon } from './shared/icons'
 import { Spinner } from './shared/Spinner'
 import { fuzzyMatch, highlightMatches } from '../lib/modal-utils'
@@ -21,6 +23,16 @@ import type { Translation } from '@shared/i18n/index.js'
 import type { SessionSummary, ProjectTaskCounts } from '@shared/types.js'
 
 const HOME_SESSION_LIMIT = 20
+const ACTIVE_MODE_STORAGE_KEY = 'openfox.home.activeProjectMode'
+
+function readStoredActiveMode(): ProjectType {
+  try {
+    const stored = localStorage.getItem(ACTIVE_MODE_STORAGE_KEY)
+    return PROJECT_MODES.some((m) => m.value === stored) ? (stored as ProjectType) : DEFAULT_PROJECT_TYPE
+  } catch {
+    return DEFAULT_PROJECT_TYPE
+  }
+}
 
 /** Color-coded task-state chips shown on each project's Tasks button. */
 const TASK_STATE_CHIPS: {
@@ -94,7 +106,16 @@ export function HomePage() {
   const [searchQuery, setSearchQuery] = useState('')
   const [debouncedQuery, setDebouncedQuery] = useState('')
   const [tasksProjectId, setTasksProjectId] = useState<string | null>(null)
+  const [activeMode, setActiveMode] = useState<ProjectType>(readStoredActiveMode)
   const searchRef = useRef<HTMLInputElement>(null)
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(ACTIVE_MODE_STORAGE_KEY, activeMode)
+    } catch {
+      // ignore (private browsing / storage disabled)
+    }
+  }, [activeMode])
 
   // The home page shows only the 20 most recent sessions; the full corpus
   // (with prompts) is loaded on demand when the user searches.
@@ -127,6 +148,8 @@ export function HomePage() {
     }
   }, [debouncedQuery, hasFullCorpus, ensureFullSessionList])
 
+  const projectById = useMemo(() => new Map(projects.map((p) => [p.id, p])), [projects])
+
   const { matchCount, filteredSessionIds, relevanceScores, matchTypes, promptSnippets } = useMemo(() => {
     if (!debouncedQuery)
       return {
@@ -136,12 +159,14 @@ export function HomePage() {
         matchTypes: null as Map<string, string> | null,
         promptSnippets: null as Map<string, string> | null,
       }
-    const projectById = new Map(projects.map((p) => [p.id, p]))
     const scores = new Map<string, number>()
     const types = new Map<string, string>()
     const snippets = new Map<string, string>()
     const matching = sessions.filter((s) => {
       const project = projectById.get(s.projectId)
+      // Stay within the active mode tab — search must not leak sessions from
+      // the other function's projects into this view.
+      if ((project?.type ?? DEFAULT_PROJECT_TYPE) !== activeMode) return false
       const projectName = project?.name ?? ''
       const title = s.title ?? ''
       const prompts = s.recentUserPrompts?.map((p) => p.content) ?? []
@@ -185,17 +210,16 @@ export function HomePage() {
       matchTypes: types,
       promptSnippets: snippets,
     }
-  }, [sessions, debouncedQuery, projects])
-
-  const projectById = useMemo(() => new Map(projects.map((p) => [p.id, p])), [projects])
+  }, [sessions, debouncedQuery, projects, projectById, activeMode])
 
   // The server already returns the home list ordered by last activity; sort
-  // defensively and cap at the homepage budget.
+  // defensively, scope to the active mode tab, and cap at the homepage budget.
   const recentSessions = useMemo(() => {
     return [...sessions]
+      .filter((s) => (projectById.get(s.projectId)?.type ?? DEFAULT_PROJECT_TYPE) === activeMode)
       .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())
       .slice(0, HOME_SESSION_LIMIT)
-  }, [sessions])
+  }, [sessions, projectById, activeMode])
 
   const visibleSessions = useMemo(() => {
     if (!debouncedQuery || !filteredSessionIds || !relevanceScores) return recentSessions
@@ -209,8 +233,12 @@ export function HomePage() {
   }, [sessions, debouncedQuery, filteredSessionIds, relevanceScores, recentSessions])
 
   // Mirror the project dropdown ordering: starred first, then the rest,
-  // alphabetical within each group.
-  const sortedProjects = useMemo(() => sortProjectsStarredFirst(projects), [projects])
+  // alphabetical within each group. Scoped to the active mode tab — the root
+  // of the dev/GTD "tree": each mode only ever sees its own projects here.
+  const sortedProjects = useMemo(
+    () => sortProjectsStarredFirst(projects.filter((p) => (p.type ?? DEFAULT_PROJECT_TYPE) === activeMode)),
+    [projects, activeMode],
+  )
 
   const handleOpenProject = () => {
     setShowOpenModal(true)
@@ -257,6 +285,30 @@ export function HomePage() {
               {t({ en: 'Open Project', fr: 'Ouvrir un projet' })}
             </Button>
           </div>
+        </div>
+
+        <div
+          role="tablist"
+          aria-label={t({ en: 'Project function', fr: 'Fonction du projet' })}
+          className="mb-6 md:mb-8 flex items-center gap-1 p-1 rounded-lg bg-bg-secondary border border-border w-fit"
+        >
+          {PROJECT_MODES.map((mode) => (
+            <button
+              key={mode.value}
+              type="button"
+              role="tab"
+              aria-selected={activeMode === mode.value}
+              onClick={() => setActiveMode(mode.value)}
+              className={`px-4 py-1.5 text-sm font-medium rounded-md transition-colors ${
+                activeMode === mode.value
+                  ? mode.activeTabClassName
+                  : 'text-text-muted hover:text-text-primary hover:bg-bg-tertiary'
+              }`}
+              title={t(mode.description)}
+            >
+              {t(mode.label)}
+            </button>
+          ))}
         </div>
 
         <div className="mb-4 md:mb-6 relative">
@@ -449,7 +501,13 @@ export function HomePage() {
         )}
       </div>
 
-      {showOpenModal && <OpenProjectModal isOpen={showOpenModal} onClose={() => setShowOpenModal(false)} />}
+      {showOpenModal && (
+        <OpenProjectModal
+          isOpen={showOpenModal}
+          onClose={() => setShowOpenModal(false)}
+          initialProjectType={activeMode}
+        />
+      )}
 
       {tasksProjectId && <TasksModal isOpen onClose={() => setTasksProjectId(null)} projectId={tasksProjectId} />}
 

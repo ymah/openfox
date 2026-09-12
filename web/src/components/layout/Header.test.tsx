@@ -38,8 +38,8 @@ vi.mock('wouter', () => {
 })
 
 const projectState = vi.hoisted(() => ({
-  currentProject: null as { id: string; name: string; workdir: string } | null,
-  projects: [] as Array<{ id: string; name: string; workdir: string }>,
+  currentProject: null as { id: string; name: string; workdir: string; type?: 'dev' | 'gtd' } | null,
+  projects: [] as Array<{ id: string; name: string; workdir: string; type?: 'dev' | 'gtd' }>,
 }))
 
 vi.mock('../../hooks/useCurrentProject', () => ({
@@ -400,6 +400,19 @@ describe('Header', () => {
     const container = render(<Header />)
     const btn = container.querySelector('[title^="Toggle terminal"]')
     expect(btn).toBeTruthy()
+  })
+
+  it('hides terminal toggle and open-folder button on a GTD project page', async () => {
+    projectState.currentProject = { id: 'p1', name: 'P', workdir: '/tmp', type: 'gtd' }
+    projectState.projects = [{ id: 'p1', name: 'P', workdir: '/tmp', type: 'gtd' }]
+
+    const { useLocation } = await import('wouter')
+    vi.mocked(useLocation).mockReturnValue(['/p/p1/', vi.fn()])
+
+    const { Header } = await import('./Header')
+    const container = render(<Header />)
+    expect(container.querySelector('[title^="Toggle terminal"]')).toBeNull()
+    expect(container.querySelector('[title="Open project folder"]')).toBeNull()
   })
 
   it('shows menu button when onMenuClick provided and on session page', async () => {

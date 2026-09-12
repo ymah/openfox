@@ -71,7 +71,29 @@ describe('project store mutations', () => {
     expect(created).toMatchObject({ id: 'proj-a', defaultAgent: 'gtd-secretary' })
   })
 
-  it('createProject does not PUT when no defaultAgent is given (plain dev project)', async () => {
+  it('createProject PUTs type and defaultAgent together for a GTD project', async () => {
+    mockedAuthFetch.mockImplementation(async (url: string, init?: RequestInit) => {
+      if (url === '/api/projects' && init?.method === 'POST') return jsonResponse({ project })
+      if (url === '/api/projects/proj-a' && init?.method === 'PUT') {
+        return jsonResponse({ project: { ...project, defaultAgent: 'gtd-secretary', type: 'gtd' } })
+      }
+      return jsonResponse({ projects: [project] })
+    })
+
+    const created = await useProjectStore.getState().createProject('Alpha', '/repo/a', 'gtd-secretary', 'gtd')
+
+    expect(mockedAuthFetch).toHaveBeenNthCalledWith(
+      2,
+      '/api/projects/proj-a',
+      expect.objectContaining({
+        method: 'PUT',
+        body: JSON.stringify({ defaultAgent: 'gtd-secretary', type: 'gtd' }),
+      }),
+    )
+    expect(created).toMatchObject({ id: 'proj-a', type: 'gtd' })
+  })
+
+  it('createProject does not PUT when type is dev and no defaultAgent is given (plain dev project)', async () => {
     mockedAuthFetch.mockImplementation(async (url: string, init?: RequestInit) => {
       if (url === '/api/projects' && init?.method === 'POST') return jsonResponse({ project })
       return jsonResponse({ projects: [project] })

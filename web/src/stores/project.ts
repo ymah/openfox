@@ -1,7 +1,7 @@
 import { create } from 'zustand'
 import { authFetch } from '../lib/api'
 import { projectsResource, projectResource } from '../lib/resources'
-import type { Project } from '@shared/types.js'
+import type { Project, ProjectType } from '@shared/types.js'
 
 interface ProjectState {
   /**
@@ -18,6 +18,7 @@ interface ProjectState {
     name: string,
     workdir: string,
     defaultAgent?: string,
+    type?: ProjectType,
   ) => Promise<Project | { error: { code: string; path?: string; message?: string } } | null>
   updateProject: (
     projectId: string,
@@ -26,6 +27,7 @@ interface ProjectState {
       customInstructions?: string | null
       dangerLevel?: string | null
       defaultAgent?: string | null
+      type?: ProjectType | null
     },
   ) => Promise<Project | null>
   deleteProject: (projectId: string) => Promise<boolean>
@@ -39,7 +41,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
 
   clearProject: () => set({ currentProjectId: null }),
 
-  createProject: async (name, workdir, defaultAgent) => {
+  createProject: async (name, workdir, defaultAgent, type) => {
     try {
       const res = await authFetch('/api/projects', {
         method: 'POST',
@@ -54,8 +56,8 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
       }
       const data = await res.json()
       let project = (data.project as Project) ?? null
-      if (project && defaultAgent) {
-        project = (await get().updateProject(project.id, { defaultAgent })) ?? project
+      if (project && (defaultAgent || (type && type !== 'dev'))) {
+        project = (await get().updateProject(project.id, { defaultAgent, type })) ?? project
       }
       await projectsResource.refresh()
       return project

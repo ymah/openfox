@@ -2,10 +2,14 @@
 // Project Types
 // ============================================================================
 
+// Extend this union (and web/src/lib/project-modes.ts) to add a new project function.
+export type ProjectType = 'dev' | 'gtd'
+
 export interface Project {
   id: string
   name: string
   workdir: string
+  type?: ProjectType // Which function this project belongs to (dev, gtd, ...); scopes agents/workflows/UI chrome
   customInstructions?: string // Project-specific instructions injected into prompts
   dangerLevel?: DangerLevel // Project default danger level for new sessions
   defaultAgent?: string // Project default agent for new sessions (overrides global)

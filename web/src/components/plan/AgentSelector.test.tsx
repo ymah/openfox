@@ -71,6 +71,12 @@ vi.mock('../shared/icons', () => ({
   CheckIcon: () => <svg>✓</svg>,
 }))
 
+let mockProjectType: 'dev' | 'gtd' | undefined
+
+vi.mock('../../hooks/useCurrentProject', () => ({
+  useCurrentProject: () => (mockProjectType ? { id: 'project-1', type: mockProjectType } : null),
+}))
+
 import { AgentSelector } from './AgentSelector'
 
 function agentsPayload(overrides: Record<string, string>) {
@@ -118,6 +124,7 @@ describe('AgentSelector — effort-change gate (case 2a)', () => {
     mockOverrides = {}
     mockSessionMode = 'builder'
     mockWarmCache = true
+    mockProjectType = undefined
   })
 
   afterEach(() => {
@@ -208,6 +215,7 @@ describe('AgentSelector — dev/gtd category grouping', () => {
     clearCache()
     mockSessionMode = 'builder'
     mockWarmCache = true
+    mockProjectType = undefined
   })
 
   afterEach(() => {
@@ -261,5 +269,69 @@ describe('AgentSelector — dev/gtd category grouping', () => {
 
     const headers = screen.getAllByText(/^(dev|gtd)$/)
     expect(headers.map((h) => h.textContent)).toEqual(['dev', 'gtd'])
+  })
+})
+
+describe('AgentSelector — scoped to the project function', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    clearCache()
+    mockSessionMode = 'builder'
+    mockWarmCache = true
+    mockProjectType = undefined
+  })
+
+  afterEach(() => {
+    cleanup()
+    document.body.innerHTML = ''
+  })
+
+  async function renderWithAgents(defaults: { id: string; name: string; category?: string }[]) {
+    mockAuthFetch.mockImplementation(async () => ({
+      ok: true,
+      json: async () => ({
+        defaults: defaults.map((d) => ({ ...d, subagent: false, allowedTools: [], description: '' })),
+        userItems: [],
+        projectItems: [],
+        modelOverrides: {},
+      }),
+    }))
+    render(
+      <EffortChangeGateProvider>
+        <AgentSelector />
+      </EffortChangeGateProvider>,
+    )
+    await waitFor(() => expect(readAgents()?.defaults.length).toBe(defaults.length))
+    await userEvent.click(screen.getByTitle('Switch agent'))
+  }
+
+  it('hides gtd agents from a dev project', async () => {
+    mockProjectType = 'dev'
+    await renderWithAgents([
+      { id: 'builder', name: 'Builder', category: 'dev' },
+      { id: 'gtd-secretary', name: 'GTD Secretary', category: 'gtd' },
+    ])
+    expect(dropdownAgent('Builder')).toBeTruthy()
+    expect(screen.queryByText('GTD Secretary')).toBeNull()
+  })
+
+  it('hides dev agents from a gtd project', async () => {
+    mockProjectType = 'gtd'
+    await renderWithAgents([
+      { id: 'builder', name: 'Builder', category: 'dev' },
+      { id: 'gtd-secretary', name: 'GTD Secretary', category: 'gtd' },
+    ])
+    expect(screen.queryByText('Builder')).toBeNull()
+    expect(screen.getByText('GTD Secretary')).toBeTruthy()
+  })
+
+  it('keeps uncategorized custom agents visible regardless of project type', async () => {
+    mockProjectType = 'gtd'
+    await renderWithAgents([
+      { id: 'builder', name: 'Builder', category: 'dev' },
+      { id: 'my-custom-agent', name: 'My Custom Agent' },
+    ])
+    expect(screen.queryByText('Builder')).toBeNull()
+    expect(screen.getByText('My Custom Agent')).toBeTruthy()
   })
 })

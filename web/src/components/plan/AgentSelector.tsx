@@ -1,7 +1,7 @@
 import { Fragment, useState, useRef } from 'react'
 import { ChevronDownIcon, CheckIcon } from '../shared/icons'
 import { getAgentColor } from '../../lib/agents-actions'
-import { groupByCategory, hasMultipleCategories } from '../../lib/category-groups'
+import { groupByCategory, hasMultipleCategories, filterByProjectType } from '../../lib/category-groups'
 import { useT } from '../../hooks/useT'
 import { AgentsModal } from '../settings/AgentsModal'
 import { useKeybindings } from '../../hooks/useKeybindings'
@@ -11,6 +11,7 @@ import { useSessionScope, useScopedPaneState } from '../../stores/session/sessio
 import { useEffortGatedAgentSwitch } from '../../hooks/useEffortGateContext'
 import { useResource } from '../../hooks/useResource'
 import { agentsResource } from '../../lib/resources'
+import { useCurrentProject } from '../../hooks/useCurrentProject'
 
 export function AgentSelector() {
   const t = useT()
@@ -29,6 +30,7 @@ export function AgentSelector() {
   )
   const { data } = useResource(agentsResource, currentWorkdir)
   const gatedAgentSwitch = useEffortGatedAgentSwitch()
+  const project = useCurrentProject()
   const agents = data ? [...data.defaults, ...data.userItems, ...data.projectItems] : []
   const [isOpen, setIsOpen] = useState(false)
   const [showManager, setShowManager] = useState(false)
@@ -42,7 +44,12 @@ export function AgentSelector() {
 
   if (!currentMode) return null
 
-  const topLevelAgents = groupByCategory(agents.filter((a) => !a.subagent)).flatMap((g) => g.items)
+  const topLevelAgents = groupByCategory(
+    filterByProjectType(
+      agents.filter((a) => !a.subagent),
+      project?.type,
+    ),
+  ).flatMap((g) => g.items)
   const showCategoryHeaders = hasMultipleCategories(topLevelAgents)
   const currentAgent = topLevelAgents.find((a) => a.id === currentMode)
   const displayName = currentAgent?.name ?? currentMode
