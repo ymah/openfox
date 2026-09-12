@@ -39,6 +39,7 @@ import {
   updateSessionMessageCount,
   setSessionMessageCount,
   getSessionCachedPrompt,
+  clearSessionCachedPrompt,
   createWorkflowExecution,
   updateWorkflowExecutionStatus,
   getActiveWorkflowExecution as dbGetActiveWorkflowExecution,
@@ -802,6 +803,9 @@ export class SessionManager {
     logger.debug('Changing session mode', { sessionId, from: fromMode, to: toMode })
 
     emitModeChanged(sessionId, toMode, false)
+
+    // Clear cached prompt when mode changes, as the new agent may have different tools
+    clearSessionCachedPrompt(sessionId)
 
     // The agent's override is the label truth: selecting an agent with an
     // override deactivates the manual pick (so the override wins); selecting a
