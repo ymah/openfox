@@ -1,5 +1,5 @@
 import { ScrollArea } from './components/shared/ScrollArea'
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState, type ReactElement } from 'react'
 import {
   SETTINGS_KEYS,
   DISPLAY_SETTINGS_KEYS,
@@ -36,6 +36,10 @@ import { PageTitle } from './components/layout/PageTitle'
 import { HomePage } from './components/HomePage'
 import { NewSessionHandler } from './components/NewSessionHandler'
 import { EmptyProjectView } from './components/EmptyProjectView'
+import { WritingHome } from './components/writing/WritingHome'
+import { CodexView } from './components/writing/CodexView'
+import { ManuscriptView } from './components/writing/ManuscriptView'
+import { SceneWriteView } from './components/writing/SceneWriteView'
 import { PlanPanel } from './components/plan/PlanPanel'
 import { ReadonlySessionView } from './components/plan/ReadonlySessionView'
 import { SplitView } from './components/split/SplitView'
@@ -57,6 +61,16 @@ function LoadingSpinner() {
   )
 }
 
+/** Resolves and loads the project named by the current route's `:projectId`, null while pending. */
+function useRouteProject(projectId: string | undefined) {
+  const connectionStatus = useSessionStore((state) => state.connectionStatus)
+  const currentProject = useCurrentProject()
+  const hasToken = hasStoredToken()
+  const canLoad = connectionStatus === 'connected' || hasToken
+  useProjectLoader({ canLoad, projectId, currentProjectId: currentProject?.id })
+  return currentProject && currentProject.id === projectId ? currentProject : null
+}
+
 function ProjectView({
   sidebarOpen,
   sidebarOverlay,
@@ -68,16 +82,9 @@ function ProjectView({
 }) {
   const [, params] = useRoute('/p/:projectId')
   const projectId = params?.projectId
+  const currentProject = useRouteProject(projectId)
 
-  const connectionStatus = useSessionStore((state) => state.connectionStatus)
-  const currentProject = useCurrentProject()
-
-  const hasToken = hasStoredToken()
-  const canLoad = connectionStatus === 'connected' || hasToken
-
-  useProjectLoader({ canLoad, projectId, currentProjectId: currentProject?.id })
-
-  if (!currentProject || currentProject.id !== projectId) {
+  if (!currentProject) {
     return <LoadingSpinner />
   }
 
@@ -85,8 +92,34 @@ function ProjectView({
     <>
       <Sidebar projectId={projectId!} isOpen={sidebarOpen} overlay={sidebarOverlay} onClose={onSidebarToggle} />
       <div className="flex-1 min-w-0 bg-primary">
-        <EmptyProjectView />
+        {currentProject.type === 'writing' ? <WritingHome projectId={projectId!} /> : <EmptyProjectView />}
       </div>
+    </>
+  )
+}
+
+function WritingSubRoute({
+  routePath,
+  render,
+  sidebarOpen,
+  sidebarOverlay,
+  onSidebarToggle,
+}: {
+  routePath: '/p/:projectId/codex' | '/p/:projectId/manuscript' | '/p/:projectId/write'
+  render: (projectId: string) => ReactElement
+  sidebarOpen: boolean
+  sidebarOverlay: boolean
+  onSidebarToggle: () => void
+}) {
+  const [, params] = useRoute(routePath)
+  const projectId = params?.projectId
+  const currentProject = useRouteProject(projectId)
+
+  if (!currentProject) return <LoadingSpinner />
+  return (
+    <>
+      <Sidebar projectId={projectId!} isOpen={sidebarOpen} overlay={sidebarOverlay} onClose={onSidebarToggle} />
+      <div className="flex-1 min-w-0 bg-primary">{render(projectId!)}</div>
     </>
   )
 }
@@ -532,6 +565,33 @@ function App() {
             </Route>
             <Route path="/p/:projectId/new">
               <NewSessionHandler />
+            </Route>
+            <Route path="/p/:projectId/codex">
+              <WritingSubRoute
+                routePath="/p/:projectId/codex"
+                render={(projectId) => <CodexView projectId={projectId} />}
+                sidebarOpen={effectiveLeftOpen}
+                sidebarOverlay={leftOverlay}
+                onSidebarToggle={handleLeftToggle}
+              />
+            </Route>
+            <Route path="/p/:projectId/manuscript">
+              <WritingSubRoute
+                routePath="/p/:projectId/manuscript"
+                render={(projectId) => <ManuscriptView projectId={projectId} />}
+                sidebarOpen={effectiveLeftOpen}
+                sidebarOverlay={leftOverlay}
+                onSidebarToggle={handleLeftToggle}
+              />
+            </Route>
+            <Route path="/p/:projectId/write">
+              <WritingSubRoute
+                routePath="/p/:projectId/write"
+                render={(projectId) => <SceneWriteView projectId={projectId} />}
+                sidebarOpen={effectiveLeftOpen}
+                sidebarOverlay={leftOverlay}
+                onSidebarToggle={handleLeftToggle}
+              />
             </Route>
             <Route path="/p/:projectId">
               <ProjectView

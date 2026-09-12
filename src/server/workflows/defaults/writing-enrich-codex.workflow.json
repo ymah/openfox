@@ -1,0 +1,49 @@
+{
+  "metadata": {
+    "id": "writing-enrich-codex",
+    "name": "Écriture — Enrichir le Codex",
+    "description": "Étoffe ou crée une entrée du Codex (personnage, lieu, lore, objet ou intrigue) à partir d'un prompt libre.",
+    "version": "1.0.0",
+    "color": "#fda4af",
+    "category": "writing",
+    "parameters": [
+      {
+        "id": "entry_path",
+        "label": "Entrée Codex",
+        "description": "Chemin de l'entrée depuis la racine du vault (ex. codex/characters/nom.md)",
+        "position": 0,
+        "required": true
+      },
+      {
+        "id": "brief",
+        "label": "Ce qu'il faut ajouter/développer",
+        "description": "Prompt libre décrivant ce qui doit être ajouté ou développé",
+        "position": 1,
+        "required": true
+      }
+    ]
+  },
+  "entryStep": "enrich",
+  "settings": { "maxIterations": 10 },
+  "steps": [
+    {
+      "id": "enrich",
+      "name": "Étoffer",
+      "type": "sub_agent",
+      "phase": "build",
+      "subAgentType": "writing-worldbuilder",
+      "prompt": "Entrée Codex : {{entry_path}}\n\nÀ faire : {{brief}}\n\nSi le fichier existe déjà, lis-le d'abord et ne remplace jamais silencieusement un fait déjà renseigné.",
+      "transitions": [{ "when": { "type": "always" }, "goto": "report" }]
+    },
+    {
+      "id": "report",
+      "name": "Résumer",
+      "type": "agent",
+      "phase": "done",
+      "agentId": "writing-secretary",
+      "prompt": "L'entrée {{entry_path}} a été mise à jour. Résume en français ce qui a été ajouté, et signale tout conflit de fait relevé par writing-worldbuilder. Puis appelle step_done().",
+      "transitions": [{ "when": { "type": "always" }, "goto": "$done" }]
+    }
+  ],
+  "startCondition": { "type": "always" }
+}

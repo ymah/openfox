@@ -82,6 +82,17 @@
       "phase": "verification",
       "subAgentType": "code_reviewer",
       "prompt": "Fais une revue de code des changements liés à {{project_doc}}. Consigne chaque problème trouvé via session_metadata (clé review_findings, status open).",
+      "transitions": [{ "when": { "type": "always" }, "goto": "finalize" }]
+    },
+    {
+      "id": "finalize",
+      "name": "Clôturer la revue",
+      "type": "agent",
+      "phase": "verification",
+      "agentId": "builder",
+      "subGroup": "code",
+      "prompt": "## Retours de la revue de code\n{{stepOutput.content}}\n\nLe code reviewer a donné son avis ci-dessus. Fais les derniers ajustements nécessaires.\n\nUtilise d'abord `session_metadata` (action `get`, clé `review_findings`) pour voir les retours existants et leurs identifiants. Puis utilise `session_metadata` (action `update`) pour passer chacun à **resolved** (corrigé) ou **dismissed** (non pertinent).\n\nTous les retours doivent être resolved ou dismissed avant de pouvoir terminer. Puis appelle step_done().",
+      "nudgePrompt": "L'étape ne peut pas se terminer tant que tous les retours de revue ne sont pas resolved ou dismissed. Utilise `session_metadata` (action `get`, clé `review_findings`) pour vérifier leur statut actuel, puis `session_metadata` (action `update`) pour les passer à resolved ou dismissed. Appelle step_done() une fois tous les retours traités.",
       "transitions": [
         {
           "when": {
@@ -92,7 +103,7 @@
           },
           "goto": "$done"
         },
-        { "when": { "type": "always" }, "goto": "build" }
+        { "when": { "type": "always" }, "goto": "finalize" }
       ]
     }
   ],

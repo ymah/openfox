@@ -14,6 +14,7 @@ import { DirectoryBrowser } from './shared/DirectoryBrowser.js'
 import { PermissionDeniedModal } from './PermissionDeniedModal.js'
 import { useWorkdir } from '../hooks/useWorkdir.js'
 import { ProjectTypeToggle } from './shared/ProjectTypeToggle.js'
+import { getProjectMode } from '../lib/project-modes.js'
 import type { ProjectType } from '@shared/types.js'
 
 interface OpenProjectModalProps {
@@ -71,7 +72,7 @@ export function OpenProjectModal({ isOpen, onClose, initialProjectType = 'dev' }
 
   async function handleProjectCreation(path: string): Promise<boolean> {
     const basename = pathBasename(path)
-    const result = await createProject(basename, path, projectType === 'gtd' ? 'gtd-secretary' : undefined, projectType)
+    const result = await createProject(basename, path, getProjectMode(projectType).defaultAgent, projectType)
     if (isPermissionDenied(result)) {
       setPermissionDeniedPath((result.error as { path?: string }).path || path)
       return false

@@ -11,6 +11,18 @@ export interface RetryPatternMatch {
   matchedContent: string
 }
 
+/**
+ * Out-of-the-box protection against models (local ones especially) that
+ * fall back to printing tool calls as raw XML-ish tags instead of using the
+ * structured tool-calling API — retried instead of leaking into the chat.
+ * This is the actual default: it must reach both `SETTINGS_DEFAULTS` (what
+ * the settings API reports) and the orchestrator's no-setting-saved-yet
+ * fallback, not just the legacy `llm.disableXmlProtection` migration path.
+ */
+export const DEFAULT_RETRY_PATTERNS: RetryPatternConfig[] = [
+  { field: 'both', pattern: '<(tool_call|function=|/tool_call|parameter=)', action: 'retry', active: true },
+]
+
 const VALID_FIELDS = ['thinking', 'content', 'both'] as const
 
 export function matchRetryPatterns(

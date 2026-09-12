@@ -17,7 +17,7 @@ import type { ProviderManager } from '../provider-manager.js'
 import type { SessionManager } from '../session/index.js'
 import type { ToolRegistry } from '../tools/types.js'
 import type { RequestContextMessage, MinimalMessage } from './request-context.js'
-import type { RetryPatternConfig } from './auto-patterns.js'
+import { DEFAULT_RETRY_PATTERNS, type RetryPatternConfig } from './auto-patterns.js'
 import {
   streamLLMPure,
   consumeStreamGenerator,
@@ -48,7 +48,12 @@ import { estimateToolResultTokens, estimatePromptTokens, isContextLengthError } 
 import { loadAllAgentsDefault, getSubAgents } from '../agents/registry.js'
 import { createRetryLimiter, type RetryLimiter } from './retry-limiter.js'
 import { drainQueue } from './drain-queue.js'
-import { COMPACTION_PROMPT, CONTINUE_PROMPT, CONTINUE_AFTER_STREAM_ERROR_PROMPT } from './prompts.js'
+import {
+  COMPACTION_PROMPT,
+  CONTINUE_PROMPT,
+  CONTINUE_AFTER_STREAM_ERROR_PROMPT,
+  FORMAT_CORRECTION_PROMPT,
+} from './prompts.js'
 import { logger } from '../utils/logger.js'
 import type { LLMRetryPolicy } from '../runner/types.js'
 import { DEFAULT_LLM_RETRY_POLICY } from '../runner/types.js'
@@ -535,9 +540,16 @@ export async function runTopLevelAgentLoop(
         },
       })
 
-      // Emit system message showing what matched
+      // Emit system message showing what matched. The built-in tool-call-tag
+      // pattern gets an actionable correction (what to do differently), not
+      // just a diagnostic notice — otherwise a model prone to this mistake
+      // has nothing telling it what to change and just repeats it until the
+      // retry limit is exhausted.
       const matchMsgId = crypto.randomUUID()
-      const matchMessage = `Pattern "${result.patternMatch.pattern}" matched — auto-retry #${retryLimiter.count()}`
+      const isToolCallFormatPattern = result.patternMatch.pattern === DEFAULT_RETRY_PATTERNS[0]!.pattern
+      const matchMessage = isToolCallFormatPattern
+        ? FORMAT_CORRECTION_PROMPT
+        : `Pattern "${result.patternMatch.pattern}" matched — auto-retry #${retryLimiter.count()}`
       append(
         createMessageStartEvent(matchMsgId, 'user', matchMessage, {
           ...(currentWindowMessageOptions ?? {}),

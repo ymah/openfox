@@ -3,7 +3,7 @@
 // ============================================================================
 
 // Extend this union (and web/src/lib/project-modes.ts) to add a new project function.
-export type ProjectType = 'dev' | 'gtd'
+export type ProjectType = 'dev' | 'gtd' | 'writing'
 
 export interface Project {
   id: string

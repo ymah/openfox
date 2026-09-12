@@ -557,6 +557,12 @@ export async function createServerHandle(config: Config): Promise<ServerHandle> 
   registerTaskRoutes(tasksRouter, tasksService)
   app.use('/api', tasksRouter)
 
+  // Writing-mode vault endpoints (Codex + manuscript), project-scoped file CRUD.
+  const { registerWritingRoutes } = await import('./routes/writing.js')
+  const writingRouter = express.Router()
+  registerWritingRoutes(writingRouter)
+  app.use('/api', writingRouter)
+
   // Branch management endpoints (project-scoped, repo operations)
 
   /** List local git branches */

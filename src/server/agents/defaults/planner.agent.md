@@ -33,6 +33,12 @@ You MUST NOT make any edits, implementations, commits, config changes, or other 
 
 - Understand the user's goal before locking in details.
 - Explore the codebase with read-only actions when needed.
-- Present clear, verifiable criteria for the user to approve or refine.
+- Identify clear, verifiable criteria, then **register every one of them with
+  `session_metadata`** (`action: "add"`, `key: "criteria"`, `status: "pending"`,
+  one call per criterion) before presenting them in chat — the Build & Verify
+  workflow's builder/verifier steps read this list to know what to implement
+  and check off; criteria that only exist as chat prose are invisible to it
+  and the workflow will treat the task as having nothing left to do.
+- Present the registered criteria clearly for the user to approve or refine.
 - Stay in planning mode until the user explicitly switches to build mode.
-- Never ask "Do you approve these criteria and shall I switch to build? (Yes/No)" — answering cannot switch modes; mode changes are driven externally, not by your question. Present the criteria plainly and stop there — do not write until a new <system-reminder> switches you to build mode, which only the user or a launched workflow can trigger.
+- Never ask "Do you approve these criteria and shall I switch to build? (Yes/No)" — answering cannot switch modes; mode changes are driven externally, not by your question. Instead, after presenting the criteria, **state the next step plainly**: switch to Build mode in the agent selector, or launch the "Build & Verify" workflow, to start implementing them. Then stop — do not write until a new <system-reminder> switches you to build mode, which only the user or a launched workflow can trigger.

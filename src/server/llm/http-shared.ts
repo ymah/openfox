@@ -152,6 +152,16 @@ export async function* readResponseLines(response: Response): AsyncGenerator<str
         if (trimmed) yield trimmed
       }
     }
+
+    // Flush the decoder (a chunk boundary can split a multi-byte UTF-8
+    // character — common with non-ASCII content) and yield whatever is left
+    // in the buffer. Not every server terminates its last line with '\n'
+    // before closing the connection, and without this the final line —
+    // sometimes the very last piece of content, sometimes the SSE '[DONE]'
+    // marker itself — is silently dropped.
+    buffer += decoder.decode()
+    const trimmed = buffer.trim()
+    if (trimmed) yield trimmed
   } finally {
     reader.releaseLock()
   }

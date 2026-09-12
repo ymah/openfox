@@ -1,4 +1,5 @@
 import { getDatabase } from './index.js'
+import { DEFAULT_RETRY_PATTERNS } from '../chat/auto-patterns.js'
 
 // ============================================================================
 // Settings Operations
@@ -88,7 +89,7 @@ export const SETTINGS_DEFAULTS: Record<string, string> = {
   [SETTINGS_KEYS.LLM_CAVEMAN_THINKING]: 'false',
   [SETTINGS_KEYS.CACHE_WARMING]: 'false',
   [SETTINGS_KEYS.AUTO_CONTINUE_ON_BOOT]: 'false',
-  [SETTINGS_KEYS.RETRY_PATTERNS]: JSON.stringify({ patterns: [], maxRetriesPerTurn: 10 }),
+  [SETTINGS_KEYS.RETRY_PATTERNS]: JSON.stringify({ patterns: DEFAULT_RETRY_PATTERNS, maxRetriesPerTurn: 10 }),
   [SETTINGS_KEYS.KEYBINDINGS]: JSON.stringify({
     terminalToggle: { type: 'double-press', key: 'Control', threshold: 300 },
     quickAction: { type: 'double-press', key: 'Shift', threshold: 300 },
