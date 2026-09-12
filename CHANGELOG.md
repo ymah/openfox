@@ -1,5 +1,11 @@
 # Changelog
 
+## 2.0.148 - 2026-09-12
+
+### Bug Fixes
+
+- **Clear cached prompt when session mode changes** — Session mode switches (e.g., planner to builder) now correctly invalidate the LLM's cached tool definitions, preventing stale tools from breaking subsequent requests.
+
 ## 2.0.145 - 2026-09-11
 
 ### Bug Fixes
