@@ -86,4 +86,14 @@ describe('filterByProjectType', () => {
   it('returns everything unfiltered when the project type is unknown/not yet loaded', () => {
     expect(filterByProjectType(items, undefined)).toEqual(items)
   })
+
+  it('isolates a third project type (writing) from both dev and gtd items', () => {
+    const threeWay: Item[] = [
+      { id: 'builder', category: 'dev' },
+      { id: 'gtd-secretary', category: 'gtd' },
+      { id: 'writing-secretary', category: 'writing' },
+      { id: 'custom-legacy' },
+    ]
+    expect(filterByProjectType(threeWay, 'writing').map((i) => i.id)).toEqual(['writing-secretary', 'custom-legacy'])
+  })
 })

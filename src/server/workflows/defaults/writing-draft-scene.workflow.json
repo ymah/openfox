@@ -1,0 +1,51 @@
+{
+  "metadata": {
+    "id": "writing-draft-scene",
+    "name": "Écriture — Rédiger une scène",
+    "description": "Rédige la prose d'une scène à partir de son résumé et des entrées Codex référencées, puis vérifie la cohérence.",
+    "version": "1.0.0",
+    "color": "#e11d48",
+    "category": "writing",
+    "parameters": [
+      {
+        "id": "scene_path",
+        "label": "Scène",
+        "description": "Chemin de la scène depuis la racine du vault (ex. manuscript/01-.../01-.../02-scene.md)",
+        "position": 0,
+        "required": true
+      }
+    ]
+  },
+  "entryStep": "draft",
+  "settings": { "maxIterations": 10 },
+  "steps": [
+    {
+      "id": "draft",
+      "name": "Rédiger",
+      "type": "sub_agent",
+      "phase": "build",
+      "subAgentType": "writing-drafter",
+      "prompt": "Rédige la scène suivante : {{scene_path}}\n\nLis son frontmatter (summary, pov, codex_refs) et le contenu de chaque entrée Codex référencée, puis écris la prose dans le corps du fichier en restant strictement cohérent avec les faits déjà établis.",
+      "transitions": [{ "when": { "type": "always" }, "goto": "continuity" }]
+    },
+    {
+      "id": "continuity",
+      "name": "Vérifier la cohérence",
+      "type": "sub_agent",
+      "phase": "verification",
+      "subAgentType": "writing-continuity",
+      "prompt": "Vérifie la scène {{scene_path}} par rapport aux entrées Codex qu'elle référence : contradictions factuelles ou chronologiques, et faits nouveaux non encore capturés dans le Codex.",
+      "transitions": [{ "when": { "type": "always" }, "goto": "report" }]
+    },
+    {
+      "id": "report",
+      "name": "Résumer",
+      "type": "agent",
+      "phase": "done",
+      "agentId": "writing-secretary",
+      "prompt": "La scène {{scene_path}} a été rédigée et vérifiée. Résume en français ce qui a été écrit et les éventuelles contradictions ou faits nouveaux relevés par la vérification de cohérence — s'il y a une contradiction, signale-la clairement à l'utilisateur plutôt que de la corriger toi-même. Puis appelle step_done().",
+      "transitions": [{ "when": { "type": "always" }, "goto": "$done" }]
+    }
+  ],
+  "startCondition": { "type": "always" }
+}

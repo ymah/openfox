@@ -60,8 +60,27 @@ export function parseAnsi(text: string): ParsedSegment[] {
   const ansiRegex = new RegExp(String.fromCharCode(0x1b) + '\\[([0-9;]+)m', 'g')
 
   let lastIndex = 0
-  let currentClasses = 'text-text-primary'
   let match: RegExpExecArray | null
+
+  // SGR state persists cumulatively across separate escape sequences — real
+  // terminal output very commonly emits color and style as separate codes
+  // (e.g. "\x1b[1m" then "\x1b[31m" for bold red), and each one only ever
+  // touches its own attribute (fg/bg/style), never the others.
+  let fg: string | null = null
+  let bg: string | null = null
+  const styles = new Set<number>()
+
+  const buildClasses = (): string => {
+    const classes = [fg ?? ANSI_RESET]
+    if (bg) classes.push(bg)
+    for (const s of styles) {
+      const styleClass = ANSI_STYLES[s]
+      if (styleClass) classes.push(styleClass)
+    }
+    return classes.join(' ')
+  }
+
+  let currentClasses = ANSI_RESET
 
   try {
     while ((match = ansiRegex.exec(text)) !== null) {
@@ -83,46 +102,37 @@ export function parseAnsi(text: string): ParsedSegment[] {
 
       // Reset on 0 or no params
       if (params.length === 0 || params[0] === 0) {
-        currentClasses = 'text-text-primary'
+        fg = null
+        bg = null
+        styles.clear()
+        currentClasses = ANSI_RESET
+        lastIndex = ansiRegex.lastIndex
         continue
       }
-
-      // Build class string from parameters
-      const classes: string[] = []
 
       for (const param of params) {
         if (param >= 30 && param <= 37) {
           // Foreground color
-          const colorClass = ANSI_COLORS[param]
-          if (colorClass) classes.push(colorClass)
+          if (ANSI_COLORS[param]) fg = ANSI_COLORS[param]
         } else if (param >= 40 && param <= 47) {
           // Background color
-          const bgClass = ANSI_BG_COLORS[param]
-          if (bgClass) classes.push(bgClass)
+          if (ANSI_BG_COLORS[param]) bg = ANSI_BG_COLORS[param]
         } else if (param >= 90 && param <= 97) {
           // Bright foreground color
-          const colorClass = ANSI_COLORS[param]
-          if (colorClass) classes.push(colorClass)
+          if (ANSI_COLORS[param]) fg = ANSI_COLORS[param]
         } else if (param in ANSI_STYLES) {
-          // Text style
-          const styleClass = ANSI_STYLES[param as keyof typeof ANSI_STYLES]
-          if (styleClass) classes.push(styleClass)
+          // Text style — additive (bold + underline can both be active)
+          styles.add(param)
         } else if (param === 39) {
-          // Default foreground
-          classes.push(ANSI_RESET)
+          // Default foreground only — leaves bg/styles untouched
+          fg = null
         } else if (param === 49) {
-          // Default background - remove bg classes
-          currentClasses = currentClasses
-            .split(' ')
-            .filter((c) => !c.startsWith('bg-'))
-            .join(' ')
+          // Default background only — leaves fg/styles untouched
+          bg = null
         }
       }
 
-      if (classes.length > 0) {
-        currentClasses = classes.join(' ')
-      }
-
+      currentClasses = buildClasses()
       lastIndex = ansiRegex.lastIndex
     }
 

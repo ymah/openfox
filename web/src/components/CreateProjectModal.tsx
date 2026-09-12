@@ -12,6 +12,7 @@ import { validateProjectName } from './shared/validation'
 import { PlusMdIcon } from './shared/icons'
 import { PermissionDeniedModal } from './PermissionDeniedModal'
 import { ProjectTypeToggle, type ProjectType } from './shared/ProjectTypeToggle'
+import { getProjectMode, DEFAULT_PROJECT_TYPE } from '../lib/project-modes'
 
 interface CreateProjectModalProps {
   isOpen: boolean
@@ -100,11 +101,12 @@ export function CreateProjectModal({ isOpen, onClose, initialProjectType = 'dev'
       const data = await response.json()
       const project = data.project
 
-      if (projectType === 'gtd') {
+      if (projectType !== DEFAULT_PROJECT_TYPE) {
+        const defaultAgent = getProjectMode(projectType).defaultAgent
         await authFetch(`/api/projects/${project.id}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ type: 'gtd', defaultAgent: 'gtd-secretary' }),
+          body: JSON.stringify({ type: projectType, ...(defaultAgent ? { defaultAgent } : {}) }),
         })
       }
 

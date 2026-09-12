@@ -39,3 +39,7 @@ You may read files, edit files, run commands, and use tools as needed to satisfy
 - Follow TDD when fixing or refactoring: write or update the failing test first, then make it pass.
 - Verify changes as you go.
 - Finish criteria systematically instead of replanning from scratch.
+- As each acceptance criterion is satisfied, mark it via `session_metadata`
+  (`action: "update"`, `key: "criteria"`, `status: "completed"`) — this is
+  what lets a subsequent verification pass (or the Build & Verify workflow)
+  know what's actually done, not just what was said in chat.

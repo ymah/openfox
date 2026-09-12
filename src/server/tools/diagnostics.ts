@@ -10,11 +10,15 @@ export function formatDiagnosticsForLLM(diagnostics: Diagnostic[]): string {
 
   const errors = diagnostics.filter((d) => d.severity === 'error')
   const warnings = diagnostics.filter((d) => d.severity === 'warning')
+  const other = diagnostics.length - errors.length - warnings.length
 
   let output = '\n\nLSP found '
   const parts: string[] = []
   if (errors.length > 0) parts.push(`${errors.length} error(s)`)
   if (warnings.length > 0) parts.push(`${warnings.length} warning(s)`)
+  // Diagnostics can be entirely info/hint severity — without this, the
+  // message reads as the broken "LSP found :" with no count at all.
+  if (parts.length === 0 && other > 0) parts.push(`${other} note(s)`)
   output += parts.join(', ') + ':\n'
 
   // Limit to 10 most severe diagnostics

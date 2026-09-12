@@ -16,6 +16,14 @@ export interface ProjectModeDef {
   // JIT compiler only picks up classes it can see verbatim in source).
   activeTabClassName: string
   showsDevChrome: boolean
+  // Agent seeded as the project's defaultAgent at creation, and used to
+  // route a project's home screen to a mode-specific UI (see App.tsx). Modes
+  // that just reuse the ordinary session/chat screen (dev, gtd) leave this
+  // unset for the home-screen check but still seed a defaultAgent below.
+  defaultAgent?: string
+  // Modes with a dedicated project home screen (Codex/Manuscrit for writing)
+  // instead of the ordinary session list / EmptyProjectView.
+  hasCustomHome?: boolean
 }
 
 export const PROJECT_MODES: ProjectModeDef[] = [
@@ -30,11 +38,24 @@ export const PROJECT_MODES: ProjectModeDef[] = [
     value: 'gtd',
     label: { en: 'GTD', fr: 'GTD' },
     description: {
-      en: 'GTD vault — capture, clarify, dispatch. See docs/GTD.md.',
-      fr: 'Vault GTD — capture, clarification, dispatch. Voir docs/GTD.md.',
+      en: 'This folder becomes a GTD vault — capture, clarify, dispatch. See docs/GTD.md.',
+      fr: 'Ce dossier devient un vault GTD — capture, clarification, dispatch. Voir docs/GTD.md.',
     },
     activeTabClassName: 'bg-amber-500/20 text-amber-500',
     showsDevChrome: false,
+    defaultAgent: 'gtd-secretary',
+  },
+  {
+    value: 'writing',
+    label: { en: 'Writing', fr: 'Écriture' },
+    description: {
+      en: 'Novel/book vault — Codex, manuscript, AI writing chat.',
+      fr: 'Vault roman/livre — Codex, manuscrit, chat IA d’écriture.',
+    },
+    activeTabClassName: 'bg-rose-500/20 text-rose-500',
+    showsDevChrome: false,
+    defaultAgent: 'writing-secretary',
+    hasCustomHome: true,
   },
 ]
 

@@ -1,7 +1,16 @@
 import { beforeEach, describe, expect, it } from 'vitest'
 import { loadConfig } from '../config.js'
 import { closeDatabase, initDatabase } from './index.js'
-import { SETTINGS_KEYS, deleteSetting, getAllSettings, getMaxVisibleItems, getSetting, setSetting } from './settings.js'
+import {
+  SETTINGS_KEYS,
+  SETTINGS_DEFAULTS,
+  deleteSetting,
+  getAllSettings,
+  getMaxVisibleItems,
+  getSetting,
+  setSetting,
+} from './settings.js'
+import { DEFAULT_RETRY_PATTERNS } from '../chat/auto-patterns.js'
 
 describe('db settings', () => {
   beforeEach(() => {
@@ -30,6 +39,11 @@ describe('db settings', () => {
     expect(getAllSettings()).toEqual({
       [SETTINGS_KEYS.GLOBAL_INSTRUCTIONS]: 'Always test first',
     })
+  })
+
+  it('defaults retry patterns to protecting against tag-based tool calls, not an empty list', () => {
+    const parsed = JSON.parse(SETTINGS_DEFAULTS[SETTINGS_KEYS.RETRY_PATTERNS]!)
+    expect(parsed.patterns).toEqual(DEFAULT_RETRY_PATTERNS)
   })
 
   describe('max visible items', () => {

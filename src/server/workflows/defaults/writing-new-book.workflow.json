@@ -1,0 +1,26 @@
+{
+  "metadata": {
+    "id": "writing-new-book",
+    "name": "Écriture — Nouveau livre",
+    "description": "Structure le vault d'un nouveau roman/livre et pose les questions de cadrage (genre, POV, ton).",
+    "version": "1.0.0",
+    "color": "#f43f5e",
+    "category": "writing",
+    "parameters": []
+  },
+  "entryStep": "scaffold",
+  "settings": { "maxIterations": 15 },
+  "steps": [
+    {
+      "id": "scaffold",
+      "name": "Cadrer et structurer",
+      "type": "agent",
+      "phase": "plan",
+      "agentId": "writing-secretary",
+      "prompt": "Démarre un nouveau livre dans ce vault : pose les questions de cadrage (genre, point(s) de vue, ton/style, nombre d'actes envisagé) une à la fois via ask_user, crée AGENTS.md s'il n'existe pas, une entrée Codex par personnage principal cité, et la structure manuscript/01-.../01-.../01-....md avec un premier résumé de scène. Puis appelle step_done().",
+      "nudgePrompt": "La structure initiale n'est pas encore complète. Termine les questions de cadrage restantes puis crée les entrées Codex et la structure manuscript manquantes, puis appelle step_done().",
+      "transitions": [{ "when": { "type": "always" }, "goto": "$done" }]
+    }
+  ],
+  "startCondition": { "type": "always" }
+}

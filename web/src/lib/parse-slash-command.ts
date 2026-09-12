@@ -70,9 +70,14 @@ export function parseSlashCommand(
     if (wf.parameters && wf.parameters.length > 0) {
       const sorted = [...wf.parameters].sort((a, b) => (a.position ?? 0) - (b.position ?? 0))
       sorted.forEach((p, i) => {
-        if (args[i] !== undefined) {
-          params[p.id] = args[i]!
-        }
+        if (args[i] === undefined) return
+        // The last parameter is greedy — it absorbs every remaining word
+        // instead of just the next token. Most trailing workflow parameters
+        // are free-text ("idée", "résumé de la scène en une phrase", …), so
+        // a strict one-token-per-slot mapping would silently drop the rest
+        // of what the user typed.
+        const isLast = i === sorted.length - 1
+        params[p.id] = isLast ? args.slice(i).join(' ') : args[i]!
       })
     } else {
       args.forEach((arg, i) => {

@@ -44,8 +44,7 @@ import { getEnabledSkillMetadata } from '../skills/registry.js'
 import { getRuntimeConfig } from '../runtime-config.js'
 import { getGlobalConfigDir } from '../../cli/paths.js'
 import { logger } from '../utils/logger.js'
-import type { RetryPatternConfig } from './auto-patterns.js'
-import { sanitizeRetryPatterns } from './auto-patterns.js'
+import { DEFAULT_RETRY_PATTERNS, sanitizeRetryPatterns, type RetryPatternConfig } from './auto-patterns.js'
 import { getConversationMessages, processEventsForConversation } from './conversation-history.js'
 
 // Re-export for runner orchestrator
@@ -71,22 +70,14 @@ export async function buildRetryPatterns(): Promise<{
       // User had the old setting — migrate to retry patterns
       const disabled = oldXmlProtection === 'true'
       return {
-        retryPatterns: sanitizeRetryPatterns(
-          disabled
-            ? []
-            : [
-                {
-                  field: 'both',
-                  pattern: '<(tool_call|function=|/tool_call|parameter=)',
-                  action: 'retry',
-                  active: true,
-                },
-              ],
-        ),
+        retryPatterns: sanitizeRetryPatterns(disabled ? [] : DEFAULT_RETRY_PATTERNS),
         maxRetriesPerTurn: 10,
       }
     }
-    return { retryPatterns: [], maxRetriesPerTurn: 10 }
+    // No setting saved yet at all (fresh install, or nothing ever touched
+    // this) — protect against raw tag-based tool calls by default rather
+    // than leaving every agent unprotected until a user opts in manually.
+    return { retryPatterns: DEFAULT_RETRY_PATTERNS, maxRetriesPerTurn: 10 }
   }
   try {
     const parsed = JSON.parse(raw)
