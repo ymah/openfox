@@ -1,5 +1,16 @@
 # Changelog
 
+## 2.0.150 - 2026-09-13
+
+### Bug Fixes
+
+- **Sessions no longer stay stuck in "running"** — turns started via `chat.retry` or queue chaining now reset the running flag; Stop followed by an immediate new message no longer breaks the next turn; pre-flight errors and deleted sessions wind down cleanly.
+- **Workflow user gates pause again when revisited** — "Affiner" in `gtd-clarify` no longer loops until max iterations; exhausted, broken or crashed runs are marked blocked instead of left running; sub-agent LLM failures are no longer reported as empty successes; workflow launches queued while busy are re-dispatched as real runs.
+- **Streaming fixes** — tool calls that reuse index 0 (and every Ollama tool call) are no longer merged into one garbled call; compaction with pending tool calls runs them first; pattern-retry closes the assistant bubble; attachments sent mid-turn reach the LLM; Stop during `ask_user` is an interruption, not an error.
+- **Web client** — the WS message handler survives a server that was down at page load (auto-reconnect used to deliver to nobody); no duplicate sockets on reconnect; parallel sub-agent streams no longer mix text; the active server session follows the focused pane; chat drafts no longer leak between sessions; Stop recovers after a failed request.
+- **Novel mode** — scene routes are scoped to `manuscript/**/*.md`; autosave can no longer overwrite a scene with an empty or stale body; failed Codex saves keep the entry; non-Latin titles get a usable slug; frontmatter matches the writing skill contract.
+- Slash-command and quick-action lists are scoped to the project type; verifier findings are injected into GTD/writing nudges.
+
 ## 2.0.148 - 2026-09-12
 
 ### Bug Fixes
