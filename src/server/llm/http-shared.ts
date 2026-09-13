@@ -40,6 +40,15 @@ export abstract class ChatHttpClient {
    */
   protected abstract parseStreamLine(trimmed: string): ChatCompletionChunk | typeof DONE | null
 
+  /**
+   * Build the line parser for ONE stream. Defaults to the stateless
+   * `parseStreamLine`; backends that need per-stream state (e.g. a running
+   * tool-call index) override this so concurrent streams never share it.
+   */
+  protected createStreamLineParser(): (trimmed: string) => ChatCompletionChunk | typeof DONE | null {
+    return this.parseStreamLine.bind(this)
+  }
+
   private async post(
     params: ChatCompletionCreateParamsNonStreaming | ChatCompletionCreateParamsStreaming,
     options?: RequestOptions,
@@ -62,7 +71,7 @@ export abstract class ChatHttpClient {
     params: ChatCompletionCreateParamsStreaming,
     options?: RequestOptions,
   ): AsyncGenerator<ChatCompletionChunk> {
-    const parseStreamLine = this.parseStreamLine.bind(this)
+    const parseStreamLine = this.createStreamLineParser()
     const responsePromise = this.post(params, options)
 
     async function* generate(): AsyncGenerator<ChatCompletionChunk> {

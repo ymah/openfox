@@ -6,6 +6,8 @@ import { createMessageStartEvent } from './stream-pure.js'
 import { createQueueStateMessage, createChatMessageMessage, createChatDoneMessage } from '../ws/protocol.js'
 import { getCurrentWindowMessageOptions } from '../events/index.js'
 
+type MessageKind = NonNullable<NonNullable<Parameters<typeof createMessageStartEvent>[3]>['messageKind']>
+
 export interface DrainResult {
   messages: QueuedMessage[]
   hasMessages: boolean
@@ -25,6 +27,7 @@ export function drainQueue(
       createMessageStartEvent(asapMsgId, 'user', asap.content, {
         ...(getCurrentWindowMessageOptions(sessionId) ?? {}),
         ...(asap.attachments ? { attachments: asap.attachments } : {}),
+        ...(asap.messageKind ? { messageKind: asap.messageKind as MessageKind } : {}),
       }),
     )
     append({ type: 'message.done', data: { messageId: asapMsgId } })
@@ -35,6 +38,7 @@ export function drainQueue(
       content: asap.content,
       timestamp: new Date().toISOString(),
       ...(asap.attachments ? { attachments: asap.attachments } : {}),
+      ...(asap.messageKind ? { messageKind: asap.messageKind as MessageKind } : {}),
     }
     onMessage?.(createChatMessageMessage(message))
     onMessage?.(createChatDoneMessage(asapMsgId, 'complete'))

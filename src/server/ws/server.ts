@@ -20,7 +20,12 @@ import { interruptLLMRetryWait, hasRecentLLMFailure } from '../chat/stream-pure.
 
 import { launchWorkflowRun } from '../runner/launch.js'
 import { appendCompactionPrompt } from '../context/compactor.js'
-import { computeSessionHash, applyDynamicContext, computeUnifiedDiff } from '../chat/dynamic-context.js'
+import {
+  computeSessionHash,
+  applyDynamicContext,
+  computeUnifiedDiff,
+  resolveConcreteModelName,
+} from '../chat/dynamic-context.js'
 import { provideAnswer } from '../tools/index.js'
 import { logger } from '../utils/logger.js'
 import { devServerManager } from '../dev-server/manager.js'
@@ -952,6 +957,24 @@ export interface WebSocketServerExports {
   broadcastAll: (msg: ServerMessage) => void
 }
 
+/**
+ * Same model name the turn hashes with (agent override / alias resolved);
+ * falls back to the raw preference when no provider manager is wired (tests).
+ */
+function safeResolveModelName(
+  sessionManager: SessionManager,
+  providerManager: ProviderManager | undefined,
+  sessionId: string,
+  agentId: string,
+): string | undefined {
+  try {
+    return resolveConcreteModelName(sessionManager, sessionId, agentId) || undefined
+  } catch {
+    const session = sessionManager.getSession(sessionId)
+    return session?.providerModel ?? providerManager?.getCurrentModel()
+  }
+}
+
 async function handleClientMessage(
   ws: WebSocket,
   client: ClientConnection,
@@ -1087,7 +1110,7 @@ async function handleClientMessage(
           }
 
           if (cachedHash) {
-            const modelName = session.providerModel ?? _providerManager?.getCurrentModel()
+            const modelName = safeResolveModelName(sessionManager, _providerManager, session.id, session.mode)
             const currentHash = await computeSessionHash(sessionManager, session.id, modelName)
             if (currentHash !== cachedHash) {
               sessionManager.setDynamicContextChanged(session.id, true)
@@ -1216,7 +1239,7 @@ async function handleClientMessage(
         try {
           await mcpReadyPromise
           const session = sessionManager.requireSession(sessionId)
-          const modelName = session.providerModel ?? _providerManager?.getCurrentModel()
+          const modelName = safeResolveModelName(sessionManager, _providerManager, sessionId, session.mode)
           const currentHash = await computeSessionHash(sessionManager, sessionId, modelName)
           const cachedHash = sessionManager.getCachedPrompt(sessionId)?.hash
 
@@ -1265,7 +1288,7 @@ async function handleClientMessage(
         const agentDef =
           allAgents.findAgentById(session.mode, await allAgents.loadAllAgentsDefault()) ??
           allAgents.findAgentById('planner', await allAgents.loadAllAgentsDefault())!
-        const modelName = session.providerModel ?? _providerManager?.getCurrentModel()
+        const modelName = safeResolveModelName(sessionManager, _providerManager, sessionId, agentDef.metadata.id)
         const {
           systemPrompt: newPrompt,
           tools: newTools,
@@ -1341,7 +1364,7 @@ async function handleClientMessage(
 
       ;(async () => {
         try {
-          const modelName = session.providerModel ?? _providerManager?.getCurrentModel()
+          const modelName = safeResolveModelName(sessionManager, _providerManager, sessionId, session.mode)
           await applyDynamicContext(sessionManager, sessionId, modelName)
 
           const newContextState = sessionManager.getContextState(sessionId)

@@ -441,7 +441,14 @@ function createEventStoreAppend(sessionId: string): (event: TurnEvent) => void {
  * the orchestrator's `agentLlmClient.getModel()`. Used so the point-of-contention
  * prompt hash matches the turn-start hash (exactly-once prompt reminders).
  */
-function resolveConcreteModelName(sessionManager: SessionManager, sessionId: string, agentId: string): string {
+/**
+ * The model name the turn will actually hash with: agent override > session
+ * preference > global, with aliases resolved through the provider client.
+ * WS handlers must use this (not the raw `session.providerModel`) or their
+ * drift hash disagrees with the turn's and the "context changed" banner never
+ * clears.
+ */
+export function resolveConcreteModelName(sessionManager: SessionManager, sessionId: string, agentId: string): string {
   const effective = sessionManager.resolveEffectiveProviderModel(sessionId, agentId)
   if (effective.providerId && effective.model) {
     const pm = sessionManager.getProviderManager()

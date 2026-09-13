@@ -156,7 +156,22 @@ export async function executeTools(
           ),
         )
       }
-      const answer = await answerPromise
+      let answer: string
+      try {
+        answer = await answerPromise
+      } catch (waitError) {
+        // Stop while the question is pending: cancelQuestionsForSession rejects
+        // the promise. That is an interruption, not a turn failure — a throw
+        // here would persist an "Error: Session stopped by user" correction
+        // and leave the ask call without a tool result.
+        if (
+          ctx.signal?.aborted ||
+          (waitError instanceof Error && /stopped|cancel|abort|deleted/i.test(waitError.message))
+        ) {
+          return createInterruptedResult(startTime)
+        }
+        throw waitError
+      }
       return {
         success: true,
         output: answer,
@@ -300,9 +315,24 @@ export async function executeTools(
   }
 
   const batchStart = Date.now()
-  const executionPromises = toolCalls.map((toolCall, index) => executeTool(toolCall, index))
-  const results = await Promise.all(executionPromises)
+  // Every tool in the batch must settle: an unexpected throw in one call must
+  // not leave its siblings without a tool.result (which breaks the
+  // tool_call/tool_result pairing the next LLM request depends on). The first
+  // real error is re-thrown once all results are recorded.
+  const settled = await Promise.allSettled(toolCalls.map((toolCall, index) => executeTool(toolCall, index)))
   ctx.turnMetrics.addToolTime(Date.now() - batchStart)
+  const results: Awaited<ReturnType<typeof executeTool>>[] = []
+  let firstError: unknown
+  for (const outcome of settled) {
+    if (outcome.status === 'fulfilled') {
+      results.push(outcome.value)
+    } else if (firstError === undefined) {
+      firstError = outcome.reason
+    }
+  }
+  if (firstError !== undefined) {
+    throw firstError
+  }
 
   results.sort((a, b) => a.index - b.index)
 

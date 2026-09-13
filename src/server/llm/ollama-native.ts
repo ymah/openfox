@@ -236,12 +236,32 @@ type StreamToolCall = NonNullable<ChatCompletionChunk['choices'][0]['delta']['to
 function nativeToolCallToOpenAIStream(toolCall: OllamaToolCall, index: number): StreamToolCall {
   const fn = toolCall.function ?? {}
   return {
-    index: typeof fn.index === 'number' ? fn.index : index,
+    index,
     id: toolCall.id ?? `call_${index}`,
     function: {
       name: fn.name ?? '',
       arguments: stringifyToolArguments(fn.arguments),
     },
+  }
+}
+
+/**
+ * Per-stream tool-call index allocator. Ollama emits each tool call as a
+ * complete object and (for most models) without `function.index`; numbering
+ * them by their position within the chunk gives every call index 0 / id
+ * `call_0` when they arrive in separate chunks, and the OpenAI-shaped merge
+ * downstream then concatenates them into one garbled call.
+ */
+export function createOllamaToolCallIndexer(): (toolCall: OllamaToolCall, positionInChunk: number) => number {
+  let next = 0
+  return (toolCall, positionInChunk) => {
+    const fn = toolCall.function ?? {}
+    if (typeof fn.index === 'number') {
+      next = Math.max(next, fn.index + 1)
+      return fn.index
+    }
+    void positionInChunk
+    return next++
   }
 }
 
@@ -280,9 +300,15 @@ export function parseOllamaChatResponse(data: OllamaChatResponse): ChatCompletio
 /**
  * Translate one native streaming /api/chat line into an OpenAI-shaped chunk.
  */
-export function parseOllamaChatChunk(data: OllamaChatResponse): ChatCompletionChunk {
+export function parseOllamaChatChunk(
+  data: OllamaChatResponse,
+  allocateIndex: (toolCall: OllamaToolCall, positionInChunk: number) => number = (tc, position) =>
+    typeof tc.function?.index === 'number' ? tc.function.index : position,
+): ChatCompletionChunk {
   const msg = data.message ?? {}
-  const toolCalls = (msg.tool_calls ?? []).map(nativeToolCallToOpenAIStream)
+  const toolCalls = (msg.tool_calls ?? []).map((tc, position) =>
+    nativeToolCallToOpenAIStream(tc, allocateIndex(tc, position)),
+  )
 
   const delta: ChatCompletionChunk['choices'][0]['delta'] = {}
   if (msg.content) delta['content'] = msg.content
@@ -349,11 +375,18 @@ export class OllamaHttpClient extends ChatHttpClient {
   }
 
   protected parseStreamLine(trimmed: string): ChatCompletionChunk | typeof DONE | null {
-    try {
-      return parseOllamaChatChunk(JSON.parse(trimmed) as OllamaChatResponse)
-    } catch (error) {
-      logger.warn('Failed to parse Ollama stream chunk', { data: trimmed, error })
-      return null
+    return this.createStreamLineParser()(trimmed)
+  }
+
+  protected override createStreamLineParser(): (trimmed: string) => ChatCompletionChunk | typeof DONE | null {
+    const allocateIndex = createOllamaToolCallIndexer()
+    return (trimmed) => {
+      try {
+        return parseOllamaChatChunk(JSON.parse(trimmed) as OllamaChatResponse, allocateIndex)
+      } catch (error) {
+        logger.warn('Failed to parse Ollama stream chunk', { data: trimmed, error })
+        return null
+      }
     }
   }
 }

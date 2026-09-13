@@ -4,6 +4,7 @@ import {
   buildOllamaChatRequest,
   parseOllamaChatResponse,
   parseOllamaChatChunk,
+  createOllamaToolCallIndexer,
 } from './ollama-native.js'
 import type {
   ChatCompletionCreateParamsNonStreaming,
@@ -247,6 +248,20 @@ describe('parseOllamaChatChunk', () => {
     expect(chunk.choices[0]!.delta.tool_calls).toEqual([
       { index: 2, id: 'call_x', function: { name: 'run_command', arguments: '{"command":"ls"}' } },
     ])
+  })
+
+  it('gives tool calls arriving in separate chunks distinct indexes and ids (per-stream indexer)', () => {
+    const allocateIndex = createOllamaToolCallIndexer()
+    const first = parseOllamaChatChunk(
+      { message: { role: 'assistant', tool_calls: [{ function: { name: 'read_file', arguments: { path: 'a' } } }] } },
+      allocateIndex,
+    )
+    const second = parseOllamaChatChunk(
+      { message: { role: 'assistant', tool_calls: [{ function: { name: 'read_file', arguments: { path: 'b' } } }] } },
+      allocateIndex,
+    )
+    expect(first.choices[0]!.delta.tool_calls![0]).toMatchObject({ index: 0, id: 'call_0' })
+    expect(second.choices[0]!.delta.tool_calls![0]).toMatchObject({ index: 1, id: 'call_1' })
   })
 
   it('maps the final chunk with usage and finish_reason', () => {

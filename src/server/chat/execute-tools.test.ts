@@ -119,6 +119,27 @@ describe('executeTools', () => {
     expect(result.toolMessages[2]?.content).toBe('Tool 2 output')
   })
 
+  it('lets sibling tool calls settle (and record tool.result) when one throws unexpectedly', async () => {
+    const append = vi.fn()
+    mockToolRegistry.execute = vi.fn(async (_name: string, args: Record<string, unknown>) => {
+      if (args['boom']) throw new TypeError('internal tool bug')
+      await new Promise((resolve) => setTimeout(resolve, 20))
+      return { success: true, output: `ok ${String(args['index'])}`, durationMs: 1, truncated: false }
+    })
+    const toolCalls: ToolCall[] = [
+      { id: 'call-1', name: 'run_command', arguments: { boom: true } },
+      { id: 'call-2', name: 'run_command', arguments: { index: 2 } },
+    ]
+
+    await expect(executeTools('msg-1', toolCalls, makeCtx(), append)).rejects.toThrow('internal tool bug')
+
+    const resultEvents = (append.mock.calls as Array<[TurnEvent]>)
+      .map(([e]) => e)
+      .filter((e) => e.type === 'tool.result')
+    // The sibling's tool.result was still appended before the error propagated
+    expect(resultEvents.some((e) => (e.data as { toolCallId?: string }).toolCallId === 'call-2')).toBe(true)
+  })
+
   it('includes output and error when tool fails with output', async () => {
     const append = vi.fn()
     mockToolRegistry.execute = vi.fn().mockResolvedValue({
