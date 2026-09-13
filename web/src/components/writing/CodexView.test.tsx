@@ -51,6 +51,34 @@ describe('CodexView', () => {
     expect(screen.getByDisplayValue('A pilot.')).toBeTruthy()
   })
 
+  it('keeps the entry (and the draft) in the list when saving fails', async () => {
+    mockedAuthFetch
+      .mockResolvedValueOnce(
+        jsonResponse({
+          entries: [{ type: 'characters', slug: 'lena', title: 'Lena', tags: [], facts: {}, body: 'A pilot.' }],
+        }),
+      )
+      .mockResolvedValueOnce({
+        ok: false,
+        status: 500,
+        json: () => Promise.resolve({ error: 'disk full' }),
+      } as Response)
+    render(<CodexView projectId="p1" />)
+
+    await waitFor(() => expect(screen.getByText('Lena')).toBeTruthy())
+    await userEvent.click(screen.getByText('Lena'))
+    const bodyField = screen.getByDisplayValue('A pilot.')
+    await userEvent.clear(bodyField)
+    await userEvent.type(bodyField, 'A retired pilot.')
+    await userEvent.click(screen.getByText('Save'))
+
+    // The error body must not replace the entry: it stays listed and the
+    // unsaved edit is still in the editor.
+    await waitFor(() => expect(screen.getByText('HTTP 500')).toBeTruthy())
+    expect(screen.getByText('Lena')).toBeTruthy()
+    expect(screen.getByDisplayValue('A retired pilot.')).toBeTruthy()
+  })
+
   it('creates a new entry via the type-scoped "+ New" control', async () => {
     mockedAuthFetch.mockResolvedValue(jsonResponse({ entries: [] }))
     render(<CodexView projectId="p1" />)

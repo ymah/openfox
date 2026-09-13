@@ -69,6 +69,42 @@ describe('SceneWriteView', () => {
     )
   })
 
+  it('does not arm autosave after a failed load (would overwrite the file with an empty body)', async () => {
+    mockedAuthFetch.mockResolvedValue({
+      ok: false,
+      status: 500,
+      json: () => Promise.resolve({ error: 'boom' }),
+    } as Response)
+    render(<SceneWriteView projectId="p1" />)
+
+    await waitFor(() => expect(screen.getByText(/Could not load this scene/)).toBeTruthy())
+    // No editor rendered → nothing to type into, and no PUT can ever be issued
+    expect(screen.queryByPlaceholderText('Write the scene…')).toBeNull()
+    await new Promise((resolve) => setTimeout(resolve, 1500))
+    expect(mockedAuthFetch.mock.calls.some((c) => (c[1] as RequestInit | undefined)?.method === 'PUT')).toBe(false)
+  })
+
+  it('ignores a late response from a previous load once the scene changed', async () => {
+    let resolveFirst!: (r: Response) => void
+    const first = new Promise<Response>((resolve) => {
+      resolveFirst = resolve
+    })
+    mockedAuthFetch
+      .mockReturnValueOnce(first)
+      .mockResolvedValueOnce(jsonResponse({ path: scenePath, frontmatter: { title: 'Scene B' }, body: 'B body' }))
+
+    const { rerender } = render(<SceneWriteView projectId="p1" />)
+    // A project switch re-runs the load effect (same path in the mocked router)
+    rerender(<SceneWriteView projectId="p2" />)
+    await waitFor(() => expect(screen.getByDisplayValue('B body')).toBeTruthy())
+
+    // The first (stale) response finally arrives — it must not replace B
+    resolveFirst(jsonResponse({ path: scenePath, frontmatter: { title: 'Scene A' }, body: 'A body' }))
+    await new Promise((resolve) => setTimeout(resolve, 50))
+    expect(screen.getByDisplayValue('B body')).toBeTruthy()
+    expect(screen.queryByDisplayValue('A body')).toBeNull()
+  })
+
   it('seeds a draft message and navigates to a new session on "Chat about this scene"', async () => {
     mockedAuthFetch.mockResolvedValue(
       jsonResponse({ path: scenePath, frontmatter: { title: 'Opening' }, body: 'Once upon a time.' }),

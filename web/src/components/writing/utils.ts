@@ -1,10 +1,16 @@
+/**
+ * Kebab-case file slug. Latin diacritics are stripped; other scripts (Cyrillic,
+ * CJK…) are kept as letters so a title like "Жан" or "李明" does not slugify to
+ * '' and silently create nothing / an unnamed "01-" folder. Callers must still
+ * reject an empty result (a title made only of punctuation).
+ */
 export function slugify(title: string): string {
   return title
     .normalize('NFD')
     .replace(/[̀-ͯ]/g, '')
     .toLowerCase()
     .trim()
-    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/[^\p{L}\p{N}]+/gu, '-')
     .replace(/^-+|-+$/g, '')
 }
 

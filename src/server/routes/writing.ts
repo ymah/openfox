@@ -30,6 +30,28 @@ interface SceneFile {
   summary?: string
 }
 
+/**
+ * Codex slugs are file names: lowercase kebab-case only (no separators, no
+ * dots). Unicode letters are allowed so non-Latin titles keep a readable slug.
+ */
+const SLUG_PATTERN = /^[\p{Ll}\p{N}][\p{Ll}\p{N}-]*$/u
+
+/** Scene paths live under manuscript/ and are markdown files — never AGENTS.md, .git/, codex/… */
+function isManuscriptScenePath(relPath: string): boolean {
+  if (!relPath.startsWith('manuscript/') || !relPath.endsWith('.md')) return false
+  const segments = relPath.split('/')
+  return segments.every((seg) => seg.length > 0 && seg !== '.' && seg !== '..')
+}
+
+/** Singular frontmatter `type` (skill contract) for a codex directory name. */
+const CODEX_TYPE_LABEL: Record<CodexType, string> = {
+  characters: 'character',
+  locations: 'location',
+  lore: 'lore',
+  items: 'item',
+  subplots: 'subplot',
+}
+
 /** Resolve a vault-relative path under the project's workdir, rejecting any escape attempt. */
 function resolveVaultPath(workdir: string, relativePath: string): string | null {
   const base = resolve(workdir)
@@ -44,8 +66,10 @@ function slugTitle(slug: string): string {
 
 async function readCodexEntry(absPath: string, type: CodexType, slug: string): Promise<CodexEntry> {
   const raw = await readFile(absPath, 'utf-8')
-  const parsed = matter(raw)
-  const data = parsed.data as Record<string, unknown>
+  // gray-matter caches every distinct input string forever unless options are
+  // passed; each autosave would pin a full copy of the text in memory.
+  const parsed = matter(raw, {})
+  const data = { ...(parsed.data as Record<string, unknown>) }
   return {
     type,
     slug,
@@ -77,6 +101,11 @@ export function registerWritingRoutes(router: Router): void {
       res.status(400).json({ error: serverT({ en: 'Unknown codex type', fr: 'Type de codex inconnu' }) })
       return null
     }
+    // Express decodes %2F, so an unvalidated slug could write codex/characters/a/b.md
+    if (!SLUG_PATTERN.test(slug)) {
+      res.status(400).json({ error: serverT({ en: 'Invalid slug', fr: 'Slug invalide' }) })
+      return null
+    }
     const absPath = resolveVaultPath(project.workdir, join('codex', type, `${slug}.md`))
     if (!absPath) {
       res.status(400).json({ error: serverT({ en: 'Invalid path', fr: 'Chemin invalide' }) })
@@ -92,6 +121,12 @@ export function registerWritingRoutes(router: Router): void {
     const relPath = req.query['path'] as string
     if (!relPath) {
       res.status(400).json({ error: serverT({ en: 'path required', fr: 'path requis' }) })
+      return null
+    }
+    // Scope to manuscript/*.md: the workdir-escape guard alone still allowed
+    // reading and rewriting .git/config, AGENTS.md, .env or codex entries.
+    if (!isManuscriptScenePath(relPath)) {
+      res.status(400).json({ error: serverT({ en: 'Invalid scene path', fr: 'Chemin de scène invalide' }) })
       return null
     }
     const absPath = resolveVaultPath(project.workdir, relPath)
@@ -151,7 +186,7 @@ export function registerWritingRoutes(router: Router): void {
     const body = req.body as { title?: string; tags?: string[]; facts?: Record<string, unknown>; body?: string }
     const content = matter.stringify(body.body ?? '', {
       id: slug,
-      type,
+      type: CODEX_TYPE_LABEL[type],
       title: body.title ?? slugTitle(slug),
       tags: body.tags ?? [],
       facts: body.facts ?? {},
@@ -211,7 +246,7 @@ export function registerWritingRoutes(router: Router): void {
           const relPath = `manuscript/${actSlug}/${chapterSlug}/${file}`
           try {
             const raw = await readFile(join(chapterDir, file), 'utf-8')
-            const data = matter(raw).data as Record<string, unknown>
+            const data = matter(raw, {}).data as Record<string, unknown>
             scenes.push({
               slug,
               path: relPath,
@@ -238,8 +273,8 @@ export function registerWritingRoutes(router: Router): void {
     const { relPath, absPath } = scenePath
     try {
       const raw = await readFile(absPath, 'utf-8')
-      const parsed = matter(raw)
-      res.json({ path: relPath, frontmatter: parsed.data, body: parsed.content.replace(/^\n/, '') })
+      const parsed = matter(raw, {})
+      res.json({ path: relPath, frontmatter: { ...parsed.data }, body: parsed.content.replace(/^\n/, '') })
     } catch {
       res.status(404).json({ error: serverT({ en: 'Scene not found', fr: 'Scène introuvable' }) })
     }
@@ -253,11 +288,13 @@ export function registerWritingRoutes(router: Router): void {
     const body = req.body as { frontmatter?: Record<string, unknown>; body?: string }
     let existingFrontmatter: Record<string, unknown> = {}
     try {
-      existingFrontmatter = matter(await readFile(absPath, 'utf-8')).data as Record<string, unknown>
+      existingFrontmatter = { ...(matter(await readFile(absPath, 'utf-8'), {}).data as Record<string, unknown>) }
     } catch {
       // new scene file
     }
-    const frontmatter = { ...existingFrontmatter, ...(body.frontmatter ?? {}) }
+    const sceneSlug = relPath.slice(relPath.lastIndexOf('/') + 1, -3)
+    // `id` = file slug, as the writing skill documents for agent-authored scenes
+    const frontmatter = { id: sceneSlug, ...existingFrontmatter, ...(body.frontmatter ?? {}) }
     const content = matter.stringify(body.body ?? '', frontmatter)
     await mkdir(dirname(absPath), { recursive: true })
     await writeFile(absPath, content, 'utf-8')
