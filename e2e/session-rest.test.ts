@@ -215,14 +215,16 @@ describe('Session REST API', () => {
       // Wait for at least one chat.delta to confirm streaming has started
       await client.waitFor('chat.delta')
 
-      // Record events before deletion
-      const eventsBeforeDelete = client.allEvents().length
-
-      // Delete the session while it's running
+      // Delete the session while it's running. The route aborts the turn and
+      // waits for it to wind down (partial message.done / chat.done) BEFORE
+      // cascading the rows, so those wind-down events legitimately arrive
+      // while the request is in flight — only activity after the response
+      // counts as a leak.
       const deleteRes = await fetch(`${server.url}/api/sessions/${sessionId}`, {
         method: 'DELETE',
       })
       expect(deleteRes.status).toBe(200)
+      const eventsBeforeDelete = client.allEvents().length
 
       // Wait to see if any events arrive after deletion
       await sleep(1500)

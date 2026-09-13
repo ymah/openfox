@@ -1429,6 +1429,8 @@ describe('createWebSocketServer', () => {
     const callArgs = runOrchestratorMock.mock.calls[0]![0]
     expect(callArgs.sessionId).toBe('session-2')
     expect(callArgs.workflowId).toBe('pr-review')
+
+    await harness.close()
   })
 
   it('labels queue.state feedback with the session named in the runner.launch payload', async () => {
@@ -2024,6 +2026,46 @@ describe('createWebSocketServer', () => {
     await new Promise<void>((resolve) => setTimeout(resolve, 0))
     expect(runChatTurnMock).toHaveBeenCalled()
     expect(runChatTurnMock.mock.calls[0]![0].sessionId).toBe('session-1')
+
+    clearLLMFailure('session-1')
+    await harness.close()
+  })
+
+  it('resets the DB running flag after a chat.retry turn (runChatTurn only appends running.changed)', async () => {
+    const sessionState: any = {
+      id: 'session-1',
+      projectId: 'project-1',
+      workdir: '/tmp/project',
+      mode: 'planner',
+      phase: 'build',
+      isRunning: false,
+      criteria: [],
+    }
+    const sessionManager = createSessionManager({
+      createSession: vi.fn(() => sessionState),
+      getSession: vi.fn(() => sessionState),
+      requireSession: vi.fn(() => structuredClone(sessionState)),
+      getLatestWorkflowExecution: vi.fn(() => null),
+      setRunning: vi.fn((_id: string, isRunning: boolean) => {
+        sessionState.isRunning = isRunning
+      }),
+    })
+    // Mirror the real orchestrator: sets is_running=true in the DB, never resets it
+    runChatTurnMock.mockImplementation(async () => {
+      sessionManager.setRunning('session-1', true)
+    })
+    const harness = await createHarness({ sessionManager })
+    harness.send({ id: 'sl-ok', type: 'session.load', payload: { sessionId: 'session-1' } })
+    await harness.nextMessage((message) => message.id === 'sl-ok')
+
+    recordLLMFailure('session-1')
+    harness.send({ id: 'retry-ok', type: 'chat.retry', payload: { sessionId: 'session-1' } })
+    expect(await harness.nextMessage((message) => message.id === 'retry-ok')).toMatchObject({ type: 'ack' })
+    await new Promise<void>((resolve) => setTimeout(resolve, 10))
+
+    expect(runChatTurnMock).toHaveBeenCalled()
+    expect(sessionManager.setRunning).toHaveBeenCalledWith('session-1', false)
+    expect(sessionState.isRunning).toBe(false)
 
     clearLLMFailure('session-1')
     await harness.close()

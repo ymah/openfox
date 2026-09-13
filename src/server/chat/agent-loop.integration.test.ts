@@ -360,6 +360,91 @@ describe('agentLoop integration', () => {
     expect(batchContexts[batchContexts.length - 1].dangerLevel).toBe('dangerous')
   })
 
+  it('closes the interrupted assistant bubble when a retry pattern matches', async () => {
+    const append = vi.fn()
+
+    // Simulate streamed content: the onEvent callback opens the assistant bubble
+    ;(consumeStreamGenerator as any)
+      .mockImplementationOnce(async (_gen: unknown, onEvent: (e: unknown) => void) => {
+        onEvent({ type: 'message.delta', data: { content: 'bad format' } })
+        return makeStreamResult({
+          content: 'bad format',
+          finishReason: 'stop',
+          patternMatch: { pattern: 'bad', field: 'content', matchedContent: 'bad format' },
+        })
+      })
+      .mockResolvedValueOnce(makeStreamResult({ content: 'good format', finishReason: 'stop' }))
+
+    await runTopLevelAgentLoop(makeConfig({ append }), turnMetrics)
+
+    const events = append.mock.calls.map((args: unknown[]) => args[0] as any)
+    const starts = events.filter((e) => e.type === 'message.start' && e.data?.role === 'assistant')
+    expect(starts.length).toBe(1)
+    // Every assistant message.start must have a matching message.done — an
+    // unclosed one folds as "streaming" forever after a reload.
+    for (const start of starts) {
+      const done = events.find((e) => e.type === 'message.done' && e.data?.messageId === start.data.messageId)
+      expect(done, `message.done missing for ${start.data.messageId}`).toBeDefined()
+    }
+    const partialDone = events.find((e) => e.type === 'message.done' && e.data?.partial === true)
+    expect(partialDone).toBeDefined()
+  })
+
+  it('runs pending tool calls before compacting instead of dropping them', async () => {
+    const append = vi.fn()
+    const toolCall: ToolCall = { id: 'call-1', name: 'run_command', arguments: { command: 'echo hi' } }
+
+    // 1: response with tool calls (threshold exceeded) → tools must run first
+    // 2: compaction summary
+    // 3: final response
+    ;(consumeStreamGenerator as any)
+      .mockResolvedValueOnce(makeStreamResult({ toolCalls: [toolCall], finishReason: 'tool_calls' }))
+      .mockResolvedValueOnce(makeStreamResult({ content: 'Compacted summary', finishReason: 'stop' }))
+      .mockResolvedValueOnce(makeStreamResult({ content: 'Final', finishReason: 'stop' }))
+    ;(executeTools as any).mockResolvedValue({
+      toolMessages: [{ role: 'tool', content: 'output', source: 'history', toolCallId: 'call-1' }],
+      stepDoneCalled: false,
+    })
+    const { shouldCompact } = await import('../context/compactor.js')
+    ;(shouldCompact as any).mockReturnValueOnce(true)
+
+    await runTopLevelAgentLoop(
+      makeConfig({ append, getConversationMessages: vi.fn().mockResolvedValue([]) }),
+      turnMetrics,
+    )
+
+    expect(executeTools).toHaveBeenCalledTimes(1)
+    expect(consumeStreamGenerator).toHaveBeenCalledTimes(3)
+    const events = append.mock.calls.map((args: unknown[]) => args[0] as any)
+    const toolBatchDoneIdx = events.findIndex((e) => e.type === 'message.done' && e.data?.messageId)
+    const compactionPromptIdx = events.findIndex(
+      (e) => e.type === 'message.start' && e.data?.messageKind === 'auto-prompt',
+    )
+    expect(toolBatchDoneIdx).toBeGreaterThanOrEqual(0)
+    expect(compactionPromptIdx).toBeGreaterThan(toolBatchDoneIdx)
+    expect(events.filter((e) => e.type === 'context.compacted').length).toBe(1)
+  })
+
+  it('injects the kickoff prompt only once, not after every tool round', async () => {
+    const append = vi.fn()
+    const injectKickoff = vi.fn()
+    const toolCall: ToolCall = { id: 'call-1', name: 'run_command', arguments: { command: 'echo hi' } }
+
+    ;(consumeStreamGenerator as any)
+      .mockResolvedValueOnce(makeStreamResult({ toolCalls: [toolCall], finishReason: 'tool_calls' }))
+      .mockResolvedValueOnce(makeStreamResult({ toolCalls: [toolCall], finishReason: 'tool_calls' }))
+      .mockResolvedValueOnce(makeStreamResult({ content: 'Done', finishReason: 'stop' }))
+    ;(executeTools as any).mockResolvedValue({
+      toolMessages: [{ role: 'tool', content: 'output', source: 'history', toolCallId: 'call-1' }],
+      stepDoneCalled: false,
+    })
+
+    await runTopLevelAgentLoop(makeConfig({ append, injectKickoff }), turnMetrics)
+
+    expect(consumeStreamGenerator).toHaveBeenCalledTimes(3)
+    expect(injectKickoff).toHaveBeenCalledTimes(1)
+  })
+
   it('auto-compacts within the loop when threshold is exceeded, then continues normally', async () => {
     const append = vi.fn()
     const injectAgentReminder = vi.fn()

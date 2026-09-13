@@ -76,6 +76,7 @@ describe('QueueProcessor', () => {
       }),
       getLatestWorkflowExecution: vi.fn(() => latestExecution),
       cancelWorkflow: vi.fn(),
+      clearPauseState: vi.fn(),
       addMessage: vi.fn(() => ({ id: 'msg-1' })),
       cancelQueuedMessage: vi.fn((_id: string, queueId: string) => {
         queueItems = queueItems.filter((q) => q.queueId !== queueId)
@@ -452,6 +453,110 @@ describe('QueueProcessor', () => {
 
       expect(mockSessionManager.cancelWorkflow).not.toHaveBeenCalled()
       expect(mockSessionManager.setRunning).toHaveBeenCalledWith('sess-1', true)
+    })
+  })
+
+  describe('turn lifecycle races', () => {
+    it('does not let a stopped turn A clobber the controller/running state of the next turn B', async () => {
+      // Turn A resolves only when we say so
+      let resolveA!: () => void
+      const turnA = new Promise<void>((resolve) => {
+        resolveA = resolve
+      })
+      const runChatTurnMock = vi
+        .fn()
+        .mockReturnValueOnce(turnA)
+        .mockReturnValue(new Promise<void>(() => {}))
+      vi.doMock('../chat/orchestrator.js', () => ({ runChatTurn: runChatTurnMock }))
+
+      queueItems = [{ queueId: 'q-1', mode: 'asap', content: 'first', queuedAt: '2024-01-01' }]
+      const qp = new QueueProcessor({
+        sessionManager: mockSessionManager as any,
+        providerManager: mockProviderManager as any,
+        getLLMClient: mockGetLLMClient,
+        getActiveProvider: mockGetActiveProvider,
+        broadcastForSession: mockBroadcastForSession,
+      })
+      qp.start()
+      const callback = mockSessionManager.subscribe.mock.calls[0][0]
+      callback({ type: 'queue_added', sessionId: 'sess-1', queueId: 'q-1', mode: 'asap', content: 'first' })
+      await new Promise((resolve) => setTimeout(resolve, 20))
+      expect(runChatTurnMock).toHaveBeenCalledTimes(1)
+
+      // User hits Stop: /stop resets is_running immediately, then aborts
+      sessionState = { ...sessionState, isRunning: false }
+      expect(qp.abortSession('sess-1')).toBe(true)
+
+      // …and immediately sends a new message → turn B starts while A winds down
+      queueItems = [{ queueId: 'q-2', mode: 'asap', content: 'second', queuedAt: '2024-01-01' }]
+      callback({ type: 'queue_added', sessionId: 'sess-1', queueId: 'q-2', mode: 'asap', content: 'second' })
+      await new Promise((resolve) => setTimeout(resolve, 20))
+      expect(runChatTurnMock).toHaveBeenCalledTimes(2)
+      expect(sessionState.isRunning).toBe(true)
+
+      // Turn A finally settles: it must NOT reset B's running state nor drop B's controller
+      mockSessionManager.setRunning.mockClear()
+      resolveA()
+      await new Promise((resolve) => setTimeout(resolve, 20))
+      expect(mockSessionManager.setRunning).not.toHaveBeenCalledWith('sess-1', false)
+      expect(sessionState.isRunning).toBe(true)
+      // B is still abortable
+      expect(qp.abortSession('sess-1')).toBe(true)
+      qp.stop()
+    })
+
+    it('abortSession without an active turn leaves no stale aborted marker', async () => {
+      const runChatTurnMock = vi.fn().mockResolvedValue(undefined)
+      vi.doMock('../chat/orchestrator.js', () => ({ runChatTurn: runChatTurnMock }))
+
+      const qp = new QueueProcessor({
+        sessionManager: mockSessionManager as any,
+        providerManager: mockProviderManager as any,
+        getLLMClient: mockGetLLMClient,
+        getActiveProvider: mockGetActiveProvider,
+        broadcastForSession: mockBroadcastForSession,
+      })
+      qp.start()
+      expect(qp.abortSession('sess-1')).toBe(false)
+
+      // A turn that completes with more work queued must chain, not be treated as aborted
+      queueItems = [
+        { queueId: 'q-1', mode: 'asap', content: 'first', queuedAt: '2024-01-01' },
+        { queueId: 'q-2', mode: 'asap', content: 'second', queuedAt: '2024-01-01' },
+      ]
+      const callback = mockSessionManager.subscribe.mock.calls[0][0]
+      callback({ type: 'queue_added', sessionId: 'sess-1', queueId: 'q-1', mode: 'asap', content: 'first' })
+      await new Promise((resolve) => setTimeout(resolve, 50))
+      expect(runChatTurnMock).toHaveBeenCalledTimes(2)
+      qp.stop()
+    })
+
+    it('resets running state and reports an error when the pre-flight throws', async () => {
+      vi.doMock('../chat/orchestrator.js', () => ({ runChatTurn: vi.fn().mockResolvedValue(undefined) }))
+      sessionState = { ...sessionState, providerId: 'provider-2', providerModel: 'custom-model' }
+      mockProviderManager.getActiveProviderId = vi.fn(() => 'provider-1')
+      mockProviderManager.activateProvider = vi.fn().mockRejectedValue(new Error('provider activation exploded'))
+      queueItems = [{ queueId: 'q-1', mode: 'asap', content: 'first', queuedAt: '2024-01-01' }]
+
+      const qp = new QueueProcessor({
+        sessionManager: mockSessionManager as any,
+        providerManager: mockProviderManager as any,
+        getLLMClient: mockGetLLMClient,
+        getActiveProvider: mockGetActiveProvider,
+        broadcastForSession: mockBroadcastForSession,
+      })
+      qp.start()
+      const callback = mockSessionManager.subscribe.mock.calls[0][0]
+      callback({ type: 'queue_added', sessionId: 'sess-1', queueId: 'q-1', mode: 'asap', content: 'first' })
+      await new Promise((resolve) => setTimeout(resolve, 20))
+
+      expect(sessionState.isRunning).toBe(false)
+      expect(mockBroadcastForSession).toHaveBeenCalledWith(
+        'sess-1',
+        expect.objectContaining({ type: 'chat.error', payload: expect.objectContaining({ recoverable: true }) }),
+      )
+      expect(qp.abortSession('sess-1')).toBe(false)
+      qp.stop()
     })
   })
 })

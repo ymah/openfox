@@ -8,6 +8,8 @@ import { finalizeTurnCompletion, buildRunChatTurnParams } from '../utils/session
 import { generateSessionNameForSession } from '../session/name-generator.js'
 import { getEventStore } from '../events/index.js'
 
+type QueuedMessageKind = NonNullable<Parameters<SessionManager['addMessage']>[1]['messageKind']>
+
 interface QueueProcessorDeps {
   sessionManager: SessionManager
   providerManager: ProviderManager
@@ -26,6 +28,7 @@ export class QueueProcessor {
   private unsubscribe: (() => void) | null = null
   private activeAgents = new Map<string, AbortController>()
   private abortedSessions = new Set<string>()
+  private turnPromises = new Map<string, Promise<void>>()
 
   constructor(deps: QueueProcessorDeps) {
     this.deps = deps
@@ -63,15 +66,26 @@ export class QueueProcessor {
   }
 
   abortSession(sessionId: string): boolean {
-    this.abortedSessions.add(sessionId)
     this.deps.sessionManager.clearPauseState(sessionId)
     const controller = this.activeAgents.get(sessionId)
     if (controller) {
+      // Only flag the session as aborted when a turn actually exists — a stale
+      // marker would make the next turn's cleanup drop its queue. The
+      // controller stays registered so the turn's own finally still owns it.
+      this.abortedSessions.add(sessionId)
       controller.abort()
-      this.activeAgents.delete(sessionId)
       return true
     }
     return false
+  }
+
+  /**
+   * Promise that settles once the in-flight turn for `sessionId` (if any) has
+   * fully wound down — used by session deletion to avoid cascading while the
+   * orchestrator is still appending events.
+   */
+  waitForTurn(sessionId: string): Promise<void> {
+    return this.turnPromises.get(sessionId) ?? Promise.resolve()
   }
 
   private handleQueueAdded(sessionId: string): void {
@@ -143,6 +157,9 @@ export class QueueProcessor {
     }
 
     const controller = new AbortController()
+    // Any aborted marker belongs to the previous turn, which no longer owns
+    // this session — it must not make this fresh turn drop its queue.
+    this.abortedSessions.delete(sessionId)
     this.activeAgents.set(sessionId, controller)
 
     sessionManager.setRunning(sessionId, true)
@@ -155,6 +172,7 @@ export class QueueProcessor {
         role: 'user',
         content: nextAsap.content,
         ...(nextAsap.attachments ? { attachments: nextAsap.attachments } : {}),
+        ...(nextAsap.messageKind ? { messageKind: nextAsap.messageKind as QueuedMessageKind } : {}),
       })
       broadcastForSession(sessionId, createChatMessageMessage(userMessage))
       logger.debug('Added queued message to session', {
@@ -178,7 +196,68 @@ export class QueueProcessor {
       )
     }
 
-    this.runTurn(sessionId, controller)
+    const turnPromise = this.runTurn(sessionId, controller)
+      .catch((error) => {
+        // Pre-flight (provider activation, client resolution, dynamic import)
+        // threw before runChatTurn took over. Without this the session would
+        // stay is_running=true forever with no signal to the client.
+        logger.error('QueueProcessor pre-flight error', { sessionId, error })
+        broadcastForSession(sessionId, {
+          type: 'chat.error',
+          payload: { error: error instanceof Error ? error.message : String(error), recoverable: true },
+        } as ServerMessage)
+        this.finishTurn(sessionId, controller)
+      })
+      .finally(() => {
+        if (this.turnPromises.get(sessionId) === turnPromise) this.turnPromises.delete(sessionId)
+      })
+    this.turnPromises.set(sessionId, turnPromise)
+  }
+
+  /**
+   * Turn wind-down shared by the normal completion path and the pre-flight
+   * failure path. Guarded by controller identity: a Stop followed by an
+   * immediate new message starts turn B before turn A's finally runs, and A
+   * must not clobber B's controller or running state.
+   */
+  private finishTurn(sessionId: string, controller: AbortController): void {
+    const { sessionManager, broadcastForSession } = this.deps
+    if (this.activeAgents.get(sessionId) !== controller) {
+      return
+    }
+    this.activeAgents.delete(sessionId)
+
+    try {
+      const session = sessionManager.getSession(sessionId)
+      if (!session) {
+        // Session was deleted — nothing more to clean up
+        return
+      }
+
+      if (this.abortedSessions.has(sessionId)) {
+        this.abortedSessions.delete(sessionId)
+        finalizeTurnCompletion(sessionId, sessionManager, broadcastForSession)
+        return
+      }
+
+      const hasMore = sessionManager.hasQueuedMessages(sessionId)
+      if (!hasMore) {
+        finalizeTurnCompletion(sessionId, sessionManager, broadcastForSession)
+        return
+      }
+
+      // Safety: orchestrator only appends running.changed to event store;
+      // ensure running state is reset before starting next turn
+      if (session.isRunning) {
+        sessionManager.setRunning(sessionId, false)
+      }
+      this.startTurn(sessionId)
+    } catch (error) {
+      logger.error('Error in turn completion cleanup', {
+        sessionId,
+        error: error instanceof Error ? error.message : String(error),
+      })
+    }
   }
 
   private async runTurn(sessionId: string, controller: AbortController): Promise<void> {
@@ -251,7 +330,7 @@ export class QueueProcessor {
       onMessage: (msg) => broadcastForSession(sessionId, msg),
     })
 
-    runChatTurn(runChatTurnParams)
+    await runChatTurn(runChatTurnParams)
       .catch((error) => {
         if (error instanceof Error && error.message === 'Aborted') {
           return
@@ -259,40 +338,7 @@ export class QueueProcessor {
         logger.error('QueueProcessor turn error', { sessionId, error })
       })
       .finally(() => {
-        this.activeAgents.delete(sessionId)
-
-        try {
-          const session = sessionManager.getSession(sessionId)
-          if (!session) {
-            // Session was deleted — nothing more to clean up
-            return
-          }
-
-          if (this.abortedSessions.has(sessionId)) {
-            this.abortedSessions.delete(sessionId)
-            finalizeTurnCompletion(sessionId, sessionManager, broadcastForSession)
-            return
-          }
-
-          const hasMore = sessionManager.hasQueuedMessages(sessionId)
-          if (!hasMore) {
-            finalizeTurnCompletion(sessionId, sessionManager, broadcastForSession)
-            return
-          }
-
-          // Safety: orchestrator only appends running.changed to event store;
-          // ensure running state is reset before starting next turn
-          const currentSession = sessionManager.getSession(sessionId)
-          if (currentSession?.isRunning) {
-            sessionManager.setRunning(sessionId, false)
-          }
-          this.startTurn(sessionId)
-        } catch (error) {
-          logger.error('Error in turn completion cleanup', {
-            sessionId,
-            error: error instanceof Error ? error.message : String(error),
-          })
-        }
+        this.finishTurn(sessionId, controller)
       })
   }
 }
