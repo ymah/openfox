@@ -54,6 +54,33 @@ function doFlush() {
   dirtySessionIds.clear()
 }
 
+/**
+ * Point the session buffer at `messageId`. Deltas of several messages can
+ * interleave in one frame (parallel sub-agents each stream their own
+ * assistant message): unflushed text of the previous message must never be
+ * appended to the new one. Flush it first; if its message has not landed in
+ * the store yet, park it so the next flush applies it to the right message.
+ */
+export function retargetBuffer(sessionId: string, messageId: string): StreamingBuffer {
+  const buf = getBuffer(sessionId)
+  if (buf.messageId !== null && buf.messageId !== messageId) {
+    if (buf.deltaContent.length > 0 || buf.thinkingContent.length > 0) {
+      flushFn?.(sessionId)
+    }
+    if (buf.deltaContent.length > 0 || buf.thinkingContent.length > 0) {
+      ;(buf.parked ??= []).push({
+        messageId: buf.messageId,
+        deltaContent: buf.deltaContent,
+        thinkingContent: buf.thinkingContent,
+      })
+      buf.deltaContent = ''
+      buf.thinkingContent = ''
+    }
+  }
+  buf.messageId = messageId
+  return buf
+}
+
 export function scheduleStreamingFlush(sessionId: string = DEFAULT_BUFFER_KEY) {
   dirtySessionIds.add(sessionId)
   if (pendingTimer !== null) return
@@ -90,12 +117,21 @@ export function cancelStreamingFlush(sessionId: string = DEFAULT_BUFFER_KEY) {
     // target message has not landed in the store yet (stream racing ahead), the
     // flush re-buffers the deltas — wiping them here would drop the stream.
     const stillPending =
-      buffer.deltaContent.length > 0 || buffer.thinkingContent.length > 0 || buffer.toolOutput.length > 0
+      buffer.deltaContent.length > 0 ||
+      buffer.thinkingContent.length > 0 ||
+      buffer.toolOutput.length > 0 ||
+      (buffer.parked?.length ?? 0) > 0
     if (!stillPending) {
       buffer.messageId = null
       buffer.deltaContent = ''
       buffer.thinkingContent = ''
       buffer.toolOutput = []
     }
+  }
+  // The timer is shared by every session: cancelling one session's flush
+  // must not strand the deltas buffered for the others (split view).
+  if (dirtySessionIds.size > 0) {
+    const [next] = dirtySessionIds
+    scheduleStreamingFlush(next)
   }
 }

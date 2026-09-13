@@ -40,7 +40,7 @@ import { playNewMessage } from '../../lib/sound'
 import type { AgentType } from '../notifications'
 import type { SessionState, PendingQuestion, SessionPane } from './types'
 import { handleGlobalSoundEffects, resolveAgentType } from './sounds'
-import { getBuffer, scheduleStreamingFlush, cancelStreamingFlush } from './streamingBuffer'
+import { getBuffer, scheduleStreamingFlush, cancelStreamingFlush, retargetBuffer } from './streamingBuffer'
 import { snapshot } from '../../lib/resourceCache'
 import { mcpServersResource, settingResource, SETTINGS_KEYS, type McpServerInfo } from '../../lib/resources'
 import {
@@ -567,6 +567,9 @@ export function handleServerMessage(
     case 'chat.delta': {
       const sessionId = message.sessionId
       const payload = message.payload as ChatDeltaPayload
+      // Outside the set() updater: retargeting flushes the previous message
+      // (a nested set() inside an updater would be overwritten by it).
+      if (sessionId && isLivePane(get(), sessionId)) retargetBuffer(sessionId, payload.messageId)
       if (
         !applyChat(set, get, sessionId, (pane) => {
           if (sessionId === activeSessionId) {
@@ -578,8 +581,9 @@ export function handleServerMessage(
               playNewMessage(agent)
             }
           }
+          // Buffer mutation only — retargeting (which may flush, i.e. call
+          // set()) must happen outside this updater; see below.
           const buf = getBuffer(sessionId ?? '')
-          buf.messageId = payload.messageId
           buf.deltaContent += payload.content
           scheduleStreamingFlush(sessionId ?? '')
           return pane
@@ -594,10 +598,10 @@ export function handleServerMessage(
     case 'chat.thinking': {
       const sessionId = message.sessionId
       const payload = message.payload as ChatThinkingPayload
+      if (sessionId && isLivePane(get(), sessionId)) retargetBuffer(sessionId, payload.messageId)
       if (
         !applyChat(set, get, sessionId, (pane) => {
           const buf = getBuffer(sessionId ?? '')
-          buf.messageId = payload.messageId
           buf.thinkingContent += payload.content
           scheduleStreamingFlush(sessionId ?? '')
           return pane
@@ -716,8 +720,10 @@ export function handleServerMessage(
       const payload = message.payload as ChatToolOutputPayload
       if (
         !applyChat(set, get, sessionId, (pane) => {
+          // Tool output carries its own messageId and is applied by it — never
+          // retarget the delta buffer for it (a sub-agent's tool output must
+          // not steal the parent's streaming text).
           const buf = getBuffer(sessionId ?? '')
-          buf.messageId = payload.messageId
           buf.toolOutput.push({
             messageId: payload.messageId,
             callId: payload.callId,

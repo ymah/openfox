@@ -165,3 +165,42 @@ describe('WebSocketClient reconnect logic', () => {
     expect(wsInstances.length).toBe(1)
   })
 })
+
+describe('WebSocketClient socket ownership', () => {
+  let WebSocketClient: typeof import('./ws').WebSocketClient
+
+  beforeEach(async () => {
+    vi.resetModules()
+    wsEvents = { open: [], close: [], error: [] }
+    wsInstances = []
+    vi.stubGlobal('WebSocket', MockWebSocket)
+    localStorage.clear()
+    const mod = await import('./ws')
+    WebSocketClient = mod.WebSocketClient
+  })
+
+  it('reconnect() while CONNECTING closes the pending socket so messages are never delivered twice', async () => {
+    const client = new WebSocketClient('ws://localhost:9999/ws')
+    const handler = vi.fn()
+    client.subscribe(handler)
+
+    void client.connect().catch(() => {})
+    expect(wsInstances.length).toBe(1)
+    const first = wsInstances[0]!
+    expect(first.readyState).toBe(MockWebSocket.CONNECTING)
+
+    // User hits "reconnect" before the first socket opened
+    client.reconnect()
+    expect(wsInstances.length).toBe(2)
+    expect(first.close).toHaveBeenCalled()
+    expect(first.onmessage).toBeNull()
+
+    await vi.waitFor(() => expect(wsInstances[1]!.readyState).toBe(MockWebSocket.OPEN))
+
+    // Even if the stale socket somehow emitted, it has no handler; the live one delivers once.
+    const payload = JSON.stringify({ type: 'session.running', payload: { isRunning: true }, sessionId: 's' })
+    first.onmessage?.({ data: payload })
+    wsInstances[1]!.onmessage?.({ data: payload })
+    expect(handler).toHaveBeenCalledTimes(1)
+  })
+})

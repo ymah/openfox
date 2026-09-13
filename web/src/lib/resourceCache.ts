@@ -65,9 +65,13 @@ function entry<Data>(key: string): Entry<Data> {
   return e
 }
 
-function settle<Data>(key: string, result: { data?: Data; error?: unknown }): void {
+function settle<Data>(key: string, result: { data?: Data; error?: unknown }, owner?: Promise<Data | undefined>): void {
   const e = entries.get(key) as Entry<Data> | undefined
   if (!e) return
+  // A fetch that is no longer the entry's in-flight promise (invalidate()/
+  // write() reset it, or a newer load started) must not overwrite fresher
+  // data with its stale result — e.g. a WS push landing during a refetch.
+  if (owner && e.promise !== owner) return
   if (result.error !== undefined) {
     e.error = result.error
   } else {
@@ -85,15 +89,15 @@ function startFetch<Data>(key: string, fetcher: () => Promise<Data>): Promise<Da
   e.loading = true
   e.error = undefined
   emit()
-  const p = Promise.resolve()
+  const p: Promise<Data | undefined> = Promise.resolve()
     .then(fetcher)
     .then(
       (data) => {
-        settle(key, { data })
+        settle(key, { data }, p)
         return data
       },
       (error: unknown) => {
-        settle(key, { error })
+        settle(key, { error }, p)
         return undefined
       },
     )

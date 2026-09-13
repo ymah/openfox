@@ -62,16 +62,14 @@ export class WebSocketClient {
     this.isReconnecting = false
 
     if (this.connectingPromise && this.ws?.readyState === WebSocket.CONNECTING) {
-      return this.connectingPromise
-    }
-
-    this.lastCloseCode = 0
-    this.isReconnecting = false
-
-    if (this.connectingPromise && this.ws?.readyState === WebSocket.CONNECTING) {
       console.warn('[WS CLIENT] Connection already in progress, returning existing promise')
       return this.connectingPromise
     }
+
+    // A previous socket may still be CONNECTING/CLOSING (e.g. reconnect()
+    // cleared connectingPromise). Detach and close it so it can never deliver
+    // messages alongside the new one (doubled deltas) or trigger a reconnect.
+    this.detachSocket()
 
     this.intentionalClose = false
     this.connectingPromise = new Promise((resolve, reject) => {
@@ -190,22 +188,31 @@ export class WebSocketClient {
     })
   }
 
+  /**
+   * Detach handlers so a delayed close() completion (real browsers fire
+   * onclose asynchronously) cannot schedule an auto-reconnect or race a
+   * freshly-created socket from a subsequent connect().
+   */
+  private detachSocket(): void {
+    if (!this.ws) return
+    const socket = this.ws
+    this.ws = null
+    socket.onopen = null
+    socket.onclose = null
+    socket.onerror = null
+    socket.onmessage = null
+    try {
+      socket.close()
+    } catch {
+      // Already closed
+    }
+  }
+
   disconnect(): void {
     this.isReconnecting = false
     this.reconnectAttempts = 0
     this.intentionalClose = true
-    if (this.ws) {
-      const socket = this.ws
-      this.ws = null
-      // Detach handlers so a delayed close() completion (real browsers fire
-      // onclose asynchronously) cannot schedule an auto-reconnect or race a
-      // freshly-created socket from a subsequent connect().
-      socket.onopen = null
-      socket.onclose = null
-      socket.onerror = null
-      socket.onmessage = null
-      socket.close()
-    }
+    this.detachSocket()
     this.connectingPromise = null
   }
 

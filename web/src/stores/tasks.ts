@@ -226,15 +226,25 @@ export const useTasksStore = create<TasksState>((set) => ({
     if (existing) {
       boardResource.write({ ...existing, settings: { ...existing.settings, ...settings } }, projectId)
     }
+    // Roll the optimistic value back when the server refuses/never answers,
+    // otherwise the board shows a setting the server never accepted until
+    // some later push happens to overwrite it.
+    const rollback = () => {
+      if (existing) boardResource.write(existing, projectId)
+    }
     try {
       const res = await authFetch(`/api/projects/${projectId}/tasks/settings`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(settings),
       })
-      if (!res.ok) return false
+      if (!res.ok) {
+        rollback()
+        return false
+      }
       return true
     } catch {
+      rollback()
       return false
     }
   },

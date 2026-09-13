@@ -25,7 +25,7 @@ const SUGGESTIONS: FileSuggestion[] = [
 ]
 
 function makeResponse(data: unknown): Response {
-  return { json: async () => data } as Response
+  return { ok: true, status: 200, json: async () => data } as Response
 }
 
 function render(ui: React.ReactElement) {
@@ -79,7 +79,10 @@ describe('AtMentionAutocomplete', () => {
   it('fetches suggestions for the query after the debounce and renders them', async () => {
     const { container } = render(<AtMentionAutocomplete text="@REA" cursorPos={4} onSelect={vi.fn()} />)
     await waitForSuggestions(container)
-    expect(mockedAuthFetch).toHaveBeenCalledWith('/api/files?q=REA')
+    expect(mockedAuthFetch).toHaveBeenCalledWith(
+      '/api/files?q=REA',
+      expect.objectContaining({ signal: expect.any(AbortSignal) }),
+    )
     expect(container.textContent).toContain('README.md')
     expect(container.textContent).toContain('src/READMORE.ts')
     expect(container.textContent).toContain('docs/READ')
@@ -89,7 +92,10 @@ describe('AtMentionAutocomplete', () => {
     mockedAuthFetch.mockResolvedValue(makeResponse([]))
     const { container } = render(<AtMentionAutocomplete text="@REA" cursorPos={4} onSelect={vi.fn()} />)
     await waitFor(() => {
-      expect(mockedAuthFetch).toHaveBeenCalledWith('/api/files?q=REA')
+      expect(mockedAuthFetch).toHaveBeenCalledWith(
+        '/api/files?q=REA',
+        expect.objectContaining({ signal: expect.any(AbortSignal) }),
+      )
     })
     await act(async () => {
       await Promise.resolve()
@@ -127,7 +133,10 @@ describe('AtMentionAutocomplete', () => {
     )
     const { container } = render(<AtMentionAutocomplete text="@src/" cursorPos={5} onSelect={vi.fn()} />)
     await waitForSuggestions(container)
-    expect(mockedAuthFetch).toHaveBeenCalledWith('/api/files?q=src%2F')
+    expect(mockedAuthFetch).toHaveBeenCalledWith(
+      '/api/files?q=src%2F',
+      expect.objectContaining({ signal: expect.any(AbortSignal) }),
+    )
     expect(container.textContent).toContain('src/index.ts')
     expect(container.textContent).toContain('src/components')
   })
@@ -209,7 +218,10 @@ describe('AtMentionAutocomplete', () => {
     mockedAuthFetch.mockResolvedValue(makeResponse([{ path: 'README.md', name: 'README.md', type: 'file', score: 1 }]))
     rerender(<AtMentionAutocomplete text="@READM" cursorPos={6} onSelect={vi.fn()} />)
     await waitFor(() => {
-      expect(mockedAuthFetch).toHaveBeenCalledWith('/api/files?q=READM')
+      expect(mockedAuthFetch).toHaveBeenCalledWith(
+        '/api/files?q=READM',
+        expect.objectContaining({ signal: expect.any(AbortSignal) }),
+      )
     })
   })
 })
