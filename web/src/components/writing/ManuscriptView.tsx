@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useRef } from 'react'
 import { useLocation } from 'wouter'
 import { ScrollArea } from '../shared/ScrollArea'
 import { Button } from '../shared/Button'
@@ -29,14 +29,27 @@ export function ManuscriptView({ projectId }: ManuscriptViewProps) {
   const [sceneSummary, setSceneSummary] = useState('')
   const [creating, setCreating] = useState(false)
 
+  const [error, setError] = useState<string | null>(null)
+  // Latest-wins across project switches: a late response for the previous
+  // project must not render its acts under the new one.
+  const loadSeq = useRef(0)
+
   const load = useCallback(async () => {
+    const seq = ++loadSeq.current
     setLoading(true)
     try {
       const res = await authFetch(`/api/projects/${projectId}/manuscript`)
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
       const data = await res.json()
-      setActs(data.acts ?? [])
+      if (seq !== loadSeq.current) return
+      setActs(Array.isArray(data.acts) ? data.acts : [])
+      setError(null)
+    } catch (err) {
+      if (seq !== loadSeq.current) return
+      console.error('Manuscript load failed:', err)
+      setError(err instanceof Error ? err.message : String(err))
     } finally {
-      setLoading(false)
+      if (seq === loadSeq.current) setLoading(false)
     }
   }, [projectId])
 
@@ -46,6 +59,15 @@ export function ManuscriptView({ projectId }: ManuscriptViewProps) {
 
   const handleCreateScene = async () => {
     if (!actTitle.trim() || !chapterTitle.trim()) return
+    if (!slugify(actTitle) || !slugify(chapterTitle)) {
+      setError(
+        t({
+          en: 'Act and chapter titles must contain at least one letter or digit',
+          fr: 'Les titres d’acte et de chapitre doivent contenir au moins une lettre ou un chiffre',
+        }),
+      )
+      return
+    }
     setCreating(true)
     try {
       // Reuse an existing act/chapter when the title matches one already on
@@ -66,7 +88,7 @@ export function ManuscriptView({ projectId }: ManuscriptViewProps) {
       const sceneSlug = nextNumberedSlug(sceneSlugs, 'scene')
 
       const path = `manuscript/${actSlug}/${chapterSlug}/${sceneSlug}.md`
-      await authFetch(`/api/projects/${projectId}/manuscript/scene?path=${encodeURIComponent(path)}`, {
+      const res = await authFetch(`/api/projects/${projectId}/manuscript/scene?path=${encodeURIComponent(path)}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -74,12 +96,18 @@ export function ManuscriptView({ projectId }: ManuscriptViewProps) {
           body: '',
         }),
       })
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
       setShowNewScene(false)
       setActTitle('')
       setChapterTitle('')
       setSceneSummary('')
+      setError(null)
       await load()
+      // Only navigate to a scene that actually exists on disk
       navigate(`/p/${projectId}/write?path=${encodeURIComponent(path)}`)
+    } catch (err) {
+      console.error('Scene creation failed:', err)
+      setError(err instanceof Error ? err.message : String(err))
     } finally {
       setCreating(false)
     }
@@ -88,6 +116,7 @@ export function ManuscriptView({ projectId }: ManuscriptViewProps) {
   return (
     <ScrollArea className="flex-1 p-6">
       <div className="max-w-3xl mx-auto">
+        {error && <p className="mb-3 text-xs text-error">{error}</p>}
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-lg font-semibold text-text-primary">{t({ en: 'Manuscript', fr: 'Manuscrit' })}</h2>
           <Button variant="primary" size="sm" onClick={() => setShowNewScene((v) => !v)}>

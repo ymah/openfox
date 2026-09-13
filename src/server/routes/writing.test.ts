@@ -146,11 +146,11 @@ describe('writing routes', () => {
       body: JSON.stringify({ frontmatter: { status: 'revised' }, body: 'Once upon a time, revised.' }),
     })
     const updated = (await update.json()) as { frontmatter: Record<string, unknown> }
-    expect(updated.frontmatter).toEqual({ status: 'revised', summary: 'She wakes up.' })
+    expect(updated.frontmatter).toEqual({ id: '01-scene', status: 'revised', summary: 'She wakes up.' })
 
     const get = await fetch(`${baseUrl}/api/projects/proj-1/manuscript/scene?path=${encodeURIComponent(path)}`)
     const scene = (await get.json()) as { frontmatter: Record<string, unknown>; body: string }
-    expect(scene.frontmatter).toEqual({ status: 'revised', summary: 'She wakes up.' })
+    expect(scene.frontmatter).toEqual({ id: '01-scene', status: 'revised', summary: 'She wakes up.' })
     expect(scene.body.trim()).toBe('Once upon a time, revised.')
   })
 
@@ -159,6 +159,34 @@ describe('writing routes', () => {
       `${baseUrl}/api/projects/proj-1/manuscript/scene?path=${encodeURIComponent('../outside.md')}`,
     )
     expect(res.status).toBe(400)
+  })
+
+  it('rejects scene paths outside manuscript/ even when they stay inside the vault', async () => {
+    for (const bad of ['.git/config', 'AGENTS.md', 'codex/characters/x.md', 'manuscript/notes.txt', '.env']) {
+      const res = await fetch(`${baseUrl}/api/projects/proj-1/manuscript/scene?path=${encodeURIComponent(bad)}`)
+      expect(res.status, bad).toBe(400)
+      const put = await fetch(`${baseUrl}/api/projects/proj-1/manuscript/scene?path=${encodeURIComponent(bad)}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ body: 'overwritten' }),
+      })
+      expect(put.status, bad).toBe(400)
+    }
+  })
+
+  it('rejects a codex slug containing a path separator (%2F is decoded by Express)', async () => {
+    const res = await fetch(`${baseUrl}/api/projects/proj-1/codex/characters/${encodeURIComponent('a/b')}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ title: 'x' }),
+    })
+    expect(res.status).toBe(400)
+    const dotted = await fetch(`${baseUrl}/api/projects/proj-1/codex/characters/Bad.Slug`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ title: 'x' }),
+    })
+    expect(dotted.status).toBe(400)
   })
 
   it('requires a path query parameter for scene reads', async () => {

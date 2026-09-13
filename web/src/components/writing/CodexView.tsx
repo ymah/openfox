@@ -20,13 +20,19 @@ export function CodexView({ projectId }: CodexViewProps) {
   const [saving, setSaving] = useState(false)
   const [creatingType, setCreatingType] = useState<CodexType | null>(null)
   const [newTitle, setNewTitle] = useState('')
+  const [error, setError] = useState<string | null>(null)
 
   const load = useCallback(async () => {
     setLoading(true)
     try {
       const res = await authFetch(`/api/projects/${projectId}/codex`)
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
       const data = await res.json()
-      setEntries(data.entries ?? [])
+      setEntries(Array.isArray(data.entries) ? data.entries : [])
+      setError(null)
+    } catch (err) {
+      console.error('Codex load failed:', err)
+      setError(err instanceof Error ? err.message : String(err))
     } finally {
       setLoading(false)
     }
@@ -36,6 +42,8 @@ export function CodexView({ projectId }: CodexViewProps) {
     load()
   }, [load])
 
+  // Seed the draft only when the selection changes — re-seeding on every
+  // `entries` refresh would discard unsaved edits.
   useEffect(() => {
     if (!selected) {
       setDraft(null)
@@ -43,7 +51,7 @@ export function CodexView({ projectId }: CodexViewProps) {
     }
     const existing = entries.find((e) => e.type === selected.type && e.slug === selected.slug)
     setDraft(existing ? { ...existing } : null)
-  }, [selected, entries])
+  }, [selected])
 
   const handleSave = async () => {
     if (!draft || !selected) return
@@ -54,11 +62,15 @@ export function CodexView({ projectId }: CodexViewProps) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ title: draft.title, tags: draft.tags, facts: draft.facts, body: draft.body }),
       })
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
       const saved = (await res.json()) as CodexEntry
-      setEntries((prev) => {
-        const others = prev.filter((e) => !(e.type === selected.type && e.slug === selected.slug))
-        return [...others, saved]
-      })
+      // Keep the entry in place: replacing it with an error body used to make
+      // it vanish from the list and reset the draft.
+      setEntries((prev) => prev.map((e) => (e.type === selected.type && e.slug === selected.slug ? saved : e)))
+      setError(null)
+    } catch (err) {
+      console.error('Codex save failed:', err)
+      setError(err instanceof Error ? err.message : String(err))
     } finally {
       setSaving(false)
     }
@@ -68,17 +80,33 @@ export function CodexView({ projectId }: CodexViewProps) {
     const title = newTitle.trim()
     if (!title) return
     const slug = slugify(title)
+    if (!slug) {
+      setError(
+        t({
+          en: 'Title must contain at least one letter or digit',
+          fr: 'Le titre doit contenir au moins une lettre ou un chiffre',
+        }),
+      )
+      return
+    }
     setCreatingType(null)
     setNewTitle('')
     // A title that slugifies to an already-existing entry must not blank it
     // out with an empty PUT — just open the existing entry instead.
     const existing = entries.find((e) => e.type === type && e.slug === slug)
     if (!existing) {
-      await authFetch(`/api/projects/${projectId}/codex/${type}/${slug}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ title, tags: [], facts: {}, body: '' }),
-      })
+      try {
+        const res = await authFetch(`/api/projects/${projectId}/codex/${type}/${slug}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ title, tags: [], facts: {}, body: '' }),
+        })
+        if (!res.ok) throw new Error(`HTTP ${res.status}`)
+      } catch (err) {
+        console.error('Codex create failed:', err)
+        setError(err instanceof Error ? err.message : String(err))
+        return
+      }
       await load()
     }
     setSelected({ type, slug })
@@ -166,6 +194,7 @@ export function CodexView({ projectId }: CodexViewProps) {
           )
         })}
         {loading && <p className="text-xs text-text-muted">{t({ en: 'Loading…', fr: 'Chargement…' })}</p>}
+        {error && <p className="text-xs text-error">{error}</p>}
       </ScrollArea>
 
       <ScrollArea className="flex-1 min-w-0 p-6">
@@ -190,7 +219,13 @@ export function CodexView({ projectId }: CodexViewProps) {
                   <div key={key} className="flex items-center gap-1.5">
                     <Input value={key} readOnly className="w-32 text-xs py-1 bg-bg-secondary text-text-muted" />
                     <Input
-                      value={String(value ?? '')}
+                      value={
+                        value === null || value === undefined
+                          ? ''
+                          : typeof value === 'object'
+                            ? JSON.stringify(value)
+                            : String(value)
+                      }
                       onChange={(e) => handleFactChange(key, e.target.value)}
                       className="flex-1 text-xs py-1"
                     />
