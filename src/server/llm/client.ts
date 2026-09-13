@@ -313,6 +313,12 @@ export function createLLMClient(
         let fullContent = ''
         let fullThinking = ''
         const toolCalls: Map<number, { id: string; name: string; arguments: string }> = new Map()
+        // Servers that omit or reset `index` (or reuse 0 for every call) would
+        // otherwise merge distinct calls into one garbled entry. A delta that
+        // carries a NEW id for an already-populated index starts a fresh entry;
+        // later id-less deltas on that server index attach to the newest one.
+        const indexRemap = new Map<number, number>()
+        let nextSyntheticIndex = 0
         let finishReason: LLMCompletionResponse['finishReason'] = 'stop'
         let usage: import('../../shared/types.js').TokenUsage = {
           promptTokens: 0,
@@ -395,10 +401,17 @@ export function createLLMClient(
             // Handle tool call deltas
             if (delta.tool_calls) {
               for (const tc of delta.tool_calls) {
-                const existing = toolCalls.get(tc.index)
+                let effectiveIndex = indexRemap.get(tc.index) ?? tc.index
+                const current = toolCalls.get(effectiveIndex)
+                if (current && tc.id && current.id && tc.id !== current.id) {
+                  effectiveIndex = Math.max(nextSyntheticIndex, ...toolCalls.keys()) + 1
+                  indexRemap.set(tc.index, effectiveIndex)
+                }
+                nextSyntheticIndex = Math.max(nextSyntheticIndex, effectiveIndex)
+                const existing = toolCalls.get(effectiveIndex)
 
                 if (!existing) {
-                  toolCalls.set(tc.index, {
+                  toolCalls.set(effectiveIndex, {
                     id: tc.id ?? '',
                     name: tc.function?.name ?? '',
                     arguments: tc.function?.arguments ?? '',
@@ -411,7 +424,7 @@ export function createLLMClient(
 
                 yield {
                   type: 'tool_call_delta' as const,
-                  index: tc.index,
+                  index: effectiveIndex,
                   ...(tc.id ? { id: tc.id } : {}),
                   ...(tc.function?.name ? { name: tc.function.name } : {}),
                   ...(tc.function?.arguments ? { arguments: tc.function.arguments } : {}),

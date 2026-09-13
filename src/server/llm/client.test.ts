@@ -302,6 +302,60 @@ describe('llm client', () => {
     expect(toolCalls?.[0]).not.toHaveProperty('parseError')
   })
 
+  it('keeps two tool calls separate when the server reuses index 0 with distinct ids', async () => {
+    httpClientCreateStreamMock.mockReturnValueOnce(
+      (async function* () {
+        yield createChunk({
+          choices: [
+            {
+              delta: {
+                tool_calls: [{ index: 0, id: 'call-1', function: { name: 'read_file', arguments: '{"path":"a"}' } }],
+              },
+              finish_reason: null,
+            },
+          ],
+        })
+        yield createChunk({
+          choices: [
+            {
+              delta: {
+                tool_calls: [{ index: 0, id: 'call-2', function: { name: 'read_file', arguments: '{"path":' } }],
+              },
+              finish_reason: null,
+            },
+          ],
+        })
+        // Continuation of call-2 without an id on the same server index
+        yield createChunk({
+          choices: [
+            {
+              delta: { tool_calls: [{ index: 0, function: { arguments: '"b"}' } }] },
+              finish_reason: 'tool_calls',
+            },
+          ],
+          usage: { prompt_tokens: 10, completion_tokens: 5, total_tokens: 15 },
+        })
+      })(),
+    )
+
+    const client = createLLMClient(createConfig(), 'vllm')
+    const events = [] as Array<Record<string, unknown>>
+    for await (const event of client.stream({ messages: [{ role: 'user', content: 'hello' }] })) {
+      events.push(event as Record<string, unknown>)
+    }
+
+    const doneEvent = events.find((e) => e['type'] === 'done') as Record<string, unknown> | undefined
+    const response = doneEvent?.['response'] as Record<string, unknown> | undefined
+    const toolCalls = response?.['toolCalls'] as Array<Record<string, unknown>> | undefined
+
+    expect(toolCalls).toHaveLength(2)
+    expect(toolCalls?.[0]).toMatchObject({ id: 'call-1', name: 'read_file', arguments: { path: 'a' } })
+    expect(toolCalls?.[1]).toMatchObject({ id: 'call-2', name: 'read_file', arguments: { path: 'b' } })
+    // Streamed deltas carry distinct indexes so downstream merging stays separate too
+    const deltaIndexes = new Set(events.filter((e) => e['type'] === 'tool_call_delta').map((e) => e['index'] as number))
+    expect(deltaIndexes.size).toBe(2)
+  })
+
   it('handles tool calls with empty arguments string in complete path', async () => {
     httpClientCreateMock.mockResolvedValueOnce({
       id: 'resp-1',

@@ -930,6 +930,7 @@ export function createMessageStartEvent(
     isSystemGenerated?: boolean
     messageKind?: 'correction' | 'auto-prompt' | 'context-reset' | 'task-completed' | 'workflow-started' | 'command'
     metadata?: { type: string; name: string; color: string }
+    attachments?: Attachment[]
   },
 ): TurnEvent {
   return {
@@ -944,6 +945,7 @@ export function createMessageStartEvent(
       ...(options?.isSystemGenerated && { isSystemGenerated: options.isSystemGenerated }),
       ...(options?.messageKind && { messageKind: options.messageKind }),
       ...(options?.metadata && { metadata: options.metadata }),
+      ...(options?.attachments && options.attachments.length > 0 && { attachments: options.attachments }),
     },
   }
 }

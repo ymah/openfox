@@ -156,7 +156,22 @@ export async function executeTools(
           ),
         )
       }
-      const answer = await answerPromise
+      let answer: string
+      try {
+        answer = await answerPromise
+      } catch (waitError) {
+        // Stop while the question is pending: cancelQuestionsForSession rejects
+        // the promise. That is an interruption, not a turn failure — a throw
+        // here would persist an "Error: Session stopped by user" correction
+        // and leave the ask call without a tool result.
+        if (
+          ctx.signal?.aborted ||
+          (waitError instanceof Error && /stopped|cancel|abort|deleted/i.test(waitError.message))
+        ) {
+          return createInterruptedResult(startTime)
+        }
+        throw waitError
+      }
       return {
         success: true,
         output: answer,
@@ -283,16 +298,38 @@ export async function executeTools(
 
   const batchStart = Date.now()
 
+  // Every tool in the batch must settle: an unexpected throw in one call must
+  // not leave its siblings without a tool.result (which breaks the
+  // tool_call/tool_result pairing the next LLM request depends on). The first
+  // real error is re-thrown once all results are recorded.
+  const settleAll = async (promises: Array<Promise<ExecutedToolCall>>): Promise<ExecutedToolCall[]> => {
+    const settled = await Promise.allSettled(promises)
+    const fulfilled: ExecutedToolCall[] = []
+    let firstError: unknown
+    for (const outcome of settled) {
+      if (outcome.status === 'fulfilled') fulfilled.push(outcome.value)
+      else if (firstError === undefined) firstError = outcome.reason
+    }
+    if (firstError !== undefined) throw firstError
+    return fulfilled
+  }
+
   const runParallel = (calls: Array<{ toolCall: ToolCall; index: number }>) =>
-    Promise.all(calls.map(({ toolCall, index }) => executeTool(toolCall, index)))
+    settleAll(calls.map(({ toolCall, index }) => executeTool(toolCall, index)))
 
   const runSubAgentsSequentially = async (
     calls: Array<{ toolCall: ToolCall; index: number }>,
   ): Promise<ExecutedToolCall[]> => {
     const executed: ExecutedToolCall[] = []
+    let firstError: unknown
     for (const { toolCall, index } of calls) {
-      executed.push(await executeTool(toolCall, index))
+      try {
+        executed.push(await executeTool(toolCall, index))
+      } catch (error) {
+        if (firstError === undefined) firstError = error
+      }
     }
+    if (firstError !== undefined) throw firstError
     return executed
   }
 
