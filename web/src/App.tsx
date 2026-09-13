@@ -505,12 +505,6 @@ function App() {
     }
   }, [rightSidebarOpen, isMobile])
 
-  useEffect(() => {
-    if (connectionStatus === 'connected' || hasToken) {
-      fetchConfig()
-    }
-  }, [connectionStatus, fetchConfig, hasToken])
-
   const showPasswordModal = useSessionStore((state) => state.showPasswordModal)
   const passwordModalRetry = useSessionStore((state) => state.passwordModalRetry)
   const submitPassword = useSessionStore((state) => state.submitPassword)

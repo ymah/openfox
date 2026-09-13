@@ -29,6 +29,9 @@ vi.mock('../../lib/ws', () => ({
     connect: wsConnectMock,
     disconnect: wsDisconnectMock,
     onStatusChange: wsStatusMock,
+    getLastCloseCode: () => 0,
+    hasToken: () => true,
+    isConnected: false,
   },
 }))
 
@@ -252,5 +255,38 @@ describe('reconnect refreshes current session content', () => {
         !String((c as unknown[])[0]).includes('/background-processes'),
     ).length
     expect(sessionFetches).toBe(2)
+  })
+})
+
+describe('message subscription survives a failed initial connect', () => {
+  beforeEach(() => {
+    wsSendMock.mockClear()
+    wsSubscribeMock.mockClear()
+    wsConnectMock.mockClear()
+    wsDisconnectMock.mockClear()
+    wsStatusMock.mockClear()
+    fetchMock.mockClear()
+  })
+
+  it('keeps the WS message handler registered when connect() rejects (ws.ts auto-reconnects later)', async () => {
+    const unsubscribe = vi.fn()
+    wsSubscribeMock.mockReturnValueOnce(unsubscribe)
+    wsConnectMock.mockRejectedValueOnce(new Error('Connection timeout'))
+    const useSessionStore = await loadSessionStore()
+
+    await useSessionStore.getState().connect()
+
+    // Server down at page load: the store used to unsubscribe here, and the
+    // automatic reconnect that follows delivered messages to nobody.
+    expect(wsSubscribeMock).toHaveBeenCalledTimes(1)
+    expect(unsubscribe).not.toHaveBeenCalled()
+    expect(useSessionStore.getState().connectionStatus).toBe('disconnected')
+
+    // The auto-reconnect succeeds → status handler flips to connected; no
+    // second subscription is needed and the first one is still live.
+    const cb = (wsStatusMock.mock.calls[0] as Array<(s: string) => void>)[0]!
+    cb('connected')
+    expect(wsSubscribeMock).toHaveBeenCalledTimes(1)
+    expect(unsubscribe).not.toHaveBeenCalled()
   })
 })

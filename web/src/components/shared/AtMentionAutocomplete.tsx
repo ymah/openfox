@@ -56,29 +56,42 @@ const AtMentionAutocomplete = forwardRef<AtMentionAutocompleteHandle, AtMentionA
         return
       }
 
+      // Latest-wins: an older, slower response must not replace the
+      // suggestions of the query the user is now typing.
+      const controller = new AbortController()
       const timeoutId = setTimeout(() => {
-        fetchSuggestions(mention.query)
+        fetchSuggestions(mention.query, controller.signal)
       }, 150)
 
-      return () => clearTimeout(timeoutId)
+      return () => {
+        clearTimeout(timeoutId)
+        controller.abort()
+      }
     }, [mention?.query, workdir])
 
-    const fetchSuggestions = async (query: string) => {
+    const fetchSuggestions = async (query: string, signal: AbortSignal) => {
       setLoading(true)
       try {
         const params = new URLSearchParams({ q: query })
         if (workdir) params.set('workdir', workdir)
         // Authorized transient read: file search is a debounced autocomplete query, not shared state.
-        const response = await authFetch(`/api/files?${params.toString()}`)
-        const data: FileSuggestion[] = await response.json()
-        setSuggestions(data)
+        const response = await authFetch(`/api/files?${params.toString()}`, { signal })
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}`)
+        }
+        const data: unknown = await response.json()
+        if (signal.aborted) return
+        // An error body would otherwise be stored as a non-array and crash
+        // the keyboard navigation (`suggestions.length`, `.map`).
+        setSuggestions(Array.isArray(data) ? (data as FileSuggestion[]) : [])
         setSelectedIndex(0)
         selectedIndexRef.current = 0
       } catch (err) {
+        if (signal.aborted) return
         console.error('File search failed:', err)
         setSuggestions([])
       } finally {
-        setLoading(false)
+        if (!signal.aborted) setLoading(false)
       }
     }
 

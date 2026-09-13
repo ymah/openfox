@@ -180,40 +180,74 @@ export const useSessionStore = create<SessionState>((set, get) => {
   }
   setFlushFn((sessionId) => {
     const buf = getBuffer(sessionId)
-    if (!buf.messageId) return
 
     const hasDelta = buf.deltaContent.length > 0
     const hasThinking = buf.thinkingContent.length > 0
     const hasToolOutput = buf.toolOutput.length > 0
+    const hasParked = (buf.parked?.length ?? 0) > 0
 
-    if (!hasDelta && !hasThinking && !hasToolOutput) return
+    if (!hasDelta && !hasThinking && !hasToolOutput && !hasParked) return
 
     set((state) => {
       if (!isLivePane(state, sessionId)) return state
       return updatePane(state, sessionId, (pane) => {
-        const sm = pane.messages.find((m) => m.id === buf.messageId)
-        if (!sm) {
-          // The target message has not landed in this pane yet (the server can
-          // stream the first deltas before broadcasting the message). Keep the
-          // buffered deltas intact so the next flush applies them instead of
-          // silently dropping the stream.
-          return pane
+        const byId = new Map(pane.messages.map((m) => [m.id, m] as const))
+        const touched = new Set<string>()
+        const target = (messageId: string): Message | undefined => byId.get(messageId)
+
+        // Parked content of earlier messages (stream switched before they landed)
+        if (hasParked) {
+          const remaining: NonNullable<typeof buf.parked> = []
+          for (const entry of buf.parked!) {
+            const m = target(entry.messageId)
+            if (!m) {
+              remaining.push(entry)
+              continue
+            }
+            byId.set(entry.messageId, {
+              ...m,
+              content: m.content + entry.deltaContent,
+              ...(entry.thinkingContent ? { thinkingContent: (m.thinkingContent ?? '') + entry.thinkingContent } : {}),
+            })
+            touched.add(entry.messageId)
+          }
+          buf.parked = remaining.length > 0 ? remaining : undefined
         }
-        const updated = { ...sm }
-        let applied = false
-        if (hasDelta) {
-          updated.content = updated.content + buf.deltaContent
-          buf.deltaContent = ''
-          applied = true
+
+        // Live deltas of the current message. If it has not landed in this
+        // pane yet (the server can stream the first deltas before broadcasting
+        // the message), keep them buffered so the next flush applies them
+        // instead of silently dropping the stream.
+        if (buf.messageId && (hasDelta || hasThinking)) {
+          const m = target(buf.messageId)
+          if (m) {
+            byId.set(buf.messageId, {
+              ...m,
+              ...(hasDelta ? { content: m.content + buf.deltaContent } : {}),
+              ...(hasThinking ? { thinkingContent: (m.thinkingContent ?? '') + buf.thinkingContent } : {}),
+            })
+            touched.add(buf.messageId)
+            buf.deltaContent = ''
+            buf.thinkingContent = ''
+          }
         }
-        if (hasThinking) {
-          updated.thinkingContent = (updated.thinkingContent ?? '') + buf.thinkingContent
-          buf.thinkingContent = ''
-          applied = true
-        }
+
+        // Tool output is applied to the message it belongs to (its own
+        // messageId), not to whichever message is currently streaming text.
         if (hasToolOutput) {
           const matchedCallIds = new Set<string>()
-          updated.toolCalls = applyToolOutputs(updated.toolCalls, buf.toolOutput, matchedCallIds)
+          const byMessage = new Map<string, typeof buf.toolOutput>()
+          for (const o of buf.toolOutput) {
+            const list = byMessage.get(o.messageId) ?? []
+            list.push(o)
+            byMessage.set(o.messageId, list)
+          }
+          for (const [messageId, outputs] of byMessage) {
+            const m = target(messageId)
+            if (!m) continue
+            byId.set(messageId, { ...m, toolCalls: applyToolOutputs(m.toolCalls, outputs, matchedCallIds) })
+            touched.add(messageId)
+          }
           // Chunks whose callId never appears on the message would otherwise
           // be re-buffered forever: re-filtered on every flush (~60/s) and
           // blocking the buffer from ever being released. Keep only the most
@@ -221,10 +255,10 @@ export const useSessionStore = create<SessionState>((set, get) => {
           const unmatched = buf.toolOutput.filter((o) => !matchedCallIds.has(o.callId))
           buf.toolOutput =
             unmatched.length > MAX_UNMATCHED_TOOL_OUTPUT ? unmatched.slice(-MAX_UNMATCHED_TOOL_OUTPUT) : unmatched
-          applied = true
         }
-        if (!applied) return pane
-        return { ...pane, messages: pane.messages.map((m) => (m.id === buf.messageId ? updated : m)) }
+
+        if (touched.size === 0) return pane
+        return { ...pane, messages: pane.messages.map((m) => (touched.has(m.id) ? byId.get(m.id)! : m)) }
       })
     })
   })
@@ -256,6 +290,16 @@ export const useSessionStore = create<SessionState>((set, get) => {
    * pane becomes the focused session (the router/URL session); otherwise it is
    * loaded as a background pane for the split view.
    */
+  /** Point the server's per-client active session at `sessionId` (idempotent). */
+  function subscribeServerSession(sessionId: string) {
+    if (!wsClient.isConnected) return
+    try {
+      wsClient.send('session.load', { sessionId })
+    } catch {
+      // Not connected — the reconnect path re-sends session.load
+    }
+  }
+
   async function ensurePane(sessionId: string, focus: boolean, force = false) {
     if (!force && loadingSessionIds.has(sessionId)) {
       return
@@ -271,6 +315,11 @@ export const useSessionStore = create<SessionState>((set, get) => {
             unreadSessionIds: s.unreadSessionIds.filter((id) => id !== sessionId),
           }
         })
+        // The server routes live-only messages (git status, context state,
+        // retry indicator, path confirmations…) to the client's ACTIVE
+        // session, set only by session.load. A cached revisit (A → B → A)
+        // must move that subscription back, or the server keeps targeting B.
+        subscribeServerSession(sessionId)
       }
       touchPaneAccess(sessionId)
       evictStalePanes(get, set)
@@ -484,15 +533,20 @@ export const useSessionStore = create<SessionState>((set, get) => {
         }
       })
 
+      // Subscribe BEFORE connecting and keep the subscription across a failed
+      // attempt: ws.ts auto-reconnects after an initial failure (onerror
+      // rejects, then onclose schedules a retry), and that later successful
+      // connection would otherwise have no message handler — every server
+      // message silently dropped until a manual reconnect.
+      if (!isSubscribed) {
+        isSubscribed = true
+        wsUnsubscribe = wsClient.subscribe((message) => {
+          handleMessage(message, set, get)
+        })
+      }
+
       try {
         await wsClient.connect()
-
-        if (!isSubscribed) {
-          isSubscribed = true
-          wsUnsubscribe = wsClient.subscribe((message) => {
-            handleMessage(message, set, get)
-          })
-        }
       } catch (error) {
         console.error('Failed to connect:', error)
         const closeCode = wsClient.getLastCloseCode()
@@ -501,11 +555,6 @@ export const useSessionStore = create<SessionState>((set, get) => {
           set({ showPasswordModal: true, passwordModalRetry: true, connectionStatus: 'reconnecting' })
           return
         }
-        if (wsUnsubscribe) {
-          wsUnsubscribe()
-          wsUnsubscribe = null
-        }
-        isSubscribed = false
         set({ connectionStatus: 'disconnected' })
       }
     },
@@ -563,13 +612,12 @@ export const useSessionStore = create<SessionState>((set, get) => {
         const { token } = await res.json()
         wsClient.setToken(token)
         set({ showPasswordModal: false })
-        get().connect()
 
         void projectsResource.refresh()
         const { fetchConfig } = useConfigStore.getState()
         fetchConfig()
 
-        get().connect()
+        void get().connect()
       } catch {
         set({ showPasswordModal: true, passwordModalRetry: true, connectionStatus: 'reconnecting' })
       }
@@ -648,6 +696,7 @@ export const useSessionStore = create<SessionState>((set, get) => {
           ...mirror(pane),
         }
       })
+      if (get().focusedSessionId === sessionId) subscribeServerSession(sessionId)
       persistSplit()
     },
 
@@ -691,6 +740,9 @@ export const useSessionStore = create<SessionState>((set, get) => {
           unreadSessionIds: s.unreadSessionIds.filter((id) => id !== focus),
         }
       })
+      // Background pane loads each sent session.load; the last one stole the
+      // server-side subscription. Hand it back to the focused pane.
+      subscribeServerSession(focus)
       persistSplit()
     },
 
@@ -803,17 +855,19 @@ export const useSessionStore = create<SessionState>((set, get) => {
         const res = await authFetch(`/api/sessions?${params.toString()}`)
         const data = await res.json()
         const moreSessions = (data.sessions ?? []) as SessionSummary[]
-        set((state) => ({
-          sessions: [
-            ...state.sessions,
-            ...moreSessions.map((s) => {
-              const existing = state.sessions.find((e) => e.id === s.id)
-              return existing?.isRunning === false ? { ...s, isRunning: false } : s
-            }),
-          ],
-          sessionsHasMore: data.hasMore ?? false,
-          sessionsPaginationLoading: false,
-        }))
+        set((state) => {
+          // The offset drifts when sessions were inserted/deleted via WS since
+          // the last page (session.created prepends, session.deleted removes),
+          // so a page can overlap what is already loaded — never append a
+          // duplicate id (duplicate React keys in the sidebar).
+          const known = new Set(state.sessions.map((e) => e.id))
+          const fresh = moreSessions.filter((s) => !known.has(s.id))
+          return {
+            sessions: [...state.sessions, ...fresh],
+            sessionsHasMore: data.hasMore ?? false,
+            sessionsPaginationLoading: false,
+          }
+        })
       } catch {
         set({ sessionsPaginationLoading: false })
       }
@@ -984,6 +1038,9 @@ export const useSessionStore = create<SessionState>((set, get) => {
 
       try {
         const res = await authFetch(`/api/sessions/${sessionId}/stop`, { method: 'POST' })
+        if (!res.ok) {
+          throw new Error(`stop failed: HTTP ${res.status}`)
+        }
         const data = (await res.json()) as { success: boolean; queuedMessages?: Array<{ content: string }> }
         if (data.queuedMessages && data.queuedMessages.length > 0) {
           const combined = data.queuedMessages.map((m) => m.content).join('\n')
@@ -991,6 +1048,9 @@ export const useSessionStore = create<SessionState>((set, get) => {
         }
       } catch (error) {
         console.error('Error stopping generation:', error)
+        // The server never acknowledged the stop, so no session.running:false
+        // will reset this flag — clear it here or Stop/Escape stay dead.
+        set((s) => updatePane(s, sessionId, (p) => ({ ...p, abortInProgress: false })))
       }
     },
 

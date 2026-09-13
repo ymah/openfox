@@ -240,10 +240,16 @@ export function ChatInput({
   useEffect(() => {
     if (!sessionId) return
     const draftKey = `openfox:draft:${sessionId}`
-    const savedDraft = localStorage.getItem(draftKey)
-    if (savedDraft !== null) {
-      setInput(savedDraft)
+    let savedDraft: string | null = null
+    try {
+      savedDraft = localStorage.getItem(draftKey)
+    } catch {
+      /* storage unavailable */
     }
+    // Always reset on session change: `input` lives in PlanPanel and is not
+    // keyed by session, so without this the text typed in session A leaks
+    // into session B (and gets persisted as B's draft 500 ms later).
+    setInput(savedDraft ?? '')
   }, [sessionId, setInput])
 
   useEffect(() => {
@@ -254,14 +260,24 @@ export function ChatInput({
   useEffect(() => {
     if (!sessionId) return
     const draftKey = `openfox:draft:${sessionId}`
-    const timeoutId = setTimeout(() => {
-      if (input) {
-        localStorage.setItem(draftKey, input)
-      } else {
-        localStorage.removeItem(draftKey)
+    const persist = () => {
+      try {
+        if (input) {
+          localStorage.setItem(draftKey, input)
+        } else {
+          localStorage.removeItem(draftKey)
+        }
+      } catch {
+        /* storage unavailable */
       }
-    }, 500)
-    return () => clearTimeout(timeoutId)
+    }
+    const timeoutId = setTimeout(persist, 500)
+    return () => {
+      clearTimeout(timeoutId)
+      // Flush the pending write when leaving the session so the last 500 ms
+      // of typing are not lost.
+      persist()
+    }
   }, [sessionId, input])
 
   useEffect(() => {

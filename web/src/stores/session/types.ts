@@ -39,6 +39,12 @@ export interface StreamingBuffer {
   deltaContent: string
   thinkingContent: string
   toolOutput: { messageId: string; callId: string; stream: 'stdout' | 'stderr'; content: string }[]
+  /**
+   * Content of a previous message that had not landed in the store when the
+   * stream switched to another message (parallel sub-agents). Applied by the
+   * next flush once its message exists instead of being glued onto the new one.
+   */
+  parked?: { messageId: string; deltaContent: string; thinkingContent: string }[]
 }
 
 export type GitStatus = {

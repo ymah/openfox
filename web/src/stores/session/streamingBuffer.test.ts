@@ -143,6 +143,103 @@ describe('chat.tool_output streaming after message_updated', () => {
   })
 })
 
+describe('interleaved streams (parallel sub-agents)', () => {
+  beforeEach(() => {
+    wsSendMock.mockClear()
+    fetchMock.mockClear()
+  })
+
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  function assistantMessage(id: string) {
+    return {
+      type: 'chat.message' as const,
+      sessionId: 'session-1',
+      payload: {
+        message: {
+          id,
+          role: 'assistant',
+          content: '',
+          timestamp: '2024-01-01T00:00:00.000Z',
+          tokenCount: 0,
+          isStreaming: true,
+        },
+      },
+    }
+  }
+
+  it('never appends the unflushed text of one message onto another within the same frame', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    const useSessionStore = await loadSessionStore()
+    useSessionStore.setState({
+      currentSession: {
+        id: 'session-1',
+        projectId: 'project-1',
+        workdir: '/tmp/project-1',
+        mode: 'builder',
+        phase: 'build',
+        isRunning: true,
+        criteria: [],
+        summary: null,
+      } as any,
+    })
+    const handle = useSessionStore.getState().handleServerMessage
+    handle(assistantMessage('parent') as any)
+    handle(assistantMessage('sub-1') as any)
+
+    // Deltas of both messages arrive before any flush
+    handle({ type: 'chat.delta', sessionId: 'session-1', payload: { messageId: 'parent', content: 'Parent ' } } as any)
+    handle({ type: 'chat.delta', sessionId: 'session-1', payload: { messageId: 'sub-1', content: 'Sub ' } } as any)
+    handle({ type: 'chat.delta', sessionId: 'session-1', payload: { messageId: 'parent', content: 'text' } } as any)
+    handle({ type: 'chat.delta', sessionId: 'session-1', payload: { messageId: 'sub-1', content: 'text' } } as any)
+    vi.runAllTimers()
+
+    const messages = useSessionStore.getState().messages
+    expect(messages.find((m) => m.id === 'parent')?.content).toBe('Parent text')
+    expect(messages.find((m) => m.id === 'sub-1')?.content).toBe('Sub text')
+  })
+
+  it('applies tool output to its own message even while another message streams text', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    const useSessionStore = await loadSessionStore()
+    useSessionStore.setState({
+      currentSession: {
+        id: 'session-1',
+        projectId: 'project-1',
+        workdir: '/tmp/project-1',
+        mode: 'builder',
+        phase: 'build',
+        isRunning: true,
+        criteria: [],
+        summary: null,
+      } as any,
+    })
+    const handle = useSessionStore.getState().handleServerMessage
+    handle(assistantMessage('parent') as any)
+    handle(assistantMessage('sub-1') as any)
+    handle({
+      type: 'chat.tool_call',
+      sessionId: 'session-1',
+      payload: { messageId: 'parent', callId: 'call-1', tool: 'run_command', args: { command: 'ls' } },
+    } as any)
+
+    handle({ type: 'chat.delta', sessionId: 'session-1', payload: { messageId: 'sub-1', content: 'Sub' } } as any)
+    handle({
+      type: 'chat.tool_output',
+      sessionId: 'session-1',
+      payload: { messageId: 'parent', callId: 'call-1', stream: 'stdout', output: 'out\n' },
+    } as any)
+    vi.runAllTimers()
+
+    const messages = useSessionStore.getState().messages
+    expect(messages.find((m) => m.id === 'sub-1')?.content).toBe('Sub')
+    const parent = messages.find((m) => m.id === 'parent')
+    expect(parent?.toolCalls?.[0]?.streamingOutput?.map((c) => c.content).join('')).toBe('out\n')
+  })
+})
+
 describe('streaming flush throttling', () => {
   async function loadStreamingBuffer() {
     vi.resetModules()
