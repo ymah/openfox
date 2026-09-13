@@ -6,6 +6,8 @@
  */
 
 import type { OrchestratorOptions, OrchestratorResult } from './types.js'
+import { getProject } from '../db/projects.js'
+import type { ProjectType } from '../../shared/types.js'
 import { logger } from '../utils/logger.js'
 import { getRuntimeConfig } from '../runtime-config.js'
 import { getGlobalConfigDir } from '../../cli/paths.js'
@@ -30,12 +32,25 @@ import { executeWorkflow } from '../workflows/executor.js'
  */
 export async function runOrchestrator(options: OrchestratorOptions): Promise<OrchestratorResult> {
   const runtimeConfig = getRuntimeConfig()
-  const workflowId = options.workflowId ?? runtimeConfig.activeWorkflowId ?? 'default'
   const configDir = getGlobalConfigDir(runtimeConfig.mode ?? 'production')
 
   // Also load project workflows so project-specific workflows are discoverable
   const session = options.sessionManager.requireSession(options.sessionId)
   const projectDir = session.workdir
+
+  // The implicit `default` (build & verify) workflow is a dev workflow: a GTD
+  // or writing project has no criteria-driven build loop to fall back to.
+  let projectType: ProjectType = 'dev'
+  try {
+    projectType = getProject(session.projectId)?.type ?? 'dev'
+  } catch {
+    // Project lookup is best-effort (e.g. no DB in unit tests) — assume dev
+  }
+  const implicitWorkflowId = runtimeConfig.activeWorkflowId ?? (projectType === 'dev' ? 'default' : undefined)
+  const workflowId = options.workflowId ?? implicitWorkflowId
+  if (!workflowId) {
+    throw new Error(`No workflow specified for a ${projectType} project`)
+  }
 
   const scope = normalizeWorkflowScope(options.scope)
   let workflow

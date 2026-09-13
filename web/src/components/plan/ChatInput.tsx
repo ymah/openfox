@@ -4,6 +4,8 @@ import { useSessionStore, useIsRunning, useQueuedMessages } from '../../stores/s
 import { useScopedPaneState } from '../../stores/session/session-scope'
 import { useResource } from '../../hooks/useResource'
 import { useWorkflows } from '../../hooks/useWorkflows'
+import { useCurrentProject } from '../../hooks/useCurrentProject'
+import { filterByProjectType } from '../../lib/category-groups'
 import { commandsResource, commandResource } from '../../lib/resources'
 import { authFetch } from '../../lib/api'
 import { parseSlashCommand, extractTemplateParams } from '../../lib/parse-slash-command'
@@ -181,7 +183,11 @@ export function ChatInput({
   const commands = commandsData
     ? dedupById(dedupById(commandsData.defaults, commandsData.userItems), commandsData.projectItems)
     : []
-  const { workflows } = useWorkflows(workdir)
+  const { workflows: allWorkflows } = useWorkflows(workdir)
+  // Scope slash-command suggestions to the project's function (dev / GTD /
+  // writing), like the agent selector and the More menu already do.
+  const project = useCurrentProject()
+  const workflows = filterByProjectType(allWorkflows, project?.type)
 
   // Clear inline param hints when input is emptied (after send, escape, etc.)
   useEffect(() => {

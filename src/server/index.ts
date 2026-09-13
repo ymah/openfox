@@ -7,6 +7,7 @@ import { readFile } from 'node:fs/promises'
 import { createServer as createViteServer, type ViteDevServer } from 'vite'
 
 import type { Config, ModelConfig, ProviderBackend, ProjectType } from '../shared/types.js'
+import { PROJECT_TYPES } from '../shared/types.js'
 import type { ServerHandle } from './context.js'
 import type { VisionBackend } from './llm/vision-fallback.js'
 import { initDatabase } from './db/index.js'
@@ -496,7 +497,12 @@ export async function createServerHandle(config: Config): Promise<ServerHandle> 
     if (customInstructions !== undefined) updates.customInstructions = customInstructions
     if (dangerLevel !== undefined) updates.dangerLevel = dangerLevel as 'normal' | 'dangerous' | null
     if (defaultAgent !== undefined) updates.defaultAgent = defaultAgent as string | null
-    if (type !== undefined) updates.type = type as ProjectType | null
+    if (type !== undefined) {
+      if (type !== null && !PROJECT_TYPES.includes(type as ProjectType)) {
+        return res.status(400).json({ error: `Invalid project type: ${String(type)}` })
+      }
+      updates.type = type as ProjectType | null
+    }
     const updated = updateProject(req.params.id, updates)
     if (!updated) {
       return res.status(404).json({ error: 'Project not found' })
@@ -3692,6 +3698,7 @@ export async function createServerHandle(config: Config): Promise<ServerHandle> 
     getLLMClientForProvider,
     getActiveProvider: () => providerManager.getActiveProvider(),
     broadcastForSession: wssExports.broadcastForSession,
+    launchWorkflow: (sessionId, launch) => deferTasksLaunchWorkflow(sessionId, launch),
   })
   queueProcessor.start()
 

@@ -658,15 +658,13 @@ export function createOpenFoxMcpTools(deps: OpenFoxMcpToolDeps): OpenFoxMcpTool[
         }
 
         if (session.isRunning) {
-          let fullContent = payload.content ?? ''
-          if (payload.workflowId) {
-            const workflowInfo = `// Workflow: ${payload.workflowId}`
-            fullContent = fullContent ? `${workflowInfo}\n\n${fullContent}` : workflowInfo
-          }
-          if (!fullContent) {
+          if (!payload.workflowId && !payload.resumeFrom && !payload.content) {
             return fail('Session is running — give a workflowId or content to queue for the next turn boundary.')
           }
-          sessionManager.queueMessage(sessionId, 'asap', fullContent, undefined, 'workflow-launch')
+          // Keep the full payload: the QueueProcessor re-dispatches it as a real
+          // workflow launch/resume at the next turn boundary.
+          const { content, attachments: _attachments, ...workflowLaunch } = payload
+          sessionManager.queueMessage(sessionId, 'asap', content ?? '', undefined, 'workflow-launch', workflowLaunch)
           return ok({ queued: true, queueState: sessionManager.getQueueState(sessionId) })
         }
 

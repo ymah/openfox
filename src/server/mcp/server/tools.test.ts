@@ -1053,12 +1053,15 @@ describe('openfx MCP tools', () => {
         workflowId: 'default',
         content: 'focus on auth',
       })
+      // The full launch payload is queued so the QueueProcessor re-dispatches
+      // it as a real workflow run, not as a chat message with a marker.
       expect(deps.sessionManager.queueMessage).toHaveBeenCalledWith(
         's-1',
         'asap',
-        '// Workflow: default\n\nfocus on auth',
+        'focus on auth',
         undefined,
         'workflow-launch',
+        expect.objectContaining({ workflowId: 'default' }),
       )
       const body = json(result)
       expect(body.queued).toBe(true)
@@ -1081,6 +1084,7 @@ describe('openfx MCP tools', () => {
         'just a message',
         undefined,
         'workflow-launch',
+        expect.any(Object),
       )
       expect(json(result).queued).toBe(true)
     })

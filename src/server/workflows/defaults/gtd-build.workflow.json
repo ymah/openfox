@@ -46,7 +46,7 @@
       "agentId": "builder",
       "subGroup": "code",
       "prompt": "Implémente les {{criteriaCount}} critères issus de {{project_doc}}. Mets à jour chaque critère avec session_metadata (status completed) au fur et à mesure. Puis appelle step_done().",
-      "nudgePrompt": "{{reason}}. Continue l'implémentation des critères restants, puis appelle step_done().",
+      "nudgePrompt": "{{reason}}.\n\n## Retours du vérificateur\n{{stepOutput.content}}\n\nCorrige les problèmes ci-dessus, continue l'implémentation des critères restants, puis appelle step_done().",
       "transitions": [
         {
           "when": {

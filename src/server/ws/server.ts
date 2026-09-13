@@ -2,7 +2,7 @@ import { WebSocketServer, WebSocket } from 'ws'
 import { spawn } from 'node:child_process'
 import { createHash } from 'node:crypto'
 import type { Server } from 'node:http'
-import type { ServerMessage } from '../../shared/protocol.js'
+import type { QueuedWorkflowLaunch, ServerMessage } from '../../shared/protocol.js'
 import type { GitDiffFile } from '../../shared/protocol.js'
 import { createServerMessage } from '../../shared/protocol.js'
 import { createSessionStateMessage } from './protocol.js'
@@ -1385,23 +1385,38 @@ async function handleClientMessage(
 
       const session = sessionManager.requireSession(sessionId)
 
-      // If running, queue for later processing instead of rejecting
+      // If running, queue for later processing instead of rejecting. The FULL
+      // launch payload is kept (resume step, user choice, params, sub-group) so
+      // the QueueProcessor re-dispatches it as a real workflow launch at the
+      // next turn boundary — not as a plain chat message.
       if (session.isRunning) {
         const launchPayload = message.payload as
-          { workflowId?: string; content?: string; attachments?: unknown[] } | undefined
+          | {
+              workflowId?: string
+              content?: string
+              attachments?: unknown[]
+              params?: Record<string, string>
+              subGroup?: string
+              scope?: string
+              resumeFrom?: string
+              stepOutput?: Record<string, string>
+              userChoice?: string
+            }
+          | undefined
         const content = launchPayload?.content ?? ''
         const attachments = launchPayload?.attachments as Attachment[] | undefined
-        const workflowId = launchPayload?.workflowId
-
-        // Build message content with workflow context
-        let fullContent = content
-        if (workflowId) {
-          const workflowInfo = `// Workflow: ${workflowId}`
-          fullContent = content ? `${workflowInfo}\n\n${content}` : workflowInfo
+        const workflowLaunch: QueuedWorkflowLaunch = {
+          ...(launchPayload?.workflowId ? { workflowId: launchPayload.workflowId } : {}),
+          ...(launchPayload?.params ? { params: launchPayload.params } : {}),
+          ...(launchPayload?.subGroup ? { subGroup: launchPayload.subGroup } : {}),
+          ...(launchPayload?.scope ? { scope: launchPayload.scope } : {}),
+          ...(launchPayload?.resumeFrom ? { resumeFrom: launchPayload.resumeFrom } : {}),
+          ...(launchPayload?.stepOutput ? { stepOutput: launchPayload.stepOutput } : {}),
+          ...(launchPayload?.userChoice ? { userChoice: launchPayload.userChoice } : {}),
         }
 
         // Queue as ASAP message - will be processed at next turn boundary
-        sessionManager.queueMessage(sessionId, 'asap', fullContent, attachments, 'workflow-launch')
+        sessionManager.queueMessage(sessionId, 'asap', content, attachments, 'workflow-launch', workflowLaunch)
 
         // Return success with queue state, tagged with the target session so
         // the client attributes the queue feedback to the launching pane.

@@ -383,7 +383,16 @@ export async function runAgentTurn(
   },
 ): Promise<{ returnValueContent?: string; returnValueResult?: string; failed?: { error: string } }> {
   const allAgents = await loadAllAgentsDefault(options.sessionManager.getProjectWorkdir(options.sessionId))
-  const agentDef = findAgentById(agentId, allAgents) ?? findAgentById(resolveDefaultAgentId(), allAgents)!
+  let fallbackProjectId: string | undefined
+  try {
+    fallbackProjectId = options.sessionManager.getSession(options.sessionId)?.projectId
+  } catch {
+    // Project-scoped default is best-effort
+  }
+  const agentDef =
+    findAgentById(agentId, allAgents) ??
+    findAgentById(resolveDefaultAgentId(fallbackProjectId), allAgents) ??
+    findAgentById(resolveDefaultAgentId(), allAgents)!
 
   // Resolve per-agent model override (dedicated LLM client if configured).
   // Pass options.llmClient as preferred fallback so mock/test clients are preserved.

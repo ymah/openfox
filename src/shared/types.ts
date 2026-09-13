@@ -3,7 +3,8 @@
 // ============================================================================
 
 // Extend this union (and web/src/lib/project-modes.ts) to add a new project function.
-export type ProjectType = 'dev' | 'gtd' | 'writing'
+export const PROJECT_TYPES = ['dev', 'gtd', 'writing'] as const
+export type ProjectType = (typeof PROJECT_TYPES)[number]
 
 export interface Project {
   id: string

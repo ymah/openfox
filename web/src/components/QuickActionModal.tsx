@@ -9,6 +9,8 @@ function getProjectIdFromPath(path: string): string | undefined {
   return match?.[1]
 }
 import { useAgents } from '../hooks/useAgents'
+import { useCurrentProject } from '../hooks/useCurrentProject'
+import { filterByProjectType } from '../lib/category-groups'
 import { useResource } from '../hooks/useResource'
 import { commandsResource, workflowsResource } from '../lib/resources'
 import { useSessionStore } from '../stores/session'
@@ -78,7 +80,9 @@ export function QuickActionModal({
     (state) => state.currentSession?.workdir,
     undefined,
   )
-  const { agents } = useAgents(currentWorkdir)
+  const project = useCurrentProject()
+  const { agents: allAgents } = useAgents(currentWorkdir)
+  const agents = filterByProjectType(allAgents, project?.type)
   const { data: commandData } = useResource(commandsResource, currentWorkdir)
   const commandDefaults = commandData?.defaults ?? []
   const commandUserItems = commandData?.userItems ?? []
@@ -161,7 +165,10 @@ export function QuickActionModal({
       prefix: t({ en: 'Command > Launch', fr: 'Commande > Lancer' }),
       action: () => onSelectCommand(c.id, textareaContent),
     })),
-    ...dedupById(dedupById(workflowDefaults, workflowUserItems), workflowProjectItems).map((w) => ({
+    ...filterByProjectType(
+      dedupById(dedupById(workflowDefaults, workflowUserItems), workflowProjectItems),
+      project?.type,
+    ).map((w) => ({
       id: w.id,
       name: w.name,
       prefix: t({ en: 'Workflow > Run', fr: 'Workflow > Exécuter' }),

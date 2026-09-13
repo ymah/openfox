@@ -20,6 +20,8 @@ interface QueueProcessorDeps {
     reasoningEffort?: string,
   ) => LLMClientWithModel | undefined
   getActiveProvider: (() => import('../../shared/types.js').Provider | undefined) | undefined
+  /** Re-dispatch a queued 'workflow-launch' entry as a real workflow run. */
+  launchWorkflow?: (sessionId: string, launch: import('../runner/launch.js').WorkflowLaunchPayload) => void
   broadcastForSession: (sessionId: string, msg: ServerMessage) => void
 }
 
@@ -156,6 +158,22 @@ export class QueueProcessor {
       )
     }
 
+    const nextAsap = queue.find((m) => m.mode === 'asap') ?? queue[0]
+
+    // A workflow launch queued while the session was busy is re-dispatched as
+    // a real run (the runner owns the running state and the user message).
+    if (nextAsap?.messageKind === 'workflow-launch' && nextAsap.workflowLaunch && this.deps.launchWorkflow) {
+      sessionManager.cancelQueuedMessage(sessionId, nextAsap.queueId)
+      const { scope, ...rest } = nextAsap.workflowLaunch
+      this.deps.launchWorkflow(sessionId, {
+        ...rest,
+        ...(scope ? { scope: scope as NonNullable<import('../runner/launch.js').WorkflowLaunchPayload['scope']> } : {}),
+        ...(nextAsap.content ? { content: nextAsap.content } : {}),
+        ...(nextAsap.attachments ? { attachments: nextAsap.attachments } : {}),
+      })
+      return
+    }
+
     const controller = new AbortController()
     // Any aborted marker belongs to the previous turn, which no longer owns
     // this session — it must not make this fresh turn drop its queue.
@@ -165,7 +183,6 @@ export class QueueProcessor {
     sessionManager.setRunning(sessionId, true)
     broadcastForSession(sessionId, createSessionRunningMessage(true))
 
-    const nextAsap = queue.find((m) => m.mode === 'asap') ?? queue[0]
     if (nextAsap) {
       sessionManager.cancelQueuedMessage(sessionId, nextAsap.queueId)
       const userMessage = sessionManager.addMessage(sessionId, {

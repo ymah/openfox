@@ -18,7 +18,7 @@ import type {
   Attachment,
   PauseState,
 } from '../../shared/types.js'
-import type { QueuedMessage } from '../../shared/protocol.js'
+import type { QueuedMessage, QueuedWorkflowLaunch } from '../../shared/protocol.js'
 import {
   createSession as dbCreateSession,
   getSession as dbGetSession,
@@ -1722,6 +1722,7 @@ export class SessionManager {
     content?: string,
     attachments?: Attachment[],
     messageKind?: string,
+    workflowLaunch?: QueuedWorkflowLaunch,
   ): QueuedMessage {
     const queue = this.messageQueues.get(sessionId) ?? []
     const msg: QueuedMessage = {
@@ -1730,6 +1731,7 @@ export class SessionManager {
       content: content ?? '',
       ...(attachments ? { attachments } : {}),
       ...(messageKind ? { messageKind } : {}),
+      ...(workflowLaunch ? { workflowLaunch } : {}),
       queuedAt: new Date().toISOString(),
     }
     queue.push(msg)

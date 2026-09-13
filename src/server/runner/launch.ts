@@ -149,6 +149,22 @@ export function launchWorkflowRun(deps: LaunchWorkflowRunDeps, payload: Workflow
       logger.error('Runner error', { error: errorMessage, sessionId })
       // Surface validation errors to the user (e.g. missing required params)
       broadcastForSession(sessionId, createServerMessage('chat.error', { error: errorMessage, recoverable: false }))
+      // An execution left in 'running' after an unexpected throw would route
+      // every later chat message as a workflow resume and refuse chat.retry.
+      try {
+        const activeExec = sessionManager.getActiveWorkflowExecution(sessionId)
+        if (activeExec && activeExec.status === 'running') {
+          sessionManager.blockWorkflow(
+            sessionId,
+            activeExec.id,
+            activeExec.workflowId,
+            activeExec.workflowName,
+            activeExec.workflowColor,
+          )
+        }
+      } catch {
+        // Session may have been deleted during execution
+      }
     })
     .finally(() => {
       if (activeRuns.get(sessionId) === controller) {

@@ -9,6 +9,7 @@
  */
 
 import type { StatsIdentity } from '../../shared/types.js'
+import { LLMError } from '../utils/errors.js'
 import type { SessionManager } from '../session/index.js'
 import type { LLMClientWithModel } from '../llm/client.js'
 import type { ProviderManager } from '../provider-manager.js'
@@ -363,6 +364,13 @@ export async function executeSubAgent(options: SubAgentExecutionOptions): Promis
   // --- Build result ---
 
   logger.debug('Sub-agent execution complete', { subAgentType, subAgentId })
+
+  // A soft LLM failure (retry window exhausted) must not be reported as an
+  // empty "success": the workflow would advance on a blank draft and
+  // call_sub_agent would tell the parent the task went fine.
+  if (loopResult.failed) {
+    throw new LLMError(loopResult.failed.error)
+  }
 
   return buildSubAgentResult(
     loopResult.returnValueContent,
