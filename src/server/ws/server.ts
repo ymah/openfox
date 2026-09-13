@@ -276,6 +276,12 @@ function processQueueAndRestartTurn(
     messageKind?: string,
   ) => void,
 ): boolean {
+  // The QueueProcessor may already have started a turn for this session (it
+  // reacts to running_changed=false before this cleanup runs). Never start a
+  // second concurrent turn.
+  if (sessionManager.getSession(sessionId)?.isRunning || activeAgents.has(sessionId)) {
+    return false
+  }
   const messages = drainFn(sessionId)
   const next = messages[0]
   if (!next) return false
@@ -372,6 +378,8 @@ export function createWebSocketServer(
 
   // Per-session LLM client cache: sessionId -> { cacheKey, client }
   const sessionLLMClients = new Map<string, { key: string; client: LLMClientWithModel }>()
+  // In-flight WS-driven turns (chat.retry, queue chaining) — awaited by session deletion
+  const turnPromises = new Map<string, Promise<void>>()
 
   function getSessionLLMClient(sessionId: string): LLMClientWithModel {
     const effective = sessionManager.resolveEffectiveProviderModel(sessionId)
@@ -515,6 +523,8 @@ export function createWebSocketServer(
     setRunningOnEarlyReturn: boolean,
   ) {
     if (activeAgents.get(sessionId) !== controller) {
+      // Another turn owns the session now (or abortSession already detached
+      // us). Never touch the queue or the aborted marker of a turn we don't own.
       return
     }
     activeAgents.delete(sessionId)
@@ -558,15 +568,14 @@ export function createWebSocketServer(
     }
 
     sessionManager.clearMessageQueue(sessionId)
-    // runChatTurn in startTurnWithCompletionChain already sets isRunning=false in finally.
-    // For the runner orchestrator path (which bypasses runChatTurn), the caller's
-    // .finally() block handles setRunning(false) explicitly.
+    // startTurnWithCompletionChain resets isRunning in its own finally; the
+    // runner orchestrator path (which bypasses runChatTurn) does it in launch.ts.
     const contextState = sessionManager.getContextState(sessionId)
     sendFn(sessionId, createContextStateMessage(contextState))
   }
 
   function startTurnWithCompletionChain(sessionId: string, controller: AbortController) {
-    runChatTurn({
+    const turnPromise = runChatTurn({
       sessionManager,
       sessionId,
       llmClient: llmForSession(sessionId),
@@ -583,11 +592,20 @@ export function createWebSocketServer(
       })
       .finally(() => {
         try {
+          // runChatTurn only appends running.changed to the EventStore; the DB
+          // is_running flag (source of truth for the QueueProcessor and every
+          // "is running" guard) must be reset here, but only while this turn
+          // still owns the session — a newer turn may have replaced us.
+          if (activeAgents.get(sessionId) === controller && sessionManager.getSession(sessionId)?.isRunning) {
+            sessionManager.setRunning(sessionId, false)
+          }
           cleanupAfterTurn(sessionId, controller, broadcastForSession, false)
         } catch {
           // Session may have been deleted during execution
         }
+        if (turnPromises.get(sessionId) === turnPromise) turnPromises.delete(sessionId)
       })
+    turnPromises.set(sessionId, turnPromise)
   }
 
   // Note: SessionManager subscription removed - EventStore global subscription (below)
@@ -902,16 +920,20 @@ export function createWebSocketServer(
   return {
     wss,
     abortSession: (sessionId: string) => {
-      abortedSessions.add(sessionId)
       sessionManager.clearPauseState(sessionId)
       const controller = activeAgents.get(sessionId)
       if (controller) {
-        activeAgents.delete(sessionId)
+        // Keep the controller registered so the turn's own cleanup still
+        // matches it (and clears the aborted marker + queue). Only mark the
+        // session aborted when there is actually a turn to abort — a stale
+        // marker would make the NEXT turn drop its queue.
+        abortedSessions.add(sessionId)
         controller.abort()
         return true
       }
       return false
     },
+    waitForTurn: (sessionId: string): Promise<void> => turnPromises.get(sessionId) ?? Promise.resolve(),
     close: (cb?: () => void) => wss.close(cb as (err?: Error) => void),
     broadcastForSession,
     broadcastForProject,
@@ -922,6 +944,8 @@ export function createWebSocketServer(
 export interface WebSocketServerExports {
   wss: WebSocketServer
   abortSession: (sessionId: string) => boolean
+  /** Settles when the in-flight WS-driven turn for the session (if any) has wound down. */
+  waitForTurn: (sessionId: string) => Promise<void>
   close: (cb?: () => void) => void
   broadcastForSession: (sessionId: string, msg: ServerMessage) => void
   broadcastForProject: (projectId: string, sessionId: string, msg: ServerMessage) => void
@@ -1699,6 +1723,8 @@ async function handleClientMessage(
         logger.warn('Aborting existing agent before retrying turn', { sessionId: retrySessionId })
         existingController.abort()
       }
+      // A stale aborted marker from a previous turn must not drop this turn's queue
+      abortedSessions.delete(retrySessionId)
       activeAgents.set(retrySessionId, controller)
 
       send({ type: 'ack', payload: {}, id: message.id })

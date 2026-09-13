@@ -1032,10 +1032,16 @@ export async function createServerHandle(config: Config): Promise<ServerHandle> 
     const { cancelQuestionsForSession, cancelPathConfirmationsForSession } = await import('./tools/index.js')
 
     sessionManager.clearMessageQueue(sessionId)
-    // Awaited: deleteSession below FK-cascades the session's events, so any
-    // in-flight turn must actually settle first — see stopSessionExecution.
-    await stopSessionExecution(sessionId, sessionManager)
+    // Signal the abort FIRST, then wait: deleteSession below FK-cascades the
+    // session's events, so any in-flight turn (QueueProcessor or WS-driven)
+    // must actually settle before the rows disappear. Bounded so a turn that
+    // never observes its signal can't hang the request.
     abortSession(sessionId)
+    await stopSessionExecution(sessionId, sessionManager)
+    await Promise.race([
+      Promise.all([queueProcessor.waitForTurn(sessionId), wssExports.waitForTurn(sessionId)]),
+      new Promise<void>((resolve) => setTimeout(resolve, 5000)),
+    ])
     cancelQuestionsForSession(sessionId, 'Session deleted')
     cancelPathConfirmationsForSession(sessionId, 'Session deleted')
 

@@ -227,6 +227,7 @@ export async function runTopLevelAgentLoop(
   let currentMaxTokensOverride: number | undefined
   let lastPatternMatch: { pattern: string; field: string; matchedContent: string } | undefined
   let compacting = config.initialCompacting ?? false
+  let kickoffInjected = false
   let returnValueNudgeCount = 0
 
   for (;;) {
@@ -284,8 +285,12 @@ export async function runTopLevelAgentLoop(
 
     const session = sessionManager.requireSession(sessionId)
 
-    // Inject kickoff prompt (e.g., builder kickoff) on first iteration
-    if (retryLimiter.count() === 0) {
+    // Inject kickoff prompt (e.g., builder kickoff) on the first iteration only.
+    // (retryLimiter.count() is reset after every tool batch, so it cannot be
+    // used as a "first iteration" marker — that re-injected the kickoff after
+    // every tool round.)
+    if (!kickoffInjected) {
+      kickoffInjected = true
       await config.injectKickoff?.()
     }
 
@@ -484,6 +489,24 @@ export async function runTopLevelAgentLoop(
         if (!config.subAgentMetadata) {
           recordLLMFailure(sessionId)
           config.onMessage?.(createChatLLMRetryFailedMessage(attemptResult.error, requestFailures))
+          // Persist the failure so a reload still shows why the turn ended
+          // (the live retry_failed message above is WS-only).
+          append({
+            type: 'chat.error',
+            data: {
+              error: serverT(
+                {
+                  en: 'LLM request failed after {{count}} attempts: {{error}}',
+                  fr: 'Requête LLM échouée après {{count}} tentatives : {{error}}',
+                },
+                { count: requestFailures, error: attemptResult.error },
+              ),
+              recoverable: true,
+            },
+          })
+          if (assistantMessageStarted) {
+            append(createChatDoneEvent(assistantMsgId, 'error', undefined, agentType))
+          }
         }
         return { failed: { error: attemptResult.error } }
       }
@@ -559,6 +582,12 @@ export async function runTopLevelAgentLoop(
       )
       append({ type: 'message.done', data: { messageId: matchMsgId } })
 
+      // The interrupted assistant bubble already has message.start — close it
+      // (partial) so a reload does not fold it as streaming forever.
+      if (assistantMessageStarted) {
+        append(createMessageDoneEvent(assistantMsgId, { segments: result.segments, partial: true }))
+        onMessage?.(createChatMessageUpdatedMessage(assistantMsgId, { isStreaming: false, partial: true }))
+      }
       continue
     }
 
@@ -599,6 +628,10 @@ export async function runTopLevelAgentLoop(
     // Check compaction threshold with fresh promptTokens from LLM.
     // When exceeded, append compaction prompt and let the next iteration
     // handle summarization — same agent, same loop, no nested call.
+    // When the response carries tool calls, the tools must run first (the
+    // model's intent would otherwise be lost and the tool_call left without a
+    // tool_result); compaction is then requested right after the batch.
+    let compactionDue = false
     if (!compacting) {
       const contextState = sessionManager.getContextState(sessionId)
       const { shouldCompact, appendCompactionPrompt } = await import('../context/compactor.js')
@@ -610,9 +643,17 @@ export async function runTopLevelAgentLoop(
             runtimeConfig.context.compactionThreshold,
         )
       ) {
-        appendCompactionPrompt(sessionId, append)
-        compacting = true
-        continue
+        if (result.toolCalls.length > 0) {
+          compactionDue = true
+        } else {
+          if (assistantMessageStarted) {
+            append(createMessageDoneEvent(assistantMsgId, { segments: result.segments }))
+            onMessage?.(createChatMessageUpdatedMessage(assistantMsgId, { isStreaming: false }))
+          }
+          appendCompactionPrompt(sessionId, append)
+          compacting = true
+          continue
+        }
       }
     }
 
@@ -772,6 +813,12 @@ ${COMPACTION_PROMPT}`,
 
       if (!config.subAgentMetadata) {
         void drainQueue(sessionManager, sessionId, append, onMessage)
+      }
+
+      if (compactionDue) {
+        const { appendCompactionPrompt } = await import('../context/compactor.js')
+        appendCompactionPrompt(sessionId, append)
+        compacting = true
       }
 
       retryLimiter.reset()

@@ -4,8 +4,12 @@ import type { ToolContext } from './types.js'
 import { mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { spawnSync } from 'node:child_process'
 
 const IS_WIN32 = process.platform === 'win32'
+// The zombie-pipe tests need `setsid` (util-linux) to detach a child into its
+// own session; macOS ships without it, so those tests are Linux-only.
+const HAS_SETSID = !IS_WIN32 && spawnSync('sh', ['-c', 'command -v setsid'], { stdio: 'ignore' }).status === 0
 
 describe('shell tool streaming', () => {
   let tempDir: string
@@ -361,7 +365,7 @@ for i in a b c d e f g h i j; do echo "$i"; done
     // tool's stdio pipes open long after the shell has exited, which
     // prevents Node's 'close' event from ever firing.
 
-    it.skipIf(IS_WIN32)(
+    it.skipIf(!HAS_SETSID)(
       'settles after a small timeout instead of hanging',
       async () => {
         const contextWithShortTimeout: ToolContext = {
@@ -387,7 +391,7 @@ for i in a b c d e f g h i j; do echo "$i"; done
       10000,
     )
 
-    it.skipIf(IS_WIN32)(
+    it.skipIf(!HAS_SETSID)(
       'settles with the real exit code after a bounded grace when the timeout never fires',
       async () => {
         const contextWithDefaultTimeout: ToolContext = {
