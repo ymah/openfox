@@ -48,7 +48,7 @@
       "phase": "build",
       "agentId": "gtd-secretary",
       "prompt": "Le projet a été validé. Relis 10-projects/<slug>/PROJECT.md et, dans ce même tour, lance en parallèle tous les call_sub_agent des tâches dont les dépendances sont satisfaites (routage donné par le skill gtd). Pour toute tâche agent: code, applique la logique à deux cas décrite dans ton prompt (project_tasks si le dépôt visé est ce projet, sinon un rappel écrit + indication en chat). Écris chaque retour dans deliverables/, marque le critère correspondant completed. Puis appelle step_done().",
-      "nudgePrompt": "Certaines tâches n'ont pas encore de livrable. Relance les tâches restantes dont les dépendances sont désormais satisfaites, puis appelle step_done().",
+      "nudgePrompt": "Certaines tâches n'ont pas encore de livrable.\n\n## Retours de la vérification\n{{stepOutput.content}}\n\nTiens compte des retours ci-dessus, relance les tâches restantes dont les dépendances sont désormais satisfaites, puis appelle step_done().",
       "transitions": [
         {
           "when": {

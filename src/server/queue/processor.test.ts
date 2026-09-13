@@ -456,6 +456,47 @@ describe('QueueProcessor', () => {
     })
   })
 
+  describe('queued workflow launches', () => {
+    it('re-dispatches a queued workflow-launch entry as a real launch instead of a chat turn', async () => {
+      const runChatTurnMock = vi.fn().mockResolvedValue(undefined)
+      vi.doMock('../chat/orchestrator.js', () => ({ runChatTurn: runChatTurnMock }))
+      const launchWorkflow = vi.fn()
+      queueItems = [
+        {
+          queueId: 'q-wf',
+          mode: 'asap',
+          content: 'guidance',
+          queuedAt: '2024-01-01',
+          messageKind: 'workflow-launch',
+          workflowLaunch: { workflowId: 'gtd-clarify', resumeFrom: 'approve', userChoice: 'Affiner' },
+        } as any,
+      ]
+      const qp = new QueueProcessor({
+        sessionManager: mockSessionManager as any,
+        providerManager: mockProviderManager as any,
+        getLLMClient: mockGetLLMClient,
+        getActiveProvider: mockGetActiveProvider,
+        broadcastForSession: mockBroadcastForSession,
+        launchWorkflow,
+      })
+      qp.start()
+      const callback = mockSessionManager.subscribe.mock.calls[0][0]
+      callback({ type: 'queue_added', sessionId: 'sess-1', queueId: 'q-wf', mode: 'asap', content: 'guidance' })
+      await new Promise((resolve) => setTimeout(resolve, 20))
+
+      expect(launchWorkflow).toHaveBeenCalledWith('sess-1', {
+        workflowId: 'gtd-clarify',
+        resumeFrom: 'approve',
+        userChoice: 'Affiner',
+        content: 'guidance',
+      })
+      expect(runChatTurnMock).not.toHaveBeenCalled()
+      expect(mockSessionManager.addMessage).not.toHaveBeenCalled()
+      expect(mockSessionManager.cancelQueuedMessage).toHaveBeenCalledWith('sess-1', 'q-wf')
+      qp.stop()
+    })
+  })
+
   describe('turn lifecycle races', () => {
     it('does not let a stopped turn A clobber the controller/running state of the next turn B', async () => {
       // Turn A resolves only when we say so

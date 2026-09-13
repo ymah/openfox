@@ -19,6 +19,7 @@ import { loadAllAgentsDefault, findAgentById } from '../agents/registry.js'
 import { getToolRegistryForAgent } from '../tools/index.js'
 import { executeShellCommand } from './shell.js'
 import { serverT } from '../i18n.js'
+import { LLMError } from '../utils/errors.js'
 import { logger } from '../utils/logger.js'
 import { resolveTemplate, type TemplateContext } from './template.js'
 import type { ParallelChildStep, SubAgentChildStep, ShellChildStep } from './types.js'
@@ -189,7 +190,11 @@ export async function runSubAgentChild(child: SubAgentChildStep, deps: RunChildD
       output: { content: result.content ?? '', ...(result.result ? { result: result.result } : {}) },
     }
   } catch (error) {
-    if (isAbortError(error)) {
+    // An exhausted LLM retry window is an infrastructure failure, not a
+    // workflow-meaningful 'failure' outcome: reporting it as one would let an
+    // `always` transition advance the workflow onto an empty result. Let it
+    // propagate so the caller can block the execution instead.
+    if (isAbortError(error) || error instanceof LLMError) {
       throw error
     }
     return failureOutcome(child.id, error)

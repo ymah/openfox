@@ -64,6 +64,17 @@ export interface AskAnswerPayload {
 }
 
 // Shared queue types
+/** Full workflow launch/resume request queued while the session was busy. */
+export interface QueuedWorkflowLaunch {
+  workflowId?: string
+  params?: Record<string, string>
+  subGroup?: string
+  scope?: string
+  resumeFrom?: string
+  stepOutput?: Record<string, string>
+  userChoice?: string
+}
+
 export interface QueuedMessage {
   queueId: string
   mode: 'asap' | 'completion'
@@ -71,6 +82,8 @@ export interface QueuedMessage {
   attachments?: Attachment[]
   queuedAt: string
   messageKind?: string
+  /** Set with messageKind 'workflow-launch': re-dispatched as a real launch when dequeued. */
+  workflowLaunch?: QueuedWorkflowLaunch
 }
 
 // ============================================================================

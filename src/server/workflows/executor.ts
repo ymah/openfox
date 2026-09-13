@@ -403,6 +403,36 @@ export async function executeWorkflow(
     }
   }
 
+  // Every early exit that leaves the run unrecoverable must mark the execution
+  // blocked: a row left in 'running' makes the client route every later chat
+  // message as a workflow resume and refuses chat.retry (WORKFLOW_ACTIVE).
+  const blockExecution = (reason: string): void => {
+    if (!executionId) return
+    try {
+      sessionManager.setPhase(sessionId, 'blocked')
+      sessionManager.blockWorkflow(
+        sessionId,
+        executionId,
+        workflow.metadata.id,
+        workflow.metadata.name,
+        workflow.metadata.color,
+      )
+      emitWorkflowMessage(
+        eventStore,
+        sessionId,
+        `Runner blocked: ${reason}`,
+        getCurrentWindowMessageOptions(sessionId),
+        onMessage,
+      )
+    } catch (error) {
+      logger.error('Failed to block workflow execution', {
+        sessionId,
+        executionId,
+        error: error instanceof Error ? error.message : String(error),
+      })
+    }
+  }
+
   // Evaluate start condition if present
   if (workflow.startCondition && workflow.startCondition.type !== 'always') {
     const session = sessionManager.requireSession(sessionId)
@@ -414,10 +444,12 @@ export async function executeWorkflow(
     )
     if (!conditionMet) {
       logger.debug('Workflow start condition not met', { sessionId, condition: workflow.startCondition.type })
+      const reason = `Start condition not met: ${workflow.startCondition.type}`
+      blockExecution(reason)
       return {
         finalAction: {
           type: 'BLOCKED',
-          reason: `Start condition not met: ${workflow.startCondition.type}`,
+          reason,
           blockedCriteria: [],
         },
         iterations: 0,
@@ -485,8 +517,10 @@ export async function executeWorkflow(
     const step = stepsById.get(currentStepId)
     if (!step) {
       logger.error('Workflow step not found', { sessionId, stepId: currentStepId })
+      const reason = `Step "${currentStepId}" not found in workflow`
+      blockExecution(reason)
       return {
-        finalAction: { type: 'BLOCKED', reason: `Step "${currentStepId}" not found in workflow`, blockedCriteria: [] },
+        finalAction: { type: 'BLOCKED', reason, blockedCriteria: [] },
         iterations,
         totalTime: (performance.now() - startTime) / 1000,
       }
@@ -529,7 +563,7 @@ export async function executeWorkflow(
     // Set session mode to match agent step's agentId
     if (step.type === 'agent') {
       const agentStep = step as AgentStep
-      sessionManager.setMode(sessionId, agentStep.agentId ?? resolveDefaultAgentId())
+      sessionManager.setMode(sessionId, agentStep.agentId ?? resolveDefaultAgentId(session.projectId))
     }
 
     logger.debug('Workflow step executing', { sessionId, iteration: iterations, stepId: step.id, stepType: step.type })
@@ -628,7 +662,7 @@ export async function executeWorkflow(
         // Resolve the step's model: a per-agent override (e.g. builder-3.8-27b
         // pinned to qwen) wins over the session client — mirrors the sub-agent
         // path. Without an override the session client is used as before.
-        const stepAgentId = agentStep.agentId ?? resolveDefaultAgentId()
+        const stepAgentId = agentStep.agentId ?? resolveDefaultAgentId(session.projectId)
         const effectiveProviderManager = sessionManager.getProviderManager?.()
         let stepLlmClient = llmClient
         let stepStatsIdentity = options.statsIdentity
@@ -731,10 +765,26 @@ export async function executeWorkflow(
 
       case 'sub_agent': {
         const subStep = step as SubAgentStep
-        const outcome = await runSubAgentChild(
-          subStep,
-          buildStepChildDeps(options, templateCtx, eventStore, currentWindowMessageOptions),
-        )
+        let outcome
+        try {
+          outcome = await runSubAgentChild(
+            subStep,
+            buildStepChildDeps(options, templateCtx, eventStore, currentWindowMessageOptions),
+          )
+        } catch (error) {
+          // The sub-agent's LLM retry window was exhausted (transient failures
+          // are already retried inside the stream layer). Block so the user can
+          // retry the step, instead of letting a transition advance the
+          // workflow onto an empty result.
+          if (!(error instanceof LLMError)) throw error
+          const reason = `Sub-agent ${subStep.subAgentType} failed: ${error.message}`
+          blockExecution(reason)
+          return {
+            finalAction: { type: 'BLOCKED', reason, blockedCriteria: [] },
+            iterations,
+            totalTime: (performance.now() - startTime) / 1000,
+          }
+        }
         lastStepOutput = outcome.output
         stepOutcome = { result: outcome.result, output: lastStepOutput }
         break
@@ -792,8 +842,12 @@ export async function executeWorkflow(
       }
 
       case 'user': {
-        // On resume for THIS specific step, route by the user's choice
-        if (resumeFromStep === step.id) {
+        // On resume for THIS specific step, route by the user's choice — once.
+        // resumeFromStep is fixed for the whole run, so without consuming it a
+        // loop back to this step (e.g. approve → clarify → approve) would
+        // re-apply the same choice forever instead of pausing again.
+        if (resumeFromStep === step.id && !resumeConsumed) {
+          resumeConsumed = true
           const choice = options.userChoice
           const result = choice === undefined || choice === CONTINUE_CHOICE_ID ? DEFAULT_USER_RESULT : choice
           stepOutcome = { result, output: lastStepOutput }
@@ -954,10 +1008,12 @@ export async function executeWorkflow(
 
   // Max iterations reached
   logger.warn('Workflow executor max iterations reached', { sessionId, iterations })
+  const maxIterationsReason = `Max iterations (${workflow.settings.maxIterations}) reached`
+  blockExecution(maxIterationsReason)
   return {
     finalAction: {
       type: 'BLOCKED',
-      reason: `Max iterations (${workflow.settings.maxIterations}) reached`,
+      reason: maxIterationsReason,
       blockedCriteria: [],
     },
     iterations,

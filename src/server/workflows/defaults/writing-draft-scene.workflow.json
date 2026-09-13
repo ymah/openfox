@@ -43,7 +43,7 @@
       "type": "agent",
       "phase": "done",
       "agentId": "writing-secretary",
-      "prompt": "La scène {{scene_path}} a été rédigée et vérifiée. Résume en français ce qui a été écrit et les éventuelles contradictions ou faits nouveaux relevés par la vérification de cohérence — s'il y a une contradiction, signale-la clairement à l'utilisateur plutôt que de la corriger toi-même. Puis appelle step_done().",
+      "prompt": "La scène {{scene_path}} a été rédigée et vérifiée.\n\n## Rapport de cohérence\n{{stepOutput.content}}\n\nRésume en français ce qui a été écrit et les éventuelles contradictions ou faits nouveaux relevés par la vérification de cohérence — s'il y a une contradiction, signale-la clairement à l'utilisateur plutôt que de la corriger toi-même. Puis appelle step_done().",
       "transitions": [{ "when": { "type": "always" }, "goto": "$done" }]
     }
   ],
