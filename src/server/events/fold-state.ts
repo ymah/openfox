@@ -1,4 +1,4 @@
-import type { Criterion, SessionMode, SessionPhase, ContextState, Todo } from '../../shared/types.js'
+import type { Criterion, CriterionStatus, SessionMode, SessionPhase, ContextState, Todo } from '../../shared/types.js'
 import { resolveDefaultAgentId } from '../agents/registry.js'
 import type {
   TurnEvent,
@@ -67,6 +67,22 @@ export function foldMetadata(events: EventLike[]): Record<string, MetadataEntry[
     }
   }
   return metadata
+}
+
+function metadataStatusToCriterionStatus(status: string): CriterionStatus {
+  const timestamp = new Date(0).toISOString()
+  switch (status) {
+    case 'in_progress':
+      return { type: 'in_progress' }
+    case 'completed':
+      return { type: 'completed', completedAt: timestamp }
+    case 'passed':
+      return { type: 'passed', verifiedAt: timestamp }
+    case 'failed':
+      return { type: 'failed', reason: 'Failed', failedAt: timestamp }
+    default:
+      return { type: 'pending' }
+  }
 }
 
 interface ContextFoldResult {
@@ -223,7 +239,7 @@ export function foldSessionState(
     initialMessages && initialMessages.length > 0
       ? foldTurnEventsToSnapshotMessagesFromInitial(events, initialMessages)
       : foldTurnEventsToSnapshotMessages(events)
-  const criteria = foldCriteria(events)
+  let criteria = foldCriteria(events)
   const todos = foldTodos(events)
   let metadataEntries = foldMetadata(events)
   const contextResult = foldContextState(events, initialWindowId)
@@ -237,6 +253,7 @@ export function foldSessionState(
     canCompact: false,
     dynamicContextChanged: false,
   }
+
   const contextState: ContextState =
     baseContextState.compactionCount !== contextResult.compactionCount || baseContextState.maxTokens !== maxTokens
       ? { ...baseContextState, compactionCount: contextResult.compactionCount, maxTokens }
@@ -258,6 +275,19 @@ export function foldSessionState(
       }
       if (cachedSystemPrompt && dynamicContextHash && metadataEntriesMerged) break
     }
+  }
+
+  const metadataCriteria = metadataEntries['criteria']
+  if (metadataCriteria) {
+    // session_metadata is the canonical criteria store used by the planner
+    // and workflow executor. Keep the legacy Session.criteria projection in
+    // sync so clients and summaries see the same acceptance criteria.
+    criteria = metadataCriteria.map((entry) => ({
+      id: entry.id,
+      description: entry.description,
+      status: metadataStatusToCriterionStatus(entry.status),
+      attempts: [],
+    }))
   }
 
   let sessionInit: FoldedSessionState['sessionInit']

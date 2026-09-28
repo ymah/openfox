@@ -1747,6 +1747,13 @@ export class SessionManager {
   setMetadataEntries(sessionId: string, key: string, entries: import('../../shared/types.js').MetadataEntry[]): void {
     this.requireSession(sessionId)
     emitMetadataSet(sessionId, key, entries)
+    if (key === 'criteria') {
+      // Keep the legacy criteria projection synchronized with the canonical
+      // session_metadata representation so live clients and summaries update
+      // immediately as well as after a reload.
+      const state = getSessionState(sessionId)
+      if (state) emitCriteriaSet(sessionId, state.criteria)
+    }
     this.emit({ type: 'metadata_updated', sessionId, key, entries })
   }
 

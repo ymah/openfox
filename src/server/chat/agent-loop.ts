@@ -215,7 +215,12 @@ const OUTPUT_RESERVE_TOKENS = 2048
 export async function runTopLevelAgentLoop(
   config: TopLevelLoopConfig,
   turnMetrics: TurnMetrics,
-): Promise<{ returnValueContent?: string; returnValueResult?: string; failed?: { error: string } }> {
+): Promise<{
+  returnValueContent?: string
+  returnValueResult?: string
+  stepDoneCalled?: boolean
+  failed?: { error: string }
+}> {
   const { mode, sessionManager, sessionId, llmClient, signal, onMessage, statsIdentity } = config
   const append = config.append
   const agentType = config.subAgentMetadata ? ('sub-agent' as const) : undefined
@@ -235,6 +240,7 @@ export async function runTopLevelAgentLoop(
   let pendingToolResultTokens = 0
   let returnValueContent: string | undefined
   let returnValueResult: string | undefined
+  let stepDoneCalled = false
   let currentMaxTokensOverride: number | undefined
   let lastPatternMatch: { pattern: string; field: string; matchedContent: string } | undefined
   let compacting = config.initialCompacting ?? false
@@ -843,6 +849,7 @@ ${COMPACTION_PROMPT}`,
         const batchResult = await executeTools(assistantMsgId, result.toolCalls, batchContext, append)
         pendingToolResultTokens = estimateToolResultTokens(batchResult.toolMessages)
         if (batchResult.stepDoneCalled) {
+          stepDoneCalled = true
           emitDoneAndBreak(
             assistantMsgId,
             result.segments,
@@ -1044,6 +1051,7 @@ ${COMPACTION_PROMPT}`,
   return {
     ...(returnValueContent ? { returnValueContent } : {}),
     ...(returnValueResult ? { returnValueResult } : {}),
+    ...(stepDoneCalled ? { stepDoneCalled: true } : {}),
   }
 }
 

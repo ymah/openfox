@@ -122,6 +122,7 @@ function startTurnWithCompletionChain(sessionId: string, controller: AbortContro
       onMessage: (msg) => broadcastForSession(sessionId, msg),
     }),
   )
+    .then(() => undefined)
     .catch((error) => {
       if (error instanceof Error && error.message === 'Aborted') {
         return

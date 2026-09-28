@@ -2690,6 +2690,14 @@ describe('foldSessionState metadataEntries snapshot fallback merge', () => {
     expect(state.metadataEntries).toEqual({
       criteria: [{ id: 'c1', description: 'Criterion from snapshot', status: 'pending' }],
     })
+    expect(state.criteria).toEqual([
+      {
+        id: 'c1',
+        description: 'Criterion from snapshot',
+        status: { type: 'pending' },
+        attempts: [],
+      },
+    ])
   })
 
   it('merges snapshot metadata entries with post-snapshot metadata.set events', () => {

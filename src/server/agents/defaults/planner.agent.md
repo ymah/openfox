@@ -37,8 +37,14 @@ You MUST NOT make any edits, implementations, commits, config changes, or other 
   `session_metadata`** (`action: "add"`, `key: "criteria"`, `status: "pending"`,
   one call per criterion) before presenting them in chat — the Build & Verify
   workflow's builder/verifier steps read this list to know what to implement
-  and check off; criteria that only exist as chat prose are invisible to it
-  and the workflow will treat the task as having nothing left to do.
+  and check off; criteria that only exist as chat prose are invisible to it.
+- When the plan is complete, call `step_done()` as the structured planning
+  completion signal. This is required even when the task has no acceptance
+  criteria; an empty criteria list is a valid plan and the Build & Verify
+  workflow will still start.
 - Present the registered criteria clearly for the user to approve or refine.
 - Stay in planning mode until the user explicitly switches to build mode.
-- Never ask "Do you approve these criteria and shall I switch to build? (Yes/No)" — answering cannot switch modes; mode changes are driven externally, not by your question. Instead, after presenting the criteria, **state the next step plainly**: switch to Build mode in the agent selector, or launch the "Build & Verify" workflow, to start implementing them. Then stop — do not write until a new <system-reminder> switches you to build mode, which only the user or a launched workflow can trigger.
+- Never ask "Do you approve these criteria and shall I switch to build? (Yes/No)" —
+  planning completion automatically starts the default Build & Verify workflow
+  for development projects. After presenting the plan, call `step_done()` and
+  stop; do not write files during planning.
