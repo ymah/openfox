@@ -1,5 +1,29 @@
 # Changelog
 
+## 2.0.160-fox.1 - 2026-09-28
+
+Fork release: rebased on upstream 2.0.160. Versions in this fork now carry a
+`-fox.N` suffix so they can never collide with an upstream release again.
+
+### Features
+
+- **Project functions** — a project is created as **dev**, **GTD** or **writing**, and agents, workflows, slash commands and dev chrome are scoped to that function.
+- **Native GTD system** — GTD agents, skill and workflows (capture, clarify, build, weekly review).
+- **Novel/book writing mode** — Codex, manuscript tree, scene editor with autosave, and writing agents/workflows.
+- **Native grep/glob tools** — file search without shelling out.
+- **Import skills from a folder** — a directory of `SKILL.md` packages can be imported from Settings.
+
+### Bug Fixes
+
+- **Sessions no longer stay stuck in "running"** — turns started via `chat.retry` or queue chaining reset the running flag; Stop followed by an immediate new message no longer breaks the next turn; pre-flight errors and deleted sessions wind down cleanly.
+- **Workflows stop advancing on failure** — a sub-agent whose LLM retry window is exhausted blocks the run instead of letting an `always` transition report on an empty result; exhausted, broken or crashed runs are marked blocked instead of left running; user gates pause again when revisited.
+- **Streamed tool calls no longer merge** — calls that reuse index 0 with distinct ids (and every Ollama tool call) stay separate instead of being garbled into one.
+- **Streaming correctness** — compaction with pending tool calls runs the tools first; pattern-retry closes the assistant bubble; attachments sent mid-turn reach the LLM; Stop during `ask_user` is an interruption, not an error; one throwing tool no longer strands its siblings' results.
+- **Planner hands off properly** — a finished plan registers its acceptance criteria and reports completion via `step_done()`, so Build & Verify can start; an empty criteria list is a valid plan.
+- **Web client** — the WS handler survives a server that was down at page load; no duplicate sockets on reconnect; parallel sub-agent streams no longer mix text; the active server session follows the focused pane; chat drafts no longer leak between sessions; Stop recovers after a failed request.
+- **Novel mode** — scene routes are scoped to `manuscript/**/*.md`; autosave can no longer overwrite a scene with an empty or stale body; failed Codex saves keep the entry; non-Latin titles get a usable slug.
+- **Bounded feed memory** — pane caches, streamed tool output and large `write_file`/`edit_file` preparing payloads are all capped.
+
 ## 2.0.160 - 2026-09-26
 
 ### Features
