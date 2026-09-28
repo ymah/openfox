@@ -9,6 +9,8 @@ import { emitPluginHook } from './hook-emitter.js'
 import { listPluginModelMetadataProviders } from './model-metadata.js'
 import { listPluginTransitionHandlers, runPluginTransitionHandler } from './transition-handlers.js'
 import { getAllSettings } from '../db/settings.js'
+import { loadAllAgents, findAgentById } from '../agents/registry.js'
+import { loadAllWorkflows } from '../workflows/registry.js'
 
 const logger = { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() }
 
@@ -451,6 +453,65 @@ describe('PluginHost', () => {
       expect.objectContaining({ pluginId: 'hook-plugin', event: 'turn.completed' }),
     )
   }, 10000)
+
+  it('contributes agents and workflows that reach the core registries', async () => {
+    await writePlugin(
+      configDirectory,
+      'content-plugin',
+      2,
+      `registry.registerAgentSource({
+         id: 'agents',
+         label: { en: 'Agents', fr: 'Agents' },
+         load: () => [
+           {
+             id: 'plugin-writer',
+             name: 'Plugin writer',
+             description: 'Writes things',
+             prompt: 'You write.',
+             category: 'writing',
+             subagent: true,
+           },
+         ],
+       });
+       registry.registerWorkflowSource({
+         id: 'workflows',
+         label: { en: 'Workflows', fr: 'Workflows' },
+         load: () => [
+           {
+             metadata: { id: 'plugin-flow', name: 'Plugin flow', description: '', version: '1' },
+             entryStep: 'build',
+             settings: { maxIterations: 5 },
+             steps: [
+               {
+                 id: 'build',
+                 name: 'Build',
+                 type: 'agent',
+                 phase: 'build',
+                 transitions: [{ when: { type: 'always' }, goto: '$done' }],
+               },
+             ],
+           },
+           // Malformed: no steps. Must be rejected, not passed to the executor.
+           { metadata: { id: 'broken', name: 'Broken', description: '', version: '1' }, steps: [] },
+         ],
+       });`,
+    )
+    const host = makeHost(configDirectory)
+    await host.start()
+
+    const agents = await loadAllAgents(configDirectory)
+    const contributed = findAgentById('plugin-writer', agents)
+    expect(contributed?.metadata.category).toBe('writing')
+    expect(contributed?.metadata.subagent).toBe(true)
+
+    const workflows = await loadAllWorkflows(configDirectory)
+    expect(workflows.some((w) => w.metadata.id === 'plugin-flow')).toBe(true)
+    expect(workflows.some((w) => w.metadata.id === 'broken')).toBe(false)
+
+    await host.disable('content-plugin')
+    expect(findAgentById('plugin-writer', await loadAllAgents(configDirectory))).toBeUndefined()
+    expect((await loadAllWorkflows(configDirectory)).some((w) => w.metadata.id === 'plugin-flow')).toBe(false)
+  })
 
   it('registers transition handlers, commands, skills and model metadata', async () => {
     await writePlugin(

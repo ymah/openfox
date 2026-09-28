@@ -20,6 +20,8 @@ import {
   saveWorkflowToProject,
   deleteProjectWorkflow,
   normalizeWorkflowScope,
+  setPluginWorkflows,
+  isValidWorkflowDefinition,
 } from './registry.js'
 import type { WorkflowDefinition } from './types.js'
 
@@ -478,5 +480,53 @@ describe('normalizeWorkflowScope', () => {
     expect(normalizeWorkflowScope(42)).toBe('auto')
     expect(normalizeWorkflowScope(undefined)).toBe('auto')
     expect(normalizeWorkflowScope(null)).toBe('auto')
+  })
+})
+
+describe('plugin-contributed workflows', () => {
+  afterEach(() => {
+    setPluginWorkflows([])
+  })
+
+  it('includes plugin workflows in loadAllWorkflows', async () => {
+    setPluginWorkflows([
+      makeWorkflow({ metadata: { id: 'from-plugin', name: 'From Plugin', description: '', version: '1' } }),
+    ])
+
+    const workflows = await loadAllWorkflows(tempDir)
+
+    expect(workflows.some((w) => w.metadata.id === 'from-plugin')).toBe(true)
+  })
+
+  it('lets a user workflow win over a plugin workflow with the same id', async () => {
+    setPluginWorkflows([
+      makeWorkflow({ metadata: { id: 'shared', name: 'Plugin version', description: '', version: '1' } }),
+    ])
+    await saveWorkflow(
+      tempDir,
+      makeWorkflow({ metadata: { id: 'shared', name: 'User version', description: '', version: '1' } }),
+    )
+
+    const workflows = await loadAllWorkflows(tempDir)
+
+    expect(findWorkflowById('shared', workflows)?.metadata.name).toBe('User version')
+  })
+
+  it('clears previously contributed workflows when a plugin is deactivated', async () => {
+    setPluginWorkflows([makeWorkflow({ metadata: { id: 'gone', name: 'Gone', description: '', version: '1' } })])
+    setPluginWorkflows([])
+
+    const workflows = await loadAllWorkflows(tempDir)
+
+    expect(workflows.some((w) => w.metadata.id === 'gone')).toBe(false)
+  })
+
+  it('rejects a malformed workflow definition', () => {
+    expect(isValidWorkflowDefinition({ metadata: { id: 'x' }, steps: [] })).toBe(false)
+    expect(isValidWorkflowDefinition({ steps: [{ id: 'a' }] })).toBe(false)
+    expect(isValidWorkflowDefinition(null)).toBe(false)
+    expect(
+      isValidWorkflowDefinition(makeWorkflow({ metadata: { id: 'ok', name: 'Ok', description: '', version: '1' } })),
+    ).toBe(true)
   })
 })

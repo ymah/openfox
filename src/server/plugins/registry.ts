@@ -18,6 +18,8 @@ import type {
   PluginSettingsSchema,
   PluginSettingsTab,
   PluginSkillSource,
+  PluginAgentSource,
+  PluginWorkflowSource,
   PluginTool,
   PluginTransitionContext,
 } from '../../plugin/index.js'
@@ -42,6 +44,8 @@ type Kind =
   | 'tool'
   | 'command'
   | 'skillSource'
+  | 'agentSource'
+  | 'workflowSource'
   | 'hook'
   | 'rpc'
   | 'transition'
@@ -129,6 +133,14 @@ export class PluginRegistry implements ProviderPluginRegistry, PluginRegistryCon
 
   registerSkillSource(source: PluginSkillSource): void {
     this.register('skillSource', source.id, source)
+  }
+
+  registerAgentSource(source: PluginAgentSource): void {
+    this.register('agentSource', source.id, source)
+  }
+
+  registerWorkflowSource(source: PluginWorkflowSource): void {
+    this.register('workflowSource', source.id, source)
   }
 
   registerSettings(schema: PluginSettingsSchema): void {
@@ -231,6 +243,14 @@ export class PluginRegistry implements ProviderPluginRegistry, PluginRegistryCon
     return this.list<PluginSkillSource>('skillSource')
   }
 
+  getAgentSources(): PluginAgentSource[] {
+    return this.list<PluginAgentSource>('agentSource')
+  }
+
+  getWorkflowSources(): PluginWorkflowSource[] {
+    return this.list<PluginWorkflowSource>('workflowSource')
+  }
+
   getSettingsSchema(pluginId: string): PluginSettingsSchema | undefined {
     return this.get<PluginSettingsSchema>('settings', pluginId)
   }
@@ -297,6 +317,8 @@ export class PluginRegistry implements ProviderPluginRegistry, PluginRegistryCon
       tools: count('tool'),
       commands: count('command'),
       skillSources: count('skillSource'),
+      agentSources: count('agentSource'),
+      workflowSources: count('workflowSource'),
       hooks: [...this.hookHandlers.values()].flat().filter((h) => h.pluginId === pluginId).length,
       rpcMethods: count('rpc'),
       transitions: count('transition'),

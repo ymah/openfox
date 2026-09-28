@@ -9,6 +9,10 @@ import { setPluginTools } from '../tools/index.js'
 import { getBuiltInToolNames } from '../tools/index.js'
 import { setPluginCommands } from '../commands/registry.js'
 import { setPluginSkills } from '../skills/registry.js'
+import { setPluginAgents } from '../agents/registry.js'
+import type { AgentDefinition } from '../agents/types.js'
+import type { WorkflowDefinition } from '../workflows/types.js'
+import { setPluginWorkflows, isValidWorkflowDefinition } from '../workflows/registry.js'
 import { getAllSettings, setSetting } from '../db/settings.js'
 import type { ServerMessage } from '../../shared/protocol.js'
 import { createServerMessage } from '../../shared/protocol.js'
@@ -323,6 +327,8 @@ export class PluginHost {
     )
     setPluginModelMetadataProviders(this.registry.getModelMetadataProviders())
     void this.refreshSkillSources()
+    void this.refreshAgentSources()
+    void this.refreshWorkflowSources()
   }
 
   private async refreshSkillSources(): Promise<void> {
@@ -342,6 +348,55 @@ export class PluginHost {
       }
     }
     setPluginSkills(skills)
+  }
+
+  private async refreshAgentSources(): Promise<void> {
+    const agents: AgentDefinition[] = []
+    for (const source of this.registry.getAgentSources()) {
+      try {
+        for (const agent of await source.load()) {
+          agents.push({
+            metadata: {
+              id: agent.id,
+              name: agent.name,
+              description: agent.description,
+              subagent: agent.subagent ?? false,
+              allowedTools: agent.allowedTools ?? [],
+              ...(agent.color ? { color: agent.color } : {}),
+              ...(agent.category ? { category: agent.category } : {}),
+              ...(agent.results ? { results: agent.results } : {}),
+            },
+            prompt: agent.prompt,
+          })
+        }
+      } catch (error) {
+        this.logger.warn('Plugin agent source failed', { source: source.id, error: String(error) })
+      }
+    }
+    setPluginAgents(agents)
+  }
+
+  private async refreshWorkflowSources(): Promise<void> {
+    const workflows: WorkflowDefinition[] = []
+    for (const source of this.registry.getWorkflowSources()) {
+      try {
+        for (const raw of await source.load()) {
+          // Same shape check the bundled *.workflow.json files go through, so a
+          // malformed plugin workflow is reported instead of reaching the
+          // executor.
+          if (!isValidWorkflowDefinition(raw)) {
+            this.logger.warn('Plugin workflow rejected: needs metadata.id and at least one step', {
+              source: source.id,
+            })
+            continue
+          }
+          workflows.push(raw)
+        }
+      } catch (error) {
+        this.logger.warn('Plugin workflow source failed', { source: source.id, error: String(error) })
+      }
+    }
+    setPluginWorkflows(workflows)
   }
 
   private captureModule(packageName: string, module: Partial<PluginDefinition>): void {

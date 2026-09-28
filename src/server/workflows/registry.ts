@@ -48,6 +48,15 @@ async function pathExists(path: string): Promise<boolean> {
   }
 }
 
+/**
+ * Minimal shape check shared by the bundled/user/project loaders and by
+ * plugin-contributed workflows, so every source is held to the same bar.
+ */
+export function isValidWorkflowDefinition(value: unknown): value is WorkflowDefinition {
+  const candidate = value as WorkflowDefinition | null
+  return Boolean(candidate?.metadata?.id) && Array.isArray(candidate?.steps) && candidate.steps.length > 0
+}
+
 async function loadWorkflowsFromDir(dir: string): Promise<WorkflowDefinition[]> {
   if (!(await pathExists(dir))) {
     return []
@@ -65,7 +74,7 @@ async function loadWorkflowsFromDir(dir: string): Promise<WorkflowDefinition[]> 
     try {
       const raw = await readFile(join(dir, file), 'utf-8')
       const parsed = JSON.parse(raw) as WorkflowDefinition
-      if (parsed.metadata?.id && parsed.steps?.length > 0) {
+      if (isValidWorkflowDefinition(parsed)) {
         workflows.push(parsed)
       } else {
         logger.warn('Skipping invalid workflow file', { file })
@@ -94,11 +103,26 @@ export async function loadProjectWorkflows(projectDir: string): Promise<Workflow
   return loadWorkflowsFromDir(getProjectWorkflowsDir(projectDir))
 }
 
+/**
+ * Workflows contributed by plugins, mirroring `setPluginSkills`. They sit
+ * between the bundled defaults and the user's own directory: a plugin can add
+ * a workflow (or replace a bundled one by reusing its id), while the user's
+ * and project's own files still win.
+ */
+let pluginWorkflowsOverride: WorkflowDefinition[] = []
+
+export function setPluginWorkflows(workflows: WorkflowDefinition[]): void {
+  pluginWorkflowsOverride = [...workflows]
+}
+
 export async function loadAllWorkflows(configDir: string, projectDir?: string): Promise<WorkflowDefinition[]> {
   const [defaultWorkflows, userWorkflows] = await Promise.all([loadDefaultWorkflows(), loadUserWorkflows(configDir)])
 
   const workflowMap = new Map<string, WorkflowDefinition>()
   for (const workflow of defaultWorkflows) {
+    workflowMap.set(workflow.metadata.id, workflow)
+  }
+  for (const workflow of pluginWorkflowsOverride) {
     workflowMap.set(workflow.metadata.id, workflow)
   }
   for (const workflow of userWorkflows) {

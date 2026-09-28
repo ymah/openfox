@@ -1,7 +1,7 @@
 # OpenFox Plugins
 
 Plugins let you extend OpenFox without forking it: new LLM providers, tools,
-slash commands, skills, workflow transitions, settings, notifications, and
+slash commands, skills, agents, workflows, settings, notifications, and
 declarative UI (actions, badges, panels) — all declared through one versioned
 contract, `openfox/plugin`.
 
@@ -105,14 +105,14 @@ header.
 
 ### Manifest reference
 
-| Field                  | Required   | Description                                                                                                                    |
-| ---------------------- | ---------- | ------------------------------------------------------------------------------------------------------------------------------ |
-| `openfox.apiVersion`   | yes        | `1` (providers only, legacy) or `2` (full plugin API)                                                                          |
-| `openfox.entry`        | yes for v2 | Path to the ESM entry point, relative to the package root. `openfox.plugin` is accepted for v1 packages                        |
-| `openfox.displayName`  | no         | Shown in the Plugins tab. Defaults to the package name                                                                         |
-| `openfox.description`  | no         | Shown in the Plugins tab                                                                                                       |
-| `openfox.capabilities` | no         | `providers`, `models`, `settings`, `tools`, `commands`, `skills`, `ui`, `hooks`, `notifications`, `workflows`, `rpc`, `assets` |
-| `openfox.timeoutMs`    | no         | Per-plugin RPC timeout in ms (default 30 000)                                                                                  |
+| Field                  | Required   | Description                                                                                                                              |
+| ---------------------- | ---------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| `openfox.apiVersion`   | yes        | `1` (providers only, legacy) or `2` (full plugin API)                                                                                    |
+| `openfox.entry`        | yes for v2 | Path to the ESM entry point, relative to the package root. `openfox.plugin` is accepted for v1 packages                                  |
+| `openfox.displayName`  | no         | Shown in the Plugins tab. Defaults to the package name                                                                                   |
+| `openfox.description`  | no         | Shown in the Plugins tab                                                                                                                 |
+| `openfox.capabilities` | no         | `providers`, `models`, `settings`, `tools`, `commands`, `skills`, `agents`, `ui`, `hooks`, `notifications`, `workflows`, `rpc`, `assets` |
+| `openfox.timeoutMs`    | no         | Per-plugin RPC timeout in ms (default 30 000)                                                                                            |
 
 ### Discovery and lifecycle
 
@@ -208,6 +208,67 @@ registry.registerSkillSource({
 
 `load()` is called on enable and whenever contributions change; loaded skills
 join the normal skill discovery flow with `source: 'plugin'`.
+
+### Agents (`agents`)
+
+```ts
+registry.registerAgentSource({
+  id: 'writing-agents',
+  label: { en: 'Writing agents', fr: 'Agents d’écriture' },
+  load: () => [
+    {
+      id: 'drafter',
+      name: 'Drafter',
+      description: 'Drafts a scene from an outline.',
+      prompt: 'You draft prose…',
+      subagent: true,
+      category: 'writing',
+    },
+  ],
+})
+```
+
+`load()` is called on enable and whenever contributions change. Contributed
+agents sit between the bundled defaults and the user's own `~/.openfox/agents`
+directory: a plugin can add an agent, or replace a bundled one by reusing its
+id, while the user's and project's own files still win. `category` scopes the
+agent to a project function (`dev`, `gtd`, `writing`), and `subagent: true`
+marks an agent that only runs as a sub-agent, never as a session mode.
+
+### Workflows (`workflows`)
+
+```ts
+registry.registerWorkflowSource({
+  id: 'writing-workflows',
+  label: { en: 'Writing workflows', fr: 'Workflows d’écriture' },
+  load: () => [
+    {
+      metadata: { id: 'draft-scene', name: 'Draft a scene', description: '…', version: '1.0.0' },
+      entryStep: 'draft',
+      settings: { maxIterations: 20 },
+      steps: [
+        {
+          id: 'draft',
+          name: 'Draft',
+          type: 'agent',
+          phase: 'build',
+          agentId: 'drafter',
+          transitions: [{ when: { type: 'always' }, goto: '$done' }],
+        },
+      ],
+    },
+  ],
+})
+```
+
+Each entry is a workflow definition in the same shape as a bundled
+`*.workflow.json` file, and goes through the same shape check: a definition
+without a `metadata.id` or with no steps is rejected and logged rather than
+reaching the executor. Precedence matches agents — defaults, then plugins, then
+the user's and project's own files.
+
+To contribute a custom transition _condition_ rather than a whole workflow, see
+[Workflow transitions](#workflow-transitions-workflows).
 
 ### Settings (`settings`)
 
@@ -411,7 +472,7 @@ Hooks are **observational**: they cannot block or alter the agent loop. Each
 handler runs with a 5 s timeout; a throwing or slow handler is logged and
 ignored, and never affects the turn.
 
-### Workflow transitions (`workflows`)
+### Workflow transitions
 
 ```ts
 registry.registerTransitionHandler('needs_review', async ({ config, outcome }) => {

@@ -7,6 +7,7 @@ export type PluginCapability =
   | 'tools'
   | 'commands'
   | 'skills'
+  | 'agents'
   | 'ui'
   | 'hooks'
   | 'notifications'
@@ -337,6 +338,8 @@ export interface PluginContributionSummary {
   tools: number
   commands: number
   skillSources: number
+  agentSources: number
+  workflowSources: number
   hooks: number
   rpcMethods: number
   transitions: number
@@ -402,6 +405,8 @@ export const EMPTY_PLUGIN_CONTRIBUTIONS: PluginContributionSummary = {
   tools: 0,
   commands: 0,
   skillSources: 0,
+  agentSources: 0,
+  workflowSources: 0,
   hooks: 0,
   rpcMethods: 0,
   transitions: 0,

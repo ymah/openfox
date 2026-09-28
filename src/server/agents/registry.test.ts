@@ -19,6 +19,7 @@ import {
   getDefaultAgentIds,
   saveAgentToProject,
   deleteProjectAgent,
+  setPluginAgents,
 } from './registry.js'
 import type { AgentDefinition } from './types.js'
 
@@ -367,5 +368,45 @@ describe('getDefaultAgentIds', () => {
     expect(ids).toContain('verifier')
     expect(ids).toContain('explorer')
     expect(ids).toContain('code-reviewer')
+  })
+})
+
+describe('plugin-contributed agents', () => {
+  const pluginAgent = (id: string, name: string): AgentDefinition => ({
+    metadata: { id, name, description: 'From a plugin', subagent: false, allowedTools: [], category: 'writing' },
+    prompt: 'You are a plugin agent.',
+  })
+
+  afterEach(() => {
+    setPluginAgents([])
+  })
+
+  it('includes plugin agents in loadAllAgents', async () => {
+    setPluginAgents([pluginAgent('from-plugin', 'From Plugin')])
+
+    const agents = await loadAllAgents(tempDir)
+
+    expect(findAgentById('from-plugin', agents)?.metadata.category).toBe('writing')
+  })
+
+  it('lets a user agent win over a plugin agent with the same id', async () => {
+    setPluginAgents([pluginAgent('shared', 'Plugin version')])
+    await saveAgent(tempDir, {
+      metadata: { id: 'shared', name: 'User version', description: '', subagent: false, allowedTools: [] },
+      prompt: 'User prompt.',
+    })
+
+    const agents = await loadAllAgents(tempDir)
+
+    expect(findAgentById('shared', agents)?.metadata.name).toBe('User version')
+  })
+
+  it('clears previously contributed agents when a plugin is deactivated', async () => {
+    setPluginAgents([pluginAgent('gone', 'Gone')])
+    setPluginAgents([])
+
+    const agents = await loadAllAgents(tempDir)
+
+    expect(findAgentById('gone', agents)).toBeUndefined()
   })
 })

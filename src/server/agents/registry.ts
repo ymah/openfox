@@ -106,11 +106,26 @@ export async function loadProjectAgents(projectDir: string): Promise<AgentDefini
   return loadAgentsFromDir(getProjectAgentsDir(projectDir))
 }
 
+/**
+ * Agents contributed by plugins, mirroring `setPluginSkills`. They sit between
+ * the bundled defaults and the user's own directory: a plugin can add an agent
+ * (or replace a bundled one by reusing its id), while the user's and project's
+ * own files still win.
+ */
+let pluginAgentsOverride: AgentDefinition[] = []
+
+export function setPluginAgents(agents: AgentDefinition[]): void {
+  pluginAgentsOverride = [...agents]
+}
+
 export async function loadAllAgents(configDir: string, projectDir?: string): Promise<AgentDefinition[]> {
   const [defaultAgents, userAgents] = await Promise.all([loadDefaultAgents(), loadUserAgents(configDir)])
 
   const agentMap = new Map<string, AgentDefinition>()
   for (const agent of defaultAgents) {
+    agentMap.set(agent.metadata.id, agent)
+  }
+  for (const agent of pluginAgentsOverride) {
     agentMap.set(agent.metadata.id, agent)
   }
   for (const agent of userAgents) {

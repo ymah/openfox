@@ -145,6 +145,40 @@ export interface PluginSkillSource {
   load(): Promise<PluginSkill[]> | PluginSkill[]
 }
 
+export interface PluginAgent {
+  id: string
+  name: string
+  description: string
+  /** The agent's system prompt — the body of an `*.agent.md` file. */
+  prompt: string
+  /** True for agents that only run as sub-agents, never as a session mode. */
+  subagent?: boolean
+  allowedTools?: string[]
+  color?: string
+  /** Scopes the agent to a project function, e.g. 'dev' | 'gtd' | 'writing'. */
+  category?: string
+  results?: string[]
+}
+
+export interface PluginAgentSource {
+  id: string
+  label: LocalizedString
+  load(): Promise<PluginAgent[]> | PluginAgent[]
+}
+
+/**
+ * A workflow definition, the same shape as a bundled `*.workflow.json` file.
+ * Kept as an opaque object here so the public contract does not depend on the
+ * server's internal step/transition types; the host validates it on load.
+ */
+export type PluginWorkflow = Record<string, unknown>
+
+export interface PluginWorkflowSource {
+  id: string
+  label: LocalizedString
+  load(): Promise<PluginWorkflow[]> | PluginWorkflow[]
+}
+
 export interface PluginModelMetadata {
   contextWindow?: number
   vision?: boolean
@@ -261,6 +295,8 @@ export interface PluginRegistry {
   registerTool(tool: PluginTool): void
   registerCommand(command: PluginCommand): void
   registerSkillSource(source: PluginSkillSource): void
+  registerAgentSource(source: PluginAgentSource): void
+  registerWorkflowSource(source: PluginWorkflowSource): void
   registerSettings(schema: PluginSettingsSchema): void
   registerUiAction(action: PluginUiAction): void
   registerUiBadge(badge: PluginUiBadge): void
