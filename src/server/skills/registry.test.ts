@@ -127,7 +127,8 @@ describe('loadDefaultSkills', () => {
     expect(defaults.length).toBeGreaterThanOrEqual(1)
     expect(defaults.some((s) => s.metadata.id === 'browser')).toBe(true)
     expect(defaults.some((s) => s.metadata.id === 'workflows')).toBe(true)
-    expect(defaults.some((s) => s.metadata.id === 'gtd')).toBe(true)
+    // 'gtd' and 'writing' now ship in the bundled plugins of the same name —
+    // see the 'bundled plugins' tests in src/server/plugins/host.test.ts.
   })
 })
 

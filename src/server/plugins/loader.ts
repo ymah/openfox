@@ -1,6 +1,6 @@
 import { readdir, readFile, stat } from 'node:fs/promises'
-import { join } from 'node:path'
-import { pathToFileURL } from 'node:url'
+import { dirname, join } from 'node:path'
+import { fileURLToPath, pathToFileURL } from 'node:url'
 import type { PluginContext, PluginDefinition, PluginManifest } from '../../plugin/index.js'
 import { pluginManifestSchema } from '../../plugin/index.js'
 import type { PluginContributionSummary, PluginCapability } from '../../shared/plugin.js'
@@ -34,11 +34,36 @@ export interface LoadPluginsOptions {
   createContext?: (manifest: PluginManifest, source: string) => PluginContext
   onModule?: (packageName: string, module: Partial<PluginDefinition>) => void
   shouldLoad?: (packageName: string) => boolean
+  /** Skip the roots shipped inside the package. Tests use it for isolation. */
+  includeBundled?: boolean
 }
 
-export function pluginRoots(configDirectory: string, cwd?: string): string[] {
+const __bundleDir = dirname(fileURLToPath(import.meta.url))
+
+/**
+ * Plugins shipped inside the openfox package itself (first-party, e.g. the GTD
+ * and writing modes). Two candidates for the same reason the agent/skill/
+ * workflow registries keep a pair: running from source, this file sits in
+ * `src/server/plugins/`, so the sources are next to it; in the published
+ * package everything collapses into flat `dist/` chunks and the directory is
+ * copied to `dist/bundled-plugins` by scripts/copy-assets.mjs. A root that does
+ * not exist is skipped silently, so listing both is free.
+ */
+export function bundledPluginRoots(): string[] {
+  return [join(__bundleDir, 'bundled'), join(__bundleDir, 'bundled-plugins')]
+}
+
+export function pluginRoots(configDirectory: string, cwd?: string, includeBundled = true): string[] {
   const pluginsDir = join(configDirectory, 'plugins')
-  return [pluginsDir, join(pluginsDir, 'node_modules'), join(cwd ?? process.cwd(), 'node_modules')]
+  return [
+    pluginsDir,
+    join(pluginsDir, 'node_modules'),
+    join(cwd ?? process.cwd(), 'node_modules'),
+    // Last: discovery dedupes by package name, first root winning, so a plugin
+    // the user installed under the same name overrides the bundled copy —
+    // and uninstalling it restores the bundled one on the next start.
+    ...(includeBundled ? bundledPluginRoots() : []),
+  ]
 }
 
 export function resolvePluginEntry(manifest: PluginManifest): string | undefined {
@@ -201,7 +226,7 @@ export async function loadPlugins(options: LoadPluginsOptions): Promise<PluginDi
   const seen = new Set<string>()
   const diagnostics: PluginDiagnostic[] = []
 
-  for (const root of pluginRoots(options.configDirectory, options.cwd)) {
+  for (const root of pluginRoots(options.configDirectory, options.cwd, options.includeBundled ?? true)) {
     for (const packageDir of await packageDirectories(root)) {
       const manifest = await readPluginManifest(packageDir)
       if (!manifest) continue

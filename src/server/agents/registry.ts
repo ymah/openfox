@@ -92,7 +92,22 @@ async function loadAgentsFromDir(dir: string): Promise<AgentDefinition[]> {
   return agents
 }
 
+/**
+ * Built-in agents: the ones bundled in this package plus the ones contributed by
+ * plugins. Plugin-contributed agents are built-ins from every caller's point of
+ * view — they have no file under ~/.openfox/agents, so they are listed as
+ * built-in and must not be offered for deletion — and they come after the
+ * bundled ones so a plugin can replace a bundled agent by reusing its id.
+ */
 export async function loadDefaultAgents(): Promise<AgentDefinition[]> {
+  const bundled = await loadBundledAgents()
+  if (pluginAgentsOverride.length === 0) return bundled
+  const byId = new Map(bundled.map((agent) => [agent.metadata.id, agent]))
+  for (const agent of pluginAgentsOverride) byId.set(agent.metadata.id, agent)
+  return [...byId.values()]
+}
+
+async function loadBundledAgents(): Promise<AgentDefinition[]> {
   const agents = await loadAgentsFromDir(DEFAULTS_DIR)
   if (agents.length > 0) return agents
   return loadAgentsFromDir(DEFAULTS_DIR_ALT)
@@ -123,9 +138,6 @@ export async function loadAllAgents(configDir: string, projectDir?: string): Pro
 
   const agentMap = new Map<string, AgentDefinition>()
   for (const agent of defaultAgents) {
-    agentMap.set(agent.metadata.id, agent)
-  }
-  for (const agent of pluginAgentsOverride) {
     agentMap.set(agent.metadata.id, agent)
   }
   for (const agent of userAgents) {
@@ -176,15 +188,7 @@ export async function loadAllAgentsDefault(projectDir?: string): Promise<AgentDe
 }
 
 export async function getDefaultAgentIds(): Promise<string[]> {
-  for (const dir of [DEFAULTS_DIR, DEFAULTS_DIR_ALT]) {
-    try {
-      const files = (await readdir(dir)).filter((f) => f.endsWith(AGENT_EXTENSION))
-      return files.map((f) => f.replace(AGENT_EXTENSION, ''))
-    } catch {
-      /* try next */
-    }
-  }
-  return []
+  return (await loadDefaultAgents()).map((agent) => agent.metadata.id)
 }
 
 export async function getDefaultAgentContent(agentId: string): Promise<AgentDefinition | null> {

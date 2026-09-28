@@ -34,10 +34,13 @@ afterEach(async () => {
 })
 
 describe('loadDefaultAgents', () => {
+  // The GTD and writing agents are no longer core defaults — they ship in the
+  // bundled openfox-gtd / openfox-writing plugins, and are covered by the
+  // 'bundled plugins' tests in src/server/plugins/host.test.ts.
   it('should load all built-in agent definitions', async () => {
     const agents = await loadDefaultAgents()
 
-    expect(agents.length).toBeGreaterThanOrEqual(12)
+    expect(agents.length).toBeGreaterThanOrEqual(5)
 
     const ids = agents.map((a) => a.metadata.id)
     expect(ids).toContain('planner')
@@ -45,23 +48,15 @@ describe('loadDefaultAgents', () => {
     expect(ids).toContain('verifier')
     expect(ids).toContain('code_reviewer')
     expect(ids).toContain('explorer')
-    expect(ids).toContain('gtd-secretary')
-    expect(ids).toContain('gtd-planner')
-    expect(ids).toContain('gtd-researcher')
-    expect(ids).toContain('gtd-writer')
-    expect(ids).toContain('gtd-translator')
-    expect(ids).toContain('gtd-scheduler')
-    expect(ids).toContain('gtd-reviewer')
   })
 
-  it('tags built-in agents with a dev/gtd category for UI grouping', async () => {
+  it('tags built-in agents with a dev category for UI grouping', async () => {
     const agents = await loadDefaultAgents()
     const byId = new Map(agents.map((a) => [a.metadata.id, a.metadata]))
 
     expect(byId.get('builder')?.category).toBe('dev')
     expect(byId.get('planner')?.category).toBe('dev')
-    expect(byId.get('gtd-secretary')?.category).toBe('gtd')
-    expect(byId.get('gtd-planner')?.category).toBe('gtd')
+    expect(byId.get('verifier')?.category).toBe('dev')
   })
 
   it('should parse agent metadata correctly', async () => {
@@ -367,7 +362,26 @@ describe('getDefaultAgentIds', () => {
     expect(ids).toContain('builder')
     expect(ids).toContain('verifier')
     expect(ids).toContain('explorer')
-    expect(ids).toContain('code-reviewer')
+    // Agent *ids*, not file names: code-reviewer.agent.md declares `id:
+    // code_reviewer`. Returning file names meant isDefaultAgent('code_reviewer')
+    // was false, so the built-in code reviewer was not protected from deletion.
+    expect(ids).toContain('code_reviewer')
+    expect(ids).not.toContain('code-reviewer')
+  })
+
+  it('counts plugin-contributed agents as built-ins', async () => {
+    setPluginAgents([
+      {
+        metadata: { id: 'from-plugin', name: 'From plugin', description: '', subagent: false, allowedTools: [] },
+        prompt: 'p',
+      },
+    ])
+    try {
+      expect(await getDefaultAgentIds()).toContain('from-plugin')
+      expect(await isDefaultAgent('from-plugin')).toBe(true)
+    } finally {
+      setPluginAgents([])
+    }
   })
 })
 

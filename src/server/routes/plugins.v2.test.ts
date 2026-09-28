@@ -57,6 +57,8 @@ describe('plugin routes (v2)', () => {
       mode: 'production',
       logger,
       cwd: join(configDirectory, 'none'),
+      // Asserts on exact plugin lists: see only this test's own fixture.
+      includeBundledPlugins: false,
     })
     await host.start()
 

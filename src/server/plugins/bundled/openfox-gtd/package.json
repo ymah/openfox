@@ -1,0 +1,19 @@
+{
+  "name": "openfox-gtd",
+  "version": "1.0.0",
+  "description": "GTD project function: capture, clarify, build and weekly-review agents, workflows and skill.",
+  "private": true,
+  "type": "module",
+  "main": "./src/index.js",
+  "openfox": {
+    "apiVersion": 2,
+    "entry": "./src/index.js",
+    "displayName": "GTD",
+    "description": "Adds the GTD agents, workflows and reference skill used by GTD projects.",
+    "capabilities": [
+      "agents",
+      "workflows",
+      "skills"
+    ]
+  }
+}

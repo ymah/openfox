@@ -9,8 +9,9 @@ import { emitPluginHook } from './hook-emitter.js'
 import { listPluginModelMetadataProviders } from './model-metadata.js'
 import { listPluginTransitionHandlers, runPluginTransitionHandler } from './transition-handlers.js'
 import { getAllSettings } from '../db/settings.js'
-import { loadAllAgents, findAgentById } from '../agents/registry.js'
-import { loadAllWorkflows } from '../workflows/registry.js'
+import { loadAllAgents, findAgentById, isDefaultAgent, deleteAgent } from '../agents/registry.js'
+import { loadAllWorkflows, isDefaultWorkflow } from '../workflows/registry.js'
+import { loadAllSkills } from '../skills/registry.js'
 
 const logger = { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() }
 
@@ -41,6 +42,10 @@ function makeHost(configDirectory: string, rpcTimeoutMs?: number): PluginHost {
     mode: 'production',
     logger,
     cwd: join(configDirectory, 'no-node-modules'),
+    // These tests assert on exact contribution lists, so they see only their own
+    // fixtures — the plugins shipped inside the package are covered separately,
+    // in the 'bundled plugins' describe block below.
+    includeBundledPlugins: false,
     ...(rpcTimeoutMs ? { rpcTimeoutMs } : {}),
   })
 }
@@ -631,5 +636,100 @@ describe('PluginHost', () => {
         data: { providerId: 'openai-provider', model: 'mock-model' },
       })
     })
+  })
+})
+
+describe('bundled plugins', () => {
+  let configDirectory: string
+
+  beforeEach(async () => {
+    closeDatabase()
+    const config = loadConfig()
+    config.database.path = ':memory:'
+    initDatabase(config)
+    configDirectory = await mkdtemp(join(tmpdir(), 'openfox-bundled-'))
+    vi.clearAllMocks()
+  })
+
+  afterEach(async () => {
+    await rm(configDirectory, { recursive: true, force: true })
+  })
+
+  /** A host with no installed plugins at all: anything it finds is bundled. */
+  function makeBundledHost(): PluginHost {
+    return new PluginHost({
+      configDirectory,
+      mode: 'production',
+      logger,
+      cwd: join(configDirectory, 'no-node-modules'),
+    })
+  }
+
+  it('discovers the first-party plugins that ship in the package, with nothing installed', async () => {
+    const host = makeBundledHost()
+    const diagnostics = await host.start()
+
+    const byName = new Map(diagnostics.map((d) => [d.packageName, d]))
+    for (const name of ['openfox-gtd', 'openfox-writing']) {
+      const diagnostic = byName.get(name)
+      expect(diagnostic, `${name} should be discovered without being installed`).toBeDefined()
+      expect(diagnostic?.loaded).toBe(true)
+      expect(diagnostic?.error).toBeUndefined()
+    }
+  })
+
+  it('contributes the GTD and writing agents, workflows and skills', async () => {
+    const host = makeBundledHost()
+    await host.start()
+
+    const agents = await loadAllAgents(configDirectory)
+    const ids = agents.map((a) => a.metadata.id)
+    expect(ids).toContain('gtd-secretary')
+    expect(ids).toContain('writing-drafter')
+    // Categories are what the UI filters on to scope a project function.
+    expect(agents.find((a) => a.metadata.id === 'gtd-secretary')?.metadata.category).toBe('gtd')
+    expect(agents.find((a) => a.metadata.id === 'writing-drafter')?.metadata.category).toBe('writing')
+
+    const workflowIds = (await loadAllWorkflows(configDirectory)).map((w) => w.metadata.id)
+    expect(workflowIds).toContain('gtd-capture')
+    expect(workflowIds).toContain('writing-draft-scene')
+
+    const skillIds = (await loadAllSkills(configDirectory)).map((s) => s.metadata.id)
+    expect(skillIds).toContain('gtd')
+    expect(skillIds).toContain('writing')
+  })
+
+  it('keeps gtd-build visually distinct from the core default workflow', async () => {
+    const host = makeBundledHost()
+    await host.start()
+
+    const byId = new Map((await loadAllWorkflows(configDirectory)).map((w) => [w.metadata.id, w.metadata]))
+    // Regression: gtd-build and default used to share the exact same color,
+    // making them indistinguishable by their dot in the workflow list.
+    expect(byId.get('gtd-build')?.color).toBeDefined()
+    expect(byId.get('gtd-build')?.color).not.toBe(byId.get('default')?.color)
+  })
+
+  it('treats bundled definitions as built-ins: not deletable', async () => {
+    const host = makeBundledHost()
+    await host.start()
+
+    expect(await isDefaultAgent('gtd-secretary')).toBe(true)
+    expect(await isDefaultWorkflow('gtd-capture')).toBe(true)
+    expect((await deleteAgent(configDirectory, 'gtd-secretary')).success).toBe(false)
+  })
+
+  it('cannot be uninstalled, but can be disabled', async () => {
+    const host = makeBundledHost()
+    await host.start()
+
+    expect(host.getPlugins().find((p) => p.id === 'openfox-gtd')?.removable).toBe(false)
+    await expect(host.uninstall('openfox-gtd')).rejects.toThrow(/cannot be removed/i)
+
+    await host.disable('openfox-gtd')
+    const ids = (await loadAllAgents(configDirectory)).map((a) => a.metadata.id)
+    expect(ids).not.toContain('gtd-secretary')
+    // Disabling one bundled plugin leaves the other alone.
+    expect(ids).toContain('writing-drafter')
   })
 })

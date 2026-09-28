@@ -87,7 +87,22 @@ async function loadWorkflowsFromDir(dir: string): Promise<WorkflowDefinition[]> 
   return workflows
 }
 
+/**
+ * Built-in workflows: the ones bundled in this package plus the ones contributed
+ * by plugins. Plugin-contributed workflows are built-ins from every caller's
+ * point of view — they have no file under ~/.openfox/workflows, so they are
+ * listed as built-in and must not be offered for deletion — and they come after
+ * the bundled ones so a plugin can replace a bundled workflow by reusing its id.
+ */
 export async function loadDefaultWorkflows(): Promise<WorkflowDefinition[]> {
+  const bundled = await loadBundledWorkflows()
+  if (pluginWorkflowsOverride.length === 0) return bundled
+  const byId = new Map(bundled.map((workflow) => [workflow.metadata.id, workflow]))
+  for (const workflow of pluginWorkflowsOverride) byId.set(workflow.metadata.id, workflow)
+  return [...byId.values()]
+}
+
+async function loadBundledWorkflows(): Promise<WorkflowDefinition[]> {
   let defaults = await loadWorkflowsFromDir(DEFAULTS_DIR)
   if (!defaults.length) {
     defaults = await loadWorkflowsFromDir(DEFAULTS_DIR_ALT)
@@ -120,9 +135,6 @@ export async function loadAllWorkflows(configDir: string, projectDir?: string): 
 
   const workflowMap = new Map<string, WorkflowDefinition>()
   for (const workflow of defaultWorkflows) {
-    workflowMap.set(workflow.metadata.id, workflow)
-  }
-  for (const workflow of pluginWorkflowsOverride) {
     workflowMap.set(workflow.metadata.id, workflow)
   }
   for (const workflow of userWorkflows) {
@@ -193,15 +205,7 @@ export async function deleteProjectWorkflow(
 }
 
 export async function getDefaultWorkflowIds(): Promise<string[]> {
-  for (const dir of [DEFAULTS_DIR, DEFAULTS_DIR_ALT]) {
-    try {
-      const files = (await readdir(dir)).filter((f) => f.endsWith(WORKFLOW_EXTENSION))
-      return files.map((f) => f.replace(WORKFLOW_EXTENSION, ''))
-    } catch {
-      /* try next */
-    }
-  }
-  return []
+  return (await loadDefaultWorkflows()).map((workflow) => workflow.metadata.id)
 }
 
 export async function getDefaultWorkflowContent(workflowId: string): Promise<WorkflowDefinition | null> {

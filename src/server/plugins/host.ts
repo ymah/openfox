@@ -51,6 +51,8 @@ export interface PluginHostOptions {
   cwd?: string
   rpcTimeoutMs?: number
   registry?: PluginRegistry
+  /** Skip the plugins shipped inside the package. Tests use it for isolation. */
+  includeBundledPlugins?: boolean
 }
 
 interface PluginRecord {
@@ -88,6 +90,7 @@ export class PluginHost {
       createContext: (manifest, source) => this.createContext(manifest, source),
       onModule: (packageName, module) => this.captureModule(packageName, module),
       shouldLoad: (packageName) => !disabled.includes(packageName),
+      includeBundled: this.options.includeBundledPlugins ?? true,
     })
     for (const diagnostic of diagnostics) {
       this.records.set(diagnostic.packageName, {

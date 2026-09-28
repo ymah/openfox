@@ -121,12 +121,26 @@ Roots are scanned in order, deduplicated by package name:
 1. `{configDir}/plugins/<name>`
 2. `{configDir}/plugins/node_modules/<name>` (npm-installed plugins)
 3. `{cwd}/node_modules/<name>`
+4. **Bundled**: the first-party plugins that ship inside the OpenFox package
+   (`src/server/plugins/bundled/<name>` when running from source,
+   `dist/bundled-plugins/<name>` in the published package) — currently
+   `openfox-gtd` and `openfox-writing`.
+
+Bundled plugins are scanned **last** on purpose: because discovery deduplicates
+by package name with the first root winning, installing a plugin of the same
+name overrides the bundled copy, and uninstalling it restores the bundled one on
+the next start.
 
 `configDir` is `~/.config/openfox/` in production and `~/.config/openfox-dev/`
 in development. Plugins can be installed, enabled, disabled, and uninstalled at
 runtime from the Plugins tab — no server restart. Disabling removes every
 contribution and calls your optional `deactivate()`; re-enabling re-imports the
 module.
+
+Because the enabled/disabled state is a deny-list, a bundled plugin is **active
+by default** and can still be disabled like any other. It cannot be uninstalled:
+removal is only allowed under `{configDir}/plugins`, so bundled plugins report
+`removable: false` and the Plugins tab hides their uninstall action.
 
 A plugin that throws during `register()` is reported as a diagnostic (red status
 in the Plugins tab) and never blocks other plugins or the server.

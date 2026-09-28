@@ -21,7 +21,12 @@ describe('loadProviderPlugins', () => {
   })
 
   it('returns empty diagnostics when no plugins directory exists', async () => {
-    const diagnostics = await loadProviderPlugins({ registry, configDirectory: tempDir, cwd: '/nonexistent' })
+    const diagnostics = await loadProviderPlugins({
+      registry,
+      configDirectory: tempDir,
+      cwd: '/nonexistent',
+      includeBundled: false,
+    })
     expect(diagnostics).toEqual([])
   })
 
@@ -29,7 +34,12 @@ describe('loadProviderPlugins', () => {
     const pkgDir = join(pluginDir, 'some-unrelated-package')
     await mkdir(pkgDir, { recursive: true })
     await writeFile(join(pkgDir, 'package.json'), JSON.stringify({ name: 'some-unrelated-package', version: '1.0.0' }))
-    const diagnostics = await loadProviderPlugins({ registry, configDirectory: tempDir, cwd: '/nonexistent' })
+    const diagnostics = await loadProviderPlugins({
+      registry,
+      configDirectory: tempDir,
+      cwd: '/nonexistent',
+      includeBundled: false,
+    })
     expect(diagnostics).toEqual([])
   })
 
@@ -45,7 +55,12 @@ describe('loadProviderPlugins', () => {
       }),
     )
     await writeFile(join(pkgDir, 'index.js'), 'export function register() {}')
-    const diagnostics = await loadProviderPlugins({ registry, configDirectory: tempDir, cwd: '/nonexistent' })
+    const diagnostics = await loadProviderPlugins({
+      registry,
+      configDirectory: tempDir,
+      cwd: '/nonexistent',
+      includeBundled: false,
+    })
     expect(diagnostics).toHaveLength(1)
     expect(diagnostics[0]!.loaded).toBe(false)
     expect(diagnostics[0]!.error).toContain('Unsupported OpenFox plugin API version: 99')
@@ -89,7 +104,12 @@ describe('loadProviderPlugins', () => {
         });
       }`,
     )
-    const diagnostics = await loadProviderPlugins({ registry, configDirectory: tempDir, cwd: '/nonexistent' })
+    const diagnostics = await loadProviderPlugins({
+      registry,
+      configDirectory: tempDir,
+      cwd: '/nonexistent',
+      includeBundled: false,
+    })
     expect(diagnostics).toHaveLength(1)
     expect(diagnostics[0]!.loaded).toBe(true)
     expect(diagnostics[0]!.packageName).toBe('good-plugin')
@@ -117,7 +137,12 @@ describe('loadProviderPlugins', () => {
       }),
     )
     await writeFile(join(pkgDir, 'index.js'), `export function register() { throw new Error('Intentional failure'); }`)
-    const diagnostics = await loadProviderPlugins({ registry, configDirectory: tempDir, cwd: '/nonexistent' })
+    const diagnostics = await loadProviderPlugins({
+      registry,
+      configDirectory: tempDir,
+      cwd: '/nonexistent',
+      includeBundled: false,
+    })
     expect(diagnostics).toHaveLength(1)
     expect(diagnostics[0]!.loaded).toBe(false)
     expect(diagnostics[0]!.error).toBe('Intentional failure')
@@ -135,7 +160,12 @@ describe('loadProviderPlugins', () => {
       }),
     )
     await writeFile(join(pkgDir, 'index.js'), `export const foo = 'bar';`)
-    const diagnostics = await loadProviderPlugins({ registry, configDirectory: tempDir, cwd: '/nonexistent' })
+    const diagnostics = await loadProviderPlugins({
+      registry,
+      configDirectory: tempDir,
+      cwd: '/nonexistent',
+      includeBundled: false,
+    })
     expect(diagnostics).toHaveLength(1)
     expect(diagnostics[0]!.loaded).toBe(false)
     expect(diagnostics[0]!.error).toContain('does not export register')

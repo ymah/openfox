@@ -169,26 +169,20 @@ describe('loadAllWorkflows', () => {
 })
 
 describe('loadDefaultWorkflows', () => {
+  // The GTD and writing workflows are no longer core defaults — they ship in the
+  // bundled openfox-gtd / openfox-writing plugins, and are covered by the
+  // 'bundled plugins' tests in src/server/plugins/host.test.ts.
   it('should load bundled default workflows', async () => {
     const defaults = await loadDefaultWorkflows()
-    expect(defaults.length).toBeGreaterThanOrEqual(5)
+    expect(defaults.length).toBeGreaterThanOrEqual(1)
     expect(defaults.some((w) => w.metadata.id === 'default')).toBe(true)
-    expect(defaults.some((w) => w.metadata.id === 'gtd-capture')).toBe(true)
-    expect(defaults.some((w) => w.metadata.id === 'gtd-clarify')).toBe(true)
-    expect(defaults.some((w) => w.metadata.id === 'gtd-weekly-review')).toBe(true)
-    expect(defaults.some((w) => w.metadata.id === 'gtd-build')).toBe(true)
   })
 
-  it('tags built-in workflows with a dev/gtd category, and gives gtd-build its own color', async () => {
+  it('tags the built-in workflow with a dev category', async () => {
     const defaults = await loadDefaultWorkflows()
     const byId = new Map(defaults.map((w) => [w.metadata.id, w.metadata]))
 
     expect(byId.get('default')?.category).toBe('dev')
-    expect(byId.get('gtd-build')?.category).toBe('gtd')
-    expect(byId.get('gtd-capture')?.category).toBe('gtd')
-    // Regression: gtd-build and default used to share the exact same color,
-    // making them indistinguishable by their dot in the workflow list.
-    expect(byId.get('gtd-build')?.color).not.toBe(byId.get('default')?.color)
   })
 
   it('default Build & Verify workflow starts with a user step offering work-here vs start-a-workspace', async () => {
@@ -519,6 +513,13 @@ describe('plugin-contributed workflows', () => {
     const workflows = await loadAllWorkflows(tempDir)
 
     expect(workflows.some((w) => w.metadata.id === 'gone')).toBe(false)
+  })
+
+  it('counts plugin-contributed workflows as built-ins', async () => {
+    setPluginWorkflows([makeWorkflow({ metadata: { id: 'from-plugin', name: 'P', description: '', version: '1' } })])
+
+    expect(await getDefaultWorkflowIds()).toContain('from-plugin')
+    expect(await isDefaultWorkflow('from-plugin')).toBe(true)
   })
 
   it('rejects a malformed workflow definition', () => {

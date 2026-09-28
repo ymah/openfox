@@ -1,0 +1,19 @@
+{
+  "name": "openfox-writing",
+  "version": "1.0.0",
+  "description": "Novel-writing project function: planner, drafter, worldbuilder and continuity agents, workflows and skill.",
+  "private": true,
+  "type": "module",
+  "main": "./src/index.js",
+  "openfox": {
+    "apiVersion": 2,
+    "entry": "./src/index.js",
+    "displayName": "Writing",
+    "description": "Adds the writing agents, workflows and reference skill used by novel-writing projects.",
+    "capabilities": [
+      "agents",
+      "workflows",
+      "skills"
+    ]
+  }
+}

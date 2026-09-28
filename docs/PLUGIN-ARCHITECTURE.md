@@ -80,6 +80,9 @@ PluginHost.start()
   │   │    1. {configDir}/plugins/<name>
   │   │    2. {configDir}/plugins/node_modules/<name>   (npm installs)
   │   │    3. {cwd}/node_modules/<name>                (dev usage)
+  │   │    4. bundled: src/server/plugins/bundled/<name> (from source) or
+  │   │       dist/bundled-plugins/<name> (published)   (first-party, last
+  │   │       so an installed plugin of the same name overrides it)
   │   │
   │   ├─ for each package dir:
   │   │    ├─ readPluginManifest()        ← package.json + pluginManifestSchema
@@ -125,7 +128,8 @@ enable(id)    → re-read manifest at record.source, cache-busted re-import
 disable(id)    → runDeactivate() (optional plugin hook), registry.removePlugin(id)
                 (drops every contribution + hook + transition), persist disabled list
 uninstall(id)   → same as disable + rm -rf the directory (only if under
-                {configDir}/plugins — node_modules discoveries are not removable)
+                {configDir}/plugins — node_modules and bundled discoveries are
+                not removable; both report removable: false)
 ```
 
 The disabled list is a single settings row (`plugin.disabled`, JSON array of

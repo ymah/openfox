@@ -14,6 +14,10 @@ copyFiltered('src/server/commands/defaults', 'dist/command-defaults', '.md')
 cpSync('src/server/skills/defaults', 'dist/skill-defaults', { recursive: true })
 copyFiltered('src/server/agents/defaults', 'dist/agent-defaults', '.md')
 copyFiltered('src/server/workflows/defaults', 'dist/workflow-defaults', '.json')
+// Bundled first-party plugins: copied whole (JS entry points plus their .md and
+// .json data), so each plugin keeps the same internal layout in dev and in the
+// published package. Recursive, not copyFiltered, which keeps a single extension.
+cpSync('src/server/plugins/bundled', 'dist/bundled-plugins', { recursive: true })
 cpSync('src/server/lsp/languages.json', 'dist/languages.json')
 cpSync('CHANGELOG.md', 'dist/CHANGELOG.md')
 cpSync('package.json', 'dist/package.json')
