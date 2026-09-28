@@ -295,13 +295,14 @@ describe('agentLoop integration', () => {
       stepDoneCalled: true,
     })
 
-    await runTopLevelAgentLoop(makeConfig({ append }), turnMetrics)
+    const result = await runTopLevelAgentLoop(makeConfig({ append }), turnMetrics)
 
     // Should have called streamLLM only once (no second LLM call after step_done)
     expect(consumeStreamGenerator).toHaveBeenCalledTimes(1)
     // Should emit chat.done
     const chatDoneEvents = append.mock.calls.filter((args: unknown[]) => (args[0] as any).type === 'chat.done')
     expect(chatDoneEvents.length).toBeGreaterThanOrEqual(1)
+    expect(result.stepDoneCalled).toBe(true)
   })
 
   it('continues loop when step_done is not called', async () => {

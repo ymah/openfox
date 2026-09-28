@@ -49,6 +49,8 @@ describe('QueueProcessor', () => {
     providerModel?: string
     providerReasoningEffort?: string
     mode?: string
+    phase?: string
+    projectId?: string
   }
   let queueItems: Array<{ queueId: string; mode: string; content: string; queuedAt: string; attachments?: any[] }>
   let latestExecution: {
@@ -70,6 +72,7 @@ describe('QueueProcessor', () => {
     mockSessionManager = {
       subscribe: vi.fn(() => () => {}),
       getSession: vi.fn(() => sessionState),
+      getProject: vi.fn(() => ({ type: 'dev' })),
       hasQueuedMessages: vi.fn(() => queueItems.length > 0),
       setRunning: vi.fn((_id: string, running: boolean) => {
         sessionState = { ...sessionState, isRunning: running }
@@ -479,6 +482,7 @@ describe('QueueProcessor', () => {
         broadcastForSession: mockBroadcastForSession,
         launchWorkflow,
       })
+
       qp.start()
       const callback = mockSessionManager.subscribe.mock.calls[0][0]
       callback({ type: 'queue_added', sessionId: 'sess-1', queueId: 'q-wf', mode: 'asap', content: 'guidance' })
@@ -493,6 +497,40 @@ describe('QueueProcessor', () => {
       expect(runChatTurnMock).not.toHaveBeenCalled()
       expect(mockSessionManager.addMessage).not.toHaveBeenCalled()
       expect(mockSessionManager.cancelQueuedMessage).toHaveBeenCalledWith('sess-1', 'q-wf')
+      qp.stop()
+    })
+  })
+
+  describe('planner completion', () => {
+    it('launches the default build workflow after an explicit planner completion signal', async () => {
+      const runChatTurnMock = vi.fn().mockResolvedValue({ planningCompleted: true })
+      vi.doMock('../chat/orchestrator.js', () => ({ runChatTurn: runChatTurnMock }))
+
+      sessionState = {
+        id: 'sess-1',
+        isRunning: false,
+        metadata: { title: undefined },
+        mode: 'planner',
+        phase: 'plan',
+      }
+      queueItems = [{ queueId: 'q-1', mode: 'asap', content: 'plan', queuedAt: '2024-01-01' }]
+      const launchWorkflow = vi.fn()
+      const qp = new QueueProcessor({
+        sessionManager: mockSessionManager as any,
+        providerManager: mockProviderManager as any,
+        getLLMClient: mockGetLLMClient,
+        getActiveProvider: mockGetActiveProvider,
+        broadcastForSession: mockBroadcastForSession,
+        launchWorkflow,
+      })
+
+      qp.start()
+      const callback = mockSessionManager.subscribe.mock.calls[0][0]
+      callback({ type: 'queue_added', sessionId: 'sess-1', queueId: 'q-1', mode: 'asap', content: 'plan' })
+      await new Promise((resolve) => setTimeout(resolve, 30))
+
+      expect(launchWorkflow).toHaveBeenCalledWith('sess-1', { workflowId: 'default' })
+      expect(mockSessionManager.setRunning).toHaveBeenCalledWith('sess-1', false)
       qp.stop()
     })
   })

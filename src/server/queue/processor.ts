@@ -214,6 +214,9 @@ export class QueueProcessor {
     }
 
     const turnPromise = this.runTurn(sessionId, controller)
+      .then((result) => {
+        this.finishTurn(sessionId, controller, result?.planningCompleted === true)
+      })
       .catch((error) => {
         // Pre-flight (provider activation, client resolution, dynamic import)
         // threw before runChatTurn took over. Without this the session would
@@ -237,7 +240,7 @@ export class QueueProcessor {
    * immediate new message starts turn B before turn A's finally runs, and A
    * must not clobber B's controller or running state.
    */
-  private finishTurn(sessionId: string, controller: AbortController): void {
+  private finishTurn(sessionId: string, controller: AbortController, planningCompleted = false): void {
     const { sessionManager, broadcastForSession } = this.deps
     if (this.activeAgents.get(sessionId) !== controller) {
       return
@@ -257,13 +260,22 @@ export class QueueProcessor {
         return
       }
 
+      if (planningCompleted && this.shouldAutoLaunchBuild(sessionId, session)) {
+        // End the planner turn before handing ownership to the workflow
+        // launcher. This keeps the running-state lifecycle ordered and lets
+        // the normal workflow launcher own the next run.
+        finalizeTurnCompletion(sessionId, sessionManager, broadcastForSession)
+        this.deps.launchWorkflow?.(sessionId, { workflowId: 'default' })
+        return
+      }
+
       const hasMore = sessionManager.hasQueuedMessages(sessionId)
       if (!hasMore) {
         finalizeTurnCompletion(sessionId, sessionManager, broadcastForSession)
         return
       }
 
-      // Safety: orchestrator only appends running.changed to event store;
+      // Safety: orchestrator only appends running.changed to EventStore;
       // ensure running state is reset before starting next turn
       if (session.isRunning) {
         sessionManager.setRunning(sessionId, false)
@@ -277,7 +289,18 @@ export class QueueProcessor {
     }
   }
 
-  private async runTurn(sessionId: string, controller: AbortController): Promise<void> {
+  private shouldAutoLaunchBuild(
+    sessionId: string,
+    session: { mode?: string; phase?: string; projectId?: string },
+  ): boolean {
+    if (!this.deps.launchWorkflow || session.mode !== 'planner' || session.phase !== 'plan') return false
+    const activeWorkflow = this.deps.sessionManager.getActiveWorkflowExecution?.(sessionId)
+    if (activeWorkflow) return false
+    const project = session.projectId ? this.deps.sessionManager.getProject?.(session.projectId) : undefined
+    return (project?.type ?? 'dev') === 'dev'
+  }
+
+  private async runTurn(sessionId: string, controller: AbortController): Promise<{ planningCompleted: boolean }> {
     const { sessionManager, getLLMClient, getActiveProvider, broadcastForSession, providerManager } = this.deps
 
     // Activate the session's EFFECTIVE provider/model (agent override > session
@@ -347,15 +370,7 @@ export class QueueProcessor {
       onMessage: (msg) => broadcastForSession(sessionId, msg),
     })
 
-    await runChatTurn(runChatTurnParams)
-      .catch((error) => {
-        if (error instanceof Error && error.message === 'Aborted') {
-          return
-        }
-        logger.error('QueueProcessor turn error', { sessionId, error })
-      })
-      .finally(() => {
-        this.finishTurn(sessionId, controller)
-      })
+    const result = await runChatTurn(runChatTurnParams)
+    return result ?? { planningCompleted: false }
   }
 }

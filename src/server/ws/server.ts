@@ -589,6 +589,7 @@ export function createWebSocketServer(
       signal: controller.signal,
       onMessage: (msg) => broadcastForSession(sessionId, msg),
     })
+      .then(() => undefined)
       .catch((error) => {
         if (error instanceof Error && error.message === 'Aborted') {
           return
@@ -1452,10 +1453,16 @@ async function handleClientMessage(
         return
       }
 
-      // Skip criteria check when resuming from a user step
+      // Skip the completed-work check when resuming from a user step. Criteria
+      // are canonical in metadataEntries (the planner's session_metadata
+      // output), while Session.criteria is only a compatibility projection.
       if (!launchPayloadEarly?.resumeFrom) {
-        const pendingCriteria = session.criteria.filter((c) => c.status.type !== 'passed')
-        if (!launchPayloadEarly?.workflowId && pendingCriteria.length === 0) {
+        const hasMetadataCriteria = Object.prototype.hasOwnProperty.call(session.metadataEntries ?? {}, 'criteria')
+        const criteria = hasMetadataCriteria
+          ? (session.metadataEntries?.['criteria'] ?? [])
+          : session.criteria.map((criterion) => ({ status: criterion.status.type }))
+        const hasCompletedCriteria = criteria.length > 0 && criteria.every((entry) => entry.status === 'passed')
+        if (!launchPayloadEarly?.workflowId && hasCompletedCriteria) {
           send(
             createErrorMessage(
               'NO_WORK',
