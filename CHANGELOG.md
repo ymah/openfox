@@ -1,5 +1,18 @@
 # Changelog
 
+## 2.0.160-fox.3 - 2026-09-28
+
+### Enhancements
+
+- **Writing mode is whole again** — its agents and workflows moved back beside its Codex/manuscript pages, so disabling a plugin can no longer leave the editor working with the AI stripped out. GTD stays a plugin, since it is only agents, workflows and a skill.
+
+### Bug Fixes
+
+- **Enabling or disabling a plugin now takes effect immediately** — the call returned before the agents, workflows and skills it adds or removes had actually changed.
+- **The build no longer ships stale definitions** — a definition that moved kept a copy in the published package, registering the same id twice.
+- **Writing agents sort with the other project functions** — the 'writing' category fell into the "unknown" bucket in selector lists.
+- **A clear error instead of a crash** when a session's agent and every default are missing.
+
 ## 2.0.160-fox.2 - 2026-09-28
 
 ### Features
