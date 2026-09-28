@@ -1,5 +1,17 @@
 # Changelog
 
+## 2.0.160-fox.2 - 2026-09-28
+
+### Features
+
+- **Bundled plugins** — first-party plugins can now ship inside the package and load with no install, so a built-in feature can live in a plugin without becoming a manual setup step.
+- **GTD and writing are now plugins** — their agents, workflows and skills moved into `openfox-gtd` and `openfox-writing`, which can be disabled from the Plugins tab (but not uninstalled).
+
+### Bug Fixes
+
+- **Built-in code reviewer can no longer be deleted** — the built-in list compared file names instead of agent ids, so `code_reviewer` was never protected.
+- **Plugin-contributed agents and workflows count as built-ins** — they now appear as built-in in Settings and are protected from deletion, instead of looking like user files with no file behind them.
+
 ## 2.0.160-fox.1 - 2026-09-28
 
 Fork release: rebased on upstream 2.0.160. Versions in this fork now carry a
