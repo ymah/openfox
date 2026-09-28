@@ -669,34 +669,23 @@ describe('bundled plugins', () => {
     const host = makeBundledHost()
     const diagnostics = await host.start()
 
-    const byName = new Map(diagnostics.map((d) => [d.packageName, d]))
-    for (const name of ['openfox-gtd', 'openfox-writing']) {
-      const diagnostic = byName.get(name)
-      expect(diagnostic, `${name} should be discovered without being installed`).toBeDefined()
-      expect(diagnostic?.loaded).toBe(true)
-      expect(diagnostic?.error).toBeUndefined()
-    }
+    const diagnostic = diagnostics.find((d) => d.packageName === 'openfox-gtd')
+    expect(diagnostic, 'openfox-gtd should be discovered without being installed').toBeDefined()
+    expect(diagnostic?.loaded).toBe(true)
+    expect(diagnostic?.error).toBeUndefined()
   })
 
-  it('contributes the GTD and writing agents, workflows and skills', async () => {
+  it('contributes the GTD agents, workflows and skill', async () => {
     const host = makeBundledHost()
     await host.start()
 
     const agents = await loadAllAgents(configDirectory)
-    const ids = agents.map((a) => a.metadata.id)
-    expect(ids).toContain('gtd-secretary')
-    expect(ids).toContain('writing-drafter')
-    // Categories are what the UI filters on to scope a project function.
+    expect(agents.map((a) => a.metadata.id)).toContain('gtd-secretary')
+    // The category is what the UI filters on to scope a project function.
     expect(agents.find((a) => a.metadata.id === 'gtd-secretary')?.metadata.category).toBe('gtd')
-    expect(agents.find((a) => a.metadata.id === 'writing-drafter')?.metadata.category).toBe('writing')
 
-    const workflowIds = (await loadAllWorkflows(configDirectory)).map((w) => w.metadata.id)
-    expect(workflowIds).toContain('gtd-capture')
-    expect(workflowIds).toContain('writing-draft-scene')
-
-    const skillIds = (await loadAllSkills(configDirectory)).map((s) => s.metadata.id)
-    expect(skillIds).toContain('gtd')
-    expect(skillIds).toContain('writing')
+    expect((await loadAllWorkflows(configDirectory)).map((w) => w.metadata.id)).toContain('gtd-capture')
+    expect((await loadAllSkills(configDirectory)).map((s) => s.metadata.id)).toContain('gtd')
   })
 
   it('keeps gtd-build visually distinct from the core default workflow', async () => {
@@ -720,6 +709,18 @@ describe('bundled plugins', () => {
   })
 
   it('cannot be uninstalled, but can be disabled', async () => {
+    // A second, installed plugin also contributing an agent, to prove disabling
+    // one plugin drops only its own contributions.
+    await writePlugin(
+      configDirectory,
+      'other-agents-plugin',
+      2,
+      `registry.registerAgentSource({
+         id: 'other',
+         label: { en: 'Other', fr: 'Autre' },
+         load: () => [{ id: 'other-agent', name: 'Other agent', description: 'd', prompt: 'p' }],
+       });`,
+    )
     const host = makeBundledHost()
     await host.start()
 
@@ -729,7 +730,8 @@ describe('bundled plugins', () => {
     await host.disable('openfox-gtd')
     const ids = (await loadAllAgents(configDirectory)).map((a) => a.metadata.id)
     expect(ids).not.toContain('gtd-secretary')
-    // Disabling one bundled plugin leaves the other alone.
-    expect(ids).toContain('writing-drafter')
+    expect(ids).toContain('other-agent')
+    // The core's own built-ins are untouched by a plugin being disabled.
+    expect(ids).toContain('planner')
   })
 })

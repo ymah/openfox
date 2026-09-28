@@ -124,7 +124,14 @@ Roots are scanned in order, deduplicated by package name:
 4. **Bundled**: the first-party plugins that ship inside the OpenFox package
    (`src/server/plugins/bundled/<name>` when running from source,
    `dist/bundled-plugins/<name>` in the published package) — currently
-   `openfox-gtd` and `openfox-writing`.
+   `openfox-gtd`.
+
+Which project functions belong in a bundled plugin: one whose whole surface is
+agents, workflows and skills can be a plugin, because disabling it then removes
+the entire function. One that also owns dedicated pages cannot — a plugin has no
+way to contribute an application route, and the declarative panel format has no
+multi-line editor node — so it stays in the core, gated on the project type. That
+is why GTD is a plugin and the novel-writing mode is not.
 
 Bundled plugins are scanned **last** on purpose: because discovery deduplicates
 by package name with the first root winning, installing a plugin of the same

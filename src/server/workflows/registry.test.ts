@@ -169,20 +169,24 @@ describe('loadAllWorkflows', () => {
 })
 
 describe('loadDefaultWorkflows', () => {
-  // The GTD and writing workflows are no longer core defaults — they ship in the
-  // bundled openfox-gtd / openfox-writing plugins, and are covered by the
-  // 'bundled plugins' tests in src/server/plugins/host.test.ts.
+  // The GTD workflows ship in the bundled openfox-gtd plugin (see the 'bundled
+  // plugins' tests in src/server/plugins/host.test.ts). The writing workflows are
+  // core defaults, like the rest of the writing function.
   it('should load bundled default workflows', async () => {
     const defaults = await loadDefaultWorkflows()
-    expect(defaults.length).toBeGreaterThanOrEqual(1)
+    expect(defaults.length).toBeGreaterThanOrEqual(4)
     expect(defaults.some((w) => w.metadata.id === 'default')).toBe(true)
+    expect(defaults.some((w) => w.metadata.id === 'writing-new-book')).toBe(true)
+    expect(defaults.some((w) => w.metadata.id === 'writing-draft-scene')).toBe(true)
+    expect(defaults.some((w) => w.metadata.id === 'writing-enrich-codex')).toBe(true)
   })
 
-  it('tags the built-in workflow with a dev category', async () => {
+  it('tags built-in workflows with a dev/writing category', async () => {
     const defaults = await loadDefaultWorkflows()
     const byId = new Map(defaults.map((w) => [w.metadata.id, w.metadata]))
 
     expect(byId.get('default')?.category).toBe('dev')
+    expect(byId.get('writing-draft-scene')?.category).toBe('writing')
   })
 
   it('default Build & Verify workflow starts with a user step offering work-here vs start-a-workspace', async () => {

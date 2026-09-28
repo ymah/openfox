@@ -127,8 +127,9 @@ describe('loadDefaultSkills', () => {
     expect(defaults.length).toBeGreaterThanOrEqual(1)
     expect(defaults.some((s) => s.metadata.id === 'browser')).toBe(true)
     expect(defaults.some((s) => s.metadata.id === 'workflows')).toBe(true)
-    // 'gtd' and 'writing' now ship in the bundled plugins of the same name —
-    // see the 'bundled plugins' tests in src/server/plugins/host.test.ts.
+    expect(defaults.some((s) => s.metadata.id === 'writing')).toBe(true)
+    // 'gtd' ships in the bundled openfox-gtd plugin — see the 'bundled plugins'
+    // tests in src/server/plugins/host.test.ts.
   })
 })
 

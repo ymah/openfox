@@ -1,4 +1,4 @@
-import type { ProjectType } from '@shared/types.js'
+import { PROJECT_TYPES, type ProjectType } from '@shared/types.js'
 
 /**
  * Groups items with an optional `category` string for display in a flat
@@ -17,7 +17,11 @@ export interface CategoryGroup<T> {
  * user/project agents predating this field) come last, ungrouped. */
 export function groupByCategory<T extends { category?: string }>(
   items: T[],
-  order: string[] = ['dev', 'gtd'],
+  // Derived from PROJECT_TYPES rather than written out here: the literal list
+  // used to be ['dev', 'gtd'], so 'writing' was silently demoted to the
+  // "unknown category" bucket and sorted alphabetically among strangers. A
+  // future project function would have been forgotten the same way.
+  order: string[] = [...PROJECT_TYPES],
 ): CategoryGroup<T>[] {
   const buckets = new Map<string | null, T[]>()
   for (const item of items) {

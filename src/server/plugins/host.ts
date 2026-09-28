@@ -103,7 +103,7 @@ export class PluginHost {
       })
     }
     this.pendingDeactivates.clear()
-    this.applyContributions()
+    await this.applyContributions()
     setPluginHookEmitter((event, payload) => {
       void this.hooks.emit(event, payload)
     })
@@ -205,7 +205,7 @@ export class PluginHost {
     record.diagnostic = diagnostic
     record.enabled = diagnostic.loaded
     if (diagnostic.loaded) this.writeDisabled(this.readDisabled().filter((id) => id !== pluginId))
-    this.applyContributions()
+    await this.applyContributions()
   }
 
   async disable(pluginId: string): Promise<void> {
@@ -216,7 +216,7 @@ export class PluginHost {
     record.enabled = false
     const disabled = this.readDisabled()
     if (!disabled.includes(pluginId)) this.writeDisabled([...disabled, pluginId])
-    this.applyContributions()
+    await this.applyContributions()
   }
 
   async uninstall(pluginId: string): Promise<void> {
@@ -233,7 +233,7 @@ export class PluginHost {
     this.writeDisabled(this.readDisabled().filter((id) => id !== pluginId))
     await rm(record.diagnostic.source, { recursive: true, force: true })
     await this.cleanupNpmArtifacts(record.diagnostic.source)
-    this.applyContributions()
+    await this.applyContributions()
   }
 
   /**
@@ -286,7 +286,7 @@ export class PluginHost {
       enabled: diagnostic.loaded,
     })
     if (diagnostic.loaded) this.writeDisabled(this.readDisabled().filter((id) => id !== diagnostic.packageName))
-    this.applyContributions()
+    await this.applyContributions()
     return diagnostic
   }
 
@@ -323,15 +323,20 @@ export class PluginHost {
     await this.hooks.emit(mapping, base)
   }
 
-  private applyContributions(): void {
+  /**
+   * Push every contribution into the core registries. Awaited by its callers:
+   * the source refreshes read files, so firing them off unawaited meant
+   * enable()/disable() could return before the agents, workflows and skills
+   * they add or remove had actually changed — a caller that immediately listed
+   * them saw the previous state.
+   */
+  private async applyContributions(): Promise<void> {
     setPluginTools(this.registry.getTools().map((tool) => toServerTool(tool)))
     setPluginCommands(
       this.registry.getOwnedCommands().map((entry) => toCommandDefinition(entry.command, entry.pluginId)),
     )
     setPluginModelMetadataProviders(this.registry.getModelMetadataProviders())
-    void this.refreshSkillSources()
-    void this.refreshAgentSources()
-    void this.refreshWorkflowSources()
+    await Promise.all([this.refreshSkillSources(), this.refreshAgentSources(), this.refreshWorkflowSources()])
   }
 
   private async refreshSkillSources(): Promise<void> {

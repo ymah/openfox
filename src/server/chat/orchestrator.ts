@@ -389,10 +389,21 @@ export async function runAgentTurn(
   } catch {
     // Project-scoped default is best-effort
   }
+  // Last resorts, in order: the project's configured default, the global
+  // default, then any non-sub-agent that exists. The chain used to end in a `!`,
+  // which lied whenever the global default did not resolve either — a project
+  // pinned to an agent that no longer exists (a deleted custom agent, or a
+  // disabled plugin's agent) then crashed later with an unreadable error.
   const agentDef =
     findAgentById(agentId, allAgents) ??
     findAgentById(resolveDefaultAgentId(fallbackProjectId), allAgents) ??
-    findAgentById(resolveDefaultAgentId(), allAgents)!
+    findAgentById(resolveDefaultAgentId(), allAgents) ??
+    allAgents.find((agent) => !agent.metadata.subagent)
+  if (!agentDef) {
+    throw new Error(
+      `No usable agent found for session ${options.sessionId}: "${agentId}" is unknown and no default agent resolved.`,
+    )
+  }
 
   // Resolve per-agent model override (dedicated LLM client if configured).
   // Pass options.llmClient as preferred fallback so mock/test clients are preserved.

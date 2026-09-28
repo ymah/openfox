@@ -97,3 +97,22 @@ describe('filterByProjectType', () => {
     expect(filterByProjectType(threeWay, 'writing').map((i) => i.id)).toEqual(['writing-secretary', 'custom-legacy'])
   })
 })
+
+describe('groupByCategory default order', () => {
+  it('orders every known project type before unknown categories', () => {
+    const items = [
+      { id: 'zzz-custom', category: 'zzz-custom' },
+      { id: 'writing-secretary', category: 'writing' },
+      { id: 'gtd-secretary', category: 'gtd' },
+      { id: 'builder', category: 'dev' },
+      { id: 'legacy' },
+    ]
+
+    const categories = groupByCategory(items).map((g) => g.category)
+
+    // Regression: the default order was the literal ['dev', 'gtd'], so 'writing'
+    // fell through to the alphabetical "unknown" bucket and sorted after
+    // 'zzz-custom'. It is now derived from PROJECT_TYPES.
+    expect(categories).toEqual(['dev', 'gtd', 'writing', 'zzz-custom', null])
+  })
+})
