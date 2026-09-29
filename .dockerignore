@@ -1,0 +1,26 @@
+# Keep the build context small and free of local state. Without this the context
+# would include node_modules (rebuilt in the image anyway) and any SQLite
+# database sitting in the working tree.
+node_modules
+web/node_modules
+dist
+.git
+.github
+.husky
+.claude
+.serena
+.openfox
+*.db
+*.db-shm
+*.db-wal
+e2e/.openfox-test
+e2e-playwright
+test-results
+playwright-report
+report
+debug
+tmp
+worktrees
+SESSION-NOTES.md
+.env
+docker-compose.override.yml

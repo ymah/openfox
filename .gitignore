@@ -76,3 +76,8 @@ worktrees/
 
 # Personal session scratch notes, never part of the project
 SESSION-NOTES.md
+
+# Docker: machine-specific overrides and local env, never committed
+docker-compose.override.yml
+.env
+/projects/

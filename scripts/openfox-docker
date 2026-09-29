@@ -1,0 +1,66 @@
+#!/usr/bin/env bash
+# `openfox` for a Docker deployment: manage the container, and forward any other
+# command to the OpenFox CLI running inside it. Symlink it onto your PATH, e.g.
+#   ln -s "$PWD/scripts/openfox-docker" ~/.local/bin/openfox
+# See docs/DOCKER.md.
+set -euo pipefail
+
+# Resolve symlinks so the script finds the repository (and its compose file)
+# whatever name and place it was linked under. `readlink -f` is not portable to
+# older macOS, hence the loop.
+src="${BASH_SOURCE[0]}"
+while [ -L "$src" ]; do
+  dir="$(cd -P "$(dirname "$src")" && pwd)"
+  src="$(readlink "$src")"
+  [[ "$src" != /* ]] && src="$dir/$src"
+done
+repo="$(cd -P "$(dirname "$src")/.." && pwd)"
+
+compose() { docker compose --project-directory "$repo" "$@"; }
+
+if ! docker info >/dev/null 2>&1; then
+  echo "openfox: the Docker daemon is not running — start Docker Desktop first." >&2
+  exit 1
+fi
+
+port="${OPENFOX_PUBLISH_PORT:-10369}"
+
+usage() {
+  cat <<EOF
+openfox (Docker) — usage:
+  openfox                 start the container and print the URL
+  openfox up|start        same
+  openfox stop            stop the container (data is kept)
+  openfox restart         restart it
+  openfox status          show container state and health
+  openfox logs [-f]       show the server logs
+  openfox rebuild         rebuild the image from this checkout and restart
+  openfox shell           open a shell inside the container
+  openfox <anything else> run the OpenFox CLI inside the container
+                          (e.g. openfox provider list, openfox --version)
+EOF
+}
+
+cmd="${1:-up}"
+case "$cmd" in
+  up|start)
+    compose up -d
+    echo "OpenFox is running: http://localhost:${port}"
+    ;;
+  stop)    compose stop ;;
+  restart) compose restart ;;
+  status)  compose ps ;;
+  logs)    shift; compose logs "$@" openfox ;;
+  rebuild) compose build && compose up -d ;;
+  shell)   compose exec openfox bash ;;
+  help|-h|--help) usage ;;
+  *)
+    # Anything else is an OpenFox CLI command. It needs the container: without
+    # this check `docker compose exec` fails with a cryptic "service is not running".
+    if [ -z "$(compose ps --status running --quiet openfox 2>/dev/null)" ]; then
+      echo "openfox: the container is not running — start it with \`openfox start\`." >&2
+      exit 1
+    fi
+    compose exec openfox openfox "$@"
+    ;;
+esac

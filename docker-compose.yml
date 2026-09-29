@@ -1,0 +1,53 @@
+# OpenFox — generic deployment. See docs/DOCKER.md.
+#
+# Nothing machine-specific belongs in this file. Local paths, uid/gid and host
+# mounts go in `docker-compose.override.yml` (git-ignored, loaded automatically)
+# and tunables in `.env` (see `.env.example`).
+name: openfox
+
+services:
+  openfox:
+    build:
+      context: .
+    image: openfox:${OPENFOX_TAG:-local}
+    restart: unless-stopped
+
+    # The server listens on 0.0.0.0 inside the container, and the default auth
+    # strategy is "local" (no password). The port is therefore published on the
+    # loopback interface ONLY. Publishing it on all interfaces would expose an
+    # unauthenticated agent that runs shell commands to your whole network; only
+    # change OPENFOX_BIND together with network authentication or a reverse proxy.
+    ports:
+      - '${OPENFOX_BIND:-127.0.0.1}:${OPENFOX_PUBLISH_PORT:-10369}:10369'
+
+    environment:
+      OPENFOX_UID: '${OPENFOX_UID:-1000}'
+      OPENFOX_GID: '${OPENFOX_GID:-1000}'
+      # Forwarded to the Docker host so a provider configured as
+      # http://localhost:<port> works unchanged. Empty string disables.
+      OPENFOX_HOST_PORTS: '${OPENFOX_HOST_PORTS-1234,11434,8000,8080}'
+      # The heap ceiling is a deployment setting, not a requirement: it is a limit
+      # the process may grow to, not memory it reserves (an idle server uses tens
+      # of MB). Setting OPENFOX_HEAP_INCREASED skips the CLI's own relaunch with a
+      # 4-8 GB ceiling so the value below is the one that applies.
+      OPENFOX_HEAP_INCREASED: '1'
+      NODE_OPTIONS: '--max-old-space-size=${OPENFOX_HEAP_MB:-3072}'
+    mem_limit: ${OPENFOX_MEM_LIMIT:-4g}
+
+    # Where new projects are created by default, and the one folder mounted below.
+    working_dir: /projects
+    volumes:
+      # Config, credentials and the session database. A named volume rather than
+      # a host directory: SQLite in WAL mode is safer on the VM's own disk than
+      # on a shared filesystem.
+      - openfox-data:/data
+      # Projects always stay on the host, never in the image.
+      - ${OPENFOX_PROJECTS_DIR:-./projects}:/projects
+
+    # Lets the container reach services on the Docker host by name; built in on
+    # Docker Desktop, needed explicitly on Linux.
+    extra_hosts:
+      - 'host.docker.internal:host-gateway'
+
+volumes:
+  openfox-data:

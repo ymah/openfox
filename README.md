@@ -22,6 +22,15 @@ openfox
 
 On first run, OpenFox automatically detects your local LLM backend (vLLM, sglang, ollama, llamacpp) and configures itself.
 
+### With Docker
+
+```bash
+docker compose up -d --build
+# open http://localhost:10369
+```
+
+Projects stay on your machine and the UI is published on the loopback interface only. See [docs/DOCKER.md](docs/DOCKER.md) for mounts, AI providers running on the host, and the caveats.
+
 ## What's New in 2.0
 
 - **Multi-Turn Agent Engine** — Completely rewritten agent loop with EventStore as single source of truth. All modes (builder, planner, verifier, sub-agents, compaction) run through the same unified loop.

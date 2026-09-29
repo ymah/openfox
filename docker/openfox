@@ -1,0 +1,14 @@
+#!/bin/sh
+# `openfox` inside the container. When invoked as root (as `docker exec` does by
+# default) it drops to the same uid/gid the server runs as, so a command like
+# `openfox provider add` never leaves root-owned files in the state directory.
+set -eu
+
+run_uid="${OPENFOX_UID:-1000}"
+run_gid="${OPENFOX_GID:-1000}"
+
+if [ "$(id -u)" = "0" ]; then
+  exec setpriv --reuid="$run_uid" --regid="$run_gid" --clear-groups \
+    node /app/dist/cli/index.js "$@"
+fi
+exec node /app/dist/cli/index.js "$@"
