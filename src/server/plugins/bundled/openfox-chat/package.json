@@ -13,6 +13,8 @@
     "capabilities": [
       "agents",
       "workflows",
+      "tools",
+      "rpc",
       "ui"
     ]
   }

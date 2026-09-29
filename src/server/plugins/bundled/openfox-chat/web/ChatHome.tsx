@@ -147,6 +147,19 @@ export function ChatHome({ projectId }: ChatHomeProps) {
           )}
         </section>
 
+        <section className="mt-8">
+          <Link
+            href={`/p/${projectId}/memory`}
+            data-testid="chat-memory-link"
+            className="inline-block rounded border border-border px-3 py-1.5 text-sm text-text-primary hover:bg-bg-tertiary transition-colors"
+          >
+            {t({ en: 'Memory', fr: 'Mémoire' })}
+          </Link>
+          <span className="ml-2 text-xs text-text-muted">
+            {t({ en: 'What your assistants remember about you', fr: 'Ce que vos assistants retiennent sur vous' })}
+          </span>
+        </section>
+
         {chatWorkflows.length > 0 && (
           <section className="mt-8">
             <h3 className="text-xs font-semibold uppercase tracking-wide text-text-muted mb-2">

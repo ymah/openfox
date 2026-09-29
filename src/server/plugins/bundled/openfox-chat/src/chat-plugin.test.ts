@@ -49,6 +49,15 @@ describe('openfox-chat agents', () => {
     for (const tool of CODE_TOOLS) expect(agent.allowedTools).not.toContain(tool)
   })
 
+  it('only the agents that benefit from it can use the memory, and only assistant can forget', () => {
+    const withMemory = agents.filter((a) => a.allowedTools.includes('memory_search')).map((a) => a.id)
+    expect(withMemory.sort()).toEqual(['chat-assistant', 'chat-researcher', 'chat-tutor'])
+    for (const agent of agents.filter((a) => a.allowedTools.includes('memory_search'))) {
+      expect(agent.allowedTools).toContain('memory_save')
+    }
+    expect(agents.filter((a) => a.allowedTools.includes('memory_forget')).map((a) => a.id)).toEqual(['chat-assistant'])
+  })
+
   it('only the research-capable agents can reach the web', () => {
     const withWeb = agents.filter((a) => a.allowedTools.includes('web_search')).map((a) => a.id)
     expect(withWeb.sort()).toEqual(['chat-assistant', 'chat-researcher', 'chat-tutor'])
@@ -103,16 +112,33 @@ describe('openfox-chat workflows', () => {
 })
 
 describe('openfox-chat registration', () => {
-  it('declares the chat mode without git, seeded with the assistant', () => {
+  it('declares the chat mode without git, seeded with the assistant, plus memory tools and RPC', () => {
     const modes: unknown[] = []
     const sources: string[] = []
+    const tools: string[] = []
+    const rpc: string[] = []
     register({
+      context: { storage: { get: () => undefined, set: () => undefined } },
       registerAgentSource: (s: { id: string }) => sources.push(s.id),
       registerWorkflowSource: (s: { id: string }) => sources.push(s.id),
       registerProjectMode: (m: unknown) => modes.push(m),
+      registerTool: (t: { name: string }) => tools.push(t.name),
+      registerRpc: (name: string) => rpc.push(name),
     })
     expect(sources).toEqual(['chat-agents', 'chat-workflows'])
     expect(modes).toEqual([expect.objectContaining({ value: 'chat', initGit: false, defaultAgent: 'chat-assistant' })])
+    expect(tools.sort()).toEqual(['memory_forget', 'memory_save', 'memory_search'])
+    expect(rpc).toContain('memory.list')
+  })
+
+  it('every tool an agent lists is either built in or one this plugin registers', () => {
+    const own = new Set(['memory_search', 'memory_save', 'memory_forget'])
+    const builtIn = new Set(['web_search', 'web_fetch', 'session_metadata', 'ask_user', 'step_done'])
+    for (const agent of agents) {
+      for (const tool of agent.allowedTools) {
+        expect(builtIn.has(tool) || own.has(tool), `${agent.id} lists unknown tool ${tool}`).toBe(true)
+      }
+    }
   })
 
   it('its manifest points at a real entry', () => {

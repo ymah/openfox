@@ -1,14 +1,15 @@
 import type { BundledPluginUi } from '@/lib/bundled-plugin-ui'
 import { ChatHome } from './ChatHome'
+import { MemoryView } from './MemoryView'
 
 /**
- * The chat project home. The core discovers it at build time
+ * The chat project home and the Memory page. The core discovers them at build time
  * (web/src/lib/bundled-plugin-ui.ts) and only renders it while this plugin is
  * enabled. The `chat` mode itself is declared in ./modes.ts.
  */
 const ui: BundledPluginUi = {
   pluginId: 'openfox-chat',
-  pages: [],
+  pages: [{ path: '/p/:projectId/memory', render: (projectId) => <MemoryView projectId={projectId} /> }],
   projectHome: (projectId) => <ChatHome projectId={projectId} />,
 }
 

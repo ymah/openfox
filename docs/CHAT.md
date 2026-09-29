@@ -37,6 +37,21 @@ Type `/` in a conversation to launch one.
 - **Décider** — clarify, options, weighted criteria, matrix, recommendation and risks.
 - **Apprendre un sujet** — diagnosis, learning plan, first lesson, quiz.
 
+## Memory
+
+The Assistant, Researcher and Tutor share a memory that spans every chat project. They read it with
+`memory_search` at the start of a conversation and whenever a request depends on personal context, write durable
+facts with `memory_save` (and tell you when they do), and drop them with `memory_forget`.
+
+- **Nothing is hidden.** The **Memory** page (button on the chat home) lists every entry, lets you edit or forget
+  each one, wipe everything, add one by hand, and switch memory off — assistants then neither read nor write it.
+- **How it works.** One JSON value in the plugin's storage, capped at 500 entries of up to 1000 characters.
+  Saving a fact that repeats or rewords an existing one updates it instead of duplicating it. Search is keyword
+  scoring (TF-IDF over accent-folded words, with light plural matching) — there is no embedding model.
+- **Limits.** It is the assistant that decides to call memory: a small local model may forget to. It is not
+  injected into the prompt automatically, which keeps the provider's prompt cache intact. The on/off switch is
+  global, not per conversation.
+
 ## Regenerate and versions
 
 Under the last reply of a turn, **Regenerate** keeps the reply you have and produces another one; `‹ 2/3 ›`
