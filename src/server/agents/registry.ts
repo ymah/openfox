@@ -11,7 +11,7 @@ import { join, dirname } from 'node:path'
 import { constants } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import matter from 'gray-matter'
-import type { AgentDefinition, AgentMetadata } from './types.js'
+import { isBasePromptVariant, type AgentDefinition, type AgentMetadata } from './types.js'
 import { saveItemToDir } from '../shared/item-loader.js'
 import { logger } from '../utils/logger.js'
 import { getRuntimeConfig } from '../runtime-config.js'
@@ -59,6 +59,8 @@ function parseAgentFile(raw: string, filename: string): AgentDefinition | undefi
     ...(typeof meta['color'] === 'string' ? { color: meta['color'] } : {}),
     ...(typeof meta['category'] === 'string' ? { category: meta['category'] } : {}),
     ...(Array.isArray(meta['results']) ? { results: meta['results'].map(String) } : {}),
+    ...(isBasePromptVariant(meta['basePrompt']) ? { basePrompt: meta['basePrompt'] } : {}),
+    ...(meta['filterTools'] === true ? { filterTools: true } : {}),
   }
 
   return { metadata, prompt: content.trim() }

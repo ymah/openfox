@@ -140,6 +140,18 @@ function runMigrations(db: Database.Database): void {
     )
   `)
 
+  // Per-conversation chat settings (persona, sampling). A separate table keyed
+  // by session rather than columns on `sessions`, so the session row mapper and
+  // its many queries stay untouched; the cascade removes the row with the session.
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS session_chat_settings (
+      session_id TEXT PRIMARY KEY,
+      settings TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      FOREIGN KEY (session_id) REFERENCES sessions(id) ON DELETE CASCADE
+    )
+  `)
+
   // Create notifications table for plugin-emitted in-app notifications
   db.exec(`
     CREATE TABLE IF NOT EXISTS notifications (

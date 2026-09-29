@@ -385,11 +385,29 @@ export function getToolRegistryForSubAgent(toolNames: string[]): ToolRegistry {
 }
 
 /**
+ * Whether a tool's definition is sent to a top-level agent that opted into
+ * `filterTools`. Mirrors the execution-time permission checks in
+ * createRegistryFromTools so an agent is never offered a tool it would be
+ * refused, and never denied one it was offered.
+ */
+function isToolOffered(name: string, allowedTools: string[]): boolean {
+  if (getBuiltInToolNames().has(name)) {
+    return computeEffectiveTools(allowedTools, 'agent').has(name)
+  }
+  // MCP and plugin tools: default open, unless the agent denies them all or
+  // lists specific ones (then only those).
+  if (allowedTools.includes('__mcp_none__')) return false
+  const listsSpecific = allowedTools.some((t) => !getBuiltInToolNames().has(t) && t !== '__mcp_none__')
+  return !listsSpecific || allowedTools.includes(name)
+}
+
+/**
  * Create a tool registry for an agent definition.
  *
  * For top-level agents (subagent: false):
  *   - Returns ALL tools to ensure vLLM prefix cache consistency across mode switches
- *   - The allowedTools list is ignored for tool filtering
+ *     (unless the agent sets `filterTools`, which sends only the tools it may use)
+ *   - The allowedTools list is otherwise ignored for tool filtering
  *   - return_value is excluded (top-level agents finish with chat.done, not return_value)
  *
  * For sub-agents (subagent: true):
@@ -430,7 +448,8 @@ export function getToolRegistryForAgent(agentDef: AgentDefinition, sessionId?: s
 
   const allowedTools = agentDef.metadata.allowedTools
   const toolPermissions = parseToolPermissions(allowedTools)
-  return createRegistryFromTools(tools, allowedTools, toolPermissions, agentDef.metadata.id, false)
+  const offered = agentDef.metadata.filterTools ? tools.filter((t) => isToolOffered(t.name, allowedTools)) : tools
+  return createRegistryFromTools(offered, allowedTools, toolPermissions, agentDef.metadata.id, false)
 }
 
 /**

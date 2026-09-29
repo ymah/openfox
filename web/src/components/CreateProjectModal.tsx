@@ -85,7 +85,14 @@ export function CreateProjectModal({ isOpen, onClose, initialProjectType = 'dev'
       const response = await authFetch('/api/projects', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: projectName, workdir: fullPath }),
+        body: JSON.stringify({
+          name: projectName,
+          workdir: fullPath,
+          ...(projectType !== DEFAULT_PROJECT_TYPE ? { type: projectType } : {}),
+          ...(getProjectMode(projectType).defaultAgent
+            ? { defaultAgent: getProjectMode(projectType).defaultAgent }
+            : {}),
+        }),
       })
 
       if (!response.ok) {
@@ -100,15 +107,6 @@ export function CreateProjectModal({ isOpen, onClose, initialProjectType = 'dev'
 
       const data = await response.json()
       const project = data.project
-
-      if (projectType !== DEFAULT_PROJECT_TYPE) {
-        const defaultAgent = getProjectMode(projectType).defaultAgent
-        await authFetch(`/api/projects/${project.id}`, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ type: projectType, ...(defaultAgent ? { defaultAgent } : {}) }),
-        })
-      }
 
       onClose()
       await projectsResource.refresh()

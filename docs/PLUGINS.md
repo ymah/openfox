@@ -141,7 +141,11 @@ into the web bundle, and the core only renders a page while its plugin is
 enabled. The server side declares the same functions with
 `registry.registerProjectMode()`, which is what lets a project's `type` be
 validated at runtime, and does its own I/O through `registerRpc` rather than
-Express routes.
+Express routes. `registerProjectMode` also takes two creation-time options:
+`initGit: false` (a project of this type is not `git init`-ed — for functions
+that are not about code) and `defaultAgent` (seeded when the creator does not
+pick one). `POST /api/projects` accepts `type` and `defaultAgent` and creates
+the project whole in one call, rejecting an unknown type before touching disk.
 
 The limit of this design, stated plainly: **only bundled plugins can own pages.**
 A plugin installed at runtime cannot, because that would require loading its
@@ -271,6 +275,14 @@ directory: a plugin can add an agent, or replace a bundled one by reusing its
 id, while the user's and project's own files still win. `category` scopes the
 agent to a project function (`dev`, `gtd`, `writing`), and `subagent: true`
 marks an agent that only runs as a sub-agent, never as a session mode.
+
+Two optional fields let a conversational agent stop behaving like a coding one:
+`basePrompt: assistant` runs it under a general-purpose base prompt instead of
+the coding-agent one (no lint/typecheck rules, no working directory, no
+sub-agent list), and `filterTools: true` sends the model only the tool
+definitions the agent may use rather than the full set. Both trade away the
+provider prefix cache shared with the other agents, so use them for agents that
+never switch to a coding mode inside the same session.
 
 ### Workflows (`workflows`)
 

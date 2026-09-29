@@ -3,6 +3,7 @@ import { join, dirname, basename } from 'node:path'
 import { constants } from 'node:fs'
 import { getSetting, SETTINGS_KEYS } from '../db/settings.js'
 import { getProject } from '../db/projects.js'
+import { getSessionChatSettings } from '../db/session-chat-settings.js'
 import { pathExists } from '../shared/item-loader.js'
 import type { InjectedFile } from '../../shared/types.js'
 
@@ -192,7 +193,11 @@ export async function getInstructionsForWorkdir(workdir: string): Promise<{
  * Order: language → global → project → AGENTS.md files
  * This is the primary function that should be used when building prompts.
  */
-export async function getAllInstructions(workdir: string, projectId: string): Promise<AllInstructions> {
+export async function getAllInstructions(
+  workdir: string,
+  projectId: string,
+  sessionId?: string,
+): Promise<AllInstructions> {
   const sections: string[] = []
   const allFiles: InstructionFile[] = []
 
@@ -237,6 +242,12 @@ export async function getAllInstructions(workdir: string, projectId: string): Pr
         }
       }
     }
+  }
+
+  // 4. The conversation's own persona (chat settings), last so it refines the rest.
+  const persona = sessionId ? getSessionChatSettings(sessionId).systemPrompt : undefined
+  if (persona) {
+    sections.push(`## PERSONA\n\n${persona}`)
   }
 
   return {

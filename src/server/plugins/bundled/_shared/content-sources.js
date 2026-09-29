@@ -43,6 +43,8 @@ export function agentSource(id, label, dir) {
           ...(typeof data.color === 'string' ? { color: data.color } : {}),
           ...(typeof data.category === 'string' ? { category: data.category } : {}),
           ...(Array.isArray(data.results) ? { results: data.results.map(String) } : {}),
+          ...(data.basePrompt === 'assistant' ? { basePrompt: 'assistant' } : {}),
+          ...(data.filterTools === true ? { filterTools: true } : {}),
         })
       }
       return agents

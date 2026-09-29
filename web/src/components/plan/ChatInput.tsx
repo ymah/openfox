@@ -6,6 +6,7 @@ import { useResource } from '../../hooks/useResource'
 import { useWorkflows } from '../../hooks/useWorkflows'
 import { useCurrentProject } from '../../hooks/useCurrentProject'
 import { filterByProjectType } from '../../lib/category-groups'
+import { getProjectMode } from '../../lib/project-modes'
 import { commandsResource, commandResource, skillsResource, selectActiveSkills } from '../../lib/resources'
 import { authFetch } from '../../lib/api'
 import { parseSlashCommand, extractTemplateParams } from '../../lib/parse-slash-command'
@@ -190,6 +191,7 @@ export function ChatInput({
   // Scope slash-command suggestions to the project's function (dev / GTD /
   // writing), like the agent selector and the More menu already do.
   const project = useCurrentProject()
+  const isChatMode = getProjectMode(project?.type).chatChrome === true
   const workflows = filterByProjectType(allWorkflows, project?.type)
   const { data: skillsData } = useResource(skillsResource, workdir)
   const activeSkills = selectActiveSkills(skillsData)
@@ -893,7 +895,7 @@ export function ChatInput({
             <div className="mt-3 flex flex-col gap-y-1 @md:flex-row @md:flex-nowrap @md:items-center @md:gap-x-2">
               <div className="flex items-center justify-between gap-2 @md:justify-start">
                 <AgentSelector />
-                <DangerLevelSelector />
+                {!isChatMode && <DangerLevelSelector />}
               </div>
               <div className="flex items-center @md:ms-auto min-w-0" data-testid="model-selector-group">
                 {perSessionMcpEnabled && (

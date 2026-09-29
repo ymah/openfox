@@ -70,6 +70,7 @@ import { createPluginRoutes } from './routes/plugins.js'
 import { createNotificationRoutes } from './routes/notifications.js'
 import { pluginAssetToken } from './plugins/asset-auth.js'
 import { registerSessionFavoriteRoute } from './routes/session-favorite.js'
+import { registerSessionChatSettingsRoute } from './routes/session-chat-settings.js'
 import { logger, setLogLevel } from './utils/logger.js'
 import { VERSION } from '../constants.js'
 import {
@@ -413,15 +414,38 @@ export async function createServerHandle(config: Config): Promise<ServerHandle> 
   })
 
   app.post('/api/projects', async (req, res) => {
-    const { name, workdir } = req.body
+    const { name, workdir, type, defaultAgent } = req.body
     if (!name || !workdir) {
       return res.status(400).json({ error: 'name and workdir are required' })
     }
+    // `type` and `defaultAgent` are accepted here so a project is created whole
+    // in one call. They are validated before anything touches the disk: a
+    // rejected type must not leave a stray folder behind, and the caller must
+    // see the refusal instead of getting a plain dev project.
+    if (type !== undefined && (typeof type !== 'string' || !isKnownProjectType(type))) {
+      return res.status(400).json({ error: `Invalid project type: ${String(type)}` })
+    }
+    if (defaultAgent !== undefined && defaultAgent !== null && typeof defaultAgent !== 'string') {
+      return res.status(400).json({ error: 'defaultAgent must be a string' })
+    }
     const { createProjectDirectory } = await import('./utils/project-creator.js')
+    const { updateProject } = await import('./db/projects.js')
+    const { getProjectModeOptions } = await import('./plugins/project-modes.js')
     const { loadGlobalConfig } = await import('../cli/config.js')
     const globalConfig = await loadGlobalConfig(config.mode ?? 'production', config.globalConfigPath)
+    const modeOptions = type ? getProjectModeOptions(type) : {}
+    const autoGitInit = (globalConfig.workspace?.autoGitInit ?? true) && modeOptions.initGit !== false
     try {
-      const project = await createProjectDirectory(name, workdir, globalConfig.workspace?.autoGitInit ?? true)
+      let project = await createProjectDirectory(name, workdir, autoGitInit)
+      const seededAgent = defaultAgent ?? modeOptions.defaultAgent
+      if (type || seededAgent) {
+        const updated = updateProject(project.id, {
+          ...(type ? { type: type as ProjectType } : {}),
+          ...(seededAgent ? { defaultAgent: seededAgent } : {}),
+        })
+        if (!updated) return res.status(500).json({ error: 'Project was created but could not be configured' })
+        project = updated
+      }
       res.status(201).json({ project })
     } catch (err) {
       const eaccError = err as Error & { code?: string; cause?: unknown }
@@ -551,6 +575,10 @@ export async function createServerHandle(config: Config): Promise<ServerHandle> 
   const sessionFavoriteRouter = express.Router()
   registerSessionFavoriteRoute(sessionFavoriteRouter, sessionManager)
   app.use('/api', sessionFavoriteRouter)
+
+  const sessionChatSettingsRouter = express.Router()
+  registerSessionChatSettingsRoute(sessionChatSettingsRouter, sessionManager)
+  app.use('/api', sessionChatSettingsRouter)
 
   // Project tasks: domain service + REST routes + agent tool wiring.
   //

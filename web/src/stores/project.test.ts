@@ -19,8 +19,8 @@ const project = {
   updatedAt: '2026-01-01',
 }
 
-function jsonResponse(data: unknown = {}): Response {
-  return { ok: true, json: () => Promise.resolve(data) } as Response
+function jsonResponse(data: unknown = {}, status = 200): Response {
+  return { ok: status < 400, status, json: () => Promise.resolve(data) } as Response
 }
 
 describe('project store mutations', () => {
@@ -47,10 +47,9 @@ describe('project store mutations', () => {
     expect(readProjects()?.projects[0]?.id).toBe('proj-a')
   })
 
-  it('createProject sets defaultAgent via a follow-up PUT when given one (GTD project choice)', async () => {
+  it('createProject sends defaultAgent with the creation request, in one call', async () => {
     mockedAuthFetch.mockImplementation(async (url: string, init?: RequestInit) => {
-      if (url === '/api/projects' && init?.method === 'POST') return jsonResponse({ project })
-      if (url === '/api/projects/proj-a' && init?.method === 'PUT') {
+      if (url === '/api/projects' && init?.method === 'POST') {
         return jsonResponse({ project: { ...project, defaultAgent: 'gtd-secretary' } })
       }
       return jsonResponse({ projects: [project] })
@@ -61,20 +60,18 @@ describe('project store mutations', () => {
     expect(mockedAuthFetch).toHaveBeenNthCalledWith(
       1,
       '/api/projects',
-      expect.objectContaining({ method: 'POST', body: JSON.stringify({ name: 'Alpha', workdir: '/repo/a' }) }),
+      expect.objectContaining({
+        method: 'POST',
+        body: JSON.stringify({ name: 'Alpha', workdir: '/repo/a', defaultAgent: 'gtd-secretary' }),
+      }),
     )
-    expect(mockedAuthFetch).toHaveBeenNthCalledWith(
-      2,
-      '/api/projects/proj-a',
-      expect.objectContaining({ method: 'PUT', body: JSON.stringify({ defaultAgent: 'gtd-secretary' }) }),
-    )
+    expect(mockedAuthFetch).not.toHaveBeenCalledWith('/api/projects/proj-a', expect.anything())
     expect(created).toMatchObject({ id: 'proj-a', defaultAgent: 'gtd-secretary' })
   })
 
-  it('createProject PUTs type and defaultAgent together for a GTD project', async () => {
+  it('createProject sends type and defaultAgent together for a GTD project', async () => {
     mockedAuthFetch.mockImplementation(async (url: string, init?: RequestInit) => {
-      if (url === '/api/projects' && init?.method === 'POST') return jsonResponse({ project })
-      if (url === '/api/projects/proj-a' && init?.method === 'PUT') {
+      if (url === '/api/projects' && init?.method === 'POST') {
         return jsonResponse({ project: { ...project, defaultAgent: 'gtd-secretary', type: 'gtd' } })
       }
       return jsonResponse({ projects: [project] })
@@ -83,14 +80,27 @@ describe('project store mutations', () => {
     const created = await useProjectStore.getState().createProject('Alpha', '/repo/a', 'gtd-secretary', 'gtd')
 
     expect(mockedAuthFetch).toHaveBeenNthCalledWith(
-      2,
-      '/api/projects/proj-a',
+      1,
+      '/api/projects',
       expect.objectContaining({
-        method: 'PUT',
-        body: JSON.stringify({ defaultAgent: 'gtd-secretary', type: 'gtd' }),
+        method: 'POST',
+        body: JSON.stringify({ name: 'Alpha', workdir: '/repo/a', type: 'gtd', defaultAgent: 'gtd-secretary' }),
       }),
     )
     expect(created).toMatchObject({ id: 'proj-a', type: 'gtd' })
+  })
+
+  it('createProject reports a server refusal instead of returning a plain project', async () => {
+    mockedAuthFetch.mockImplementation(async (url: string, init?: RequestInit) => {
+      if (url === '/api/projects' && init?.method === 'POST') {
+        return jsonResponse({ error: 'Invalid project type: writing' }, 400)
+      }
+      return jsonResponse({ projects: [] })
+    })
+
+    const result = await useProjectStore.getState().createProject('Alpha', '/repo/a', undefined, 'writing')
+
+    expect(result).toMatchObject({ error: { message: 'Invalid project type: writing' } })
   })
 
   it('createProject does not PUT when type is dev and no defaultAgent is given (plain dev project)', async () => {

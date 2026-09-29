@@ -251,6 +251,31 @@ describe('tool registries', () => {
     expect(toolNames).not.toContain('return_value')
   })
 
+  it('sends every definition to a top-level agent unless it opts into filterTools', () => {
+    const chatDef = {
+      metadata: { ...builderDef.metadata, id: 'chat-x', allowedTools: ['web_search'] },
+      prompt: 'p',
+    }
+    expect(getToolRegistryForAgent(chatDef).tools.map((t) => t.name)).toContain('run_command')
+
+    const filtered = getToolRegistryForAgent({ ...chatDef, metadata: { ...chatDef.metadata, filterTools: true } })
+    const names = filtered.tools.map((t) => t.name)
+    expect(names).toContain('web_search')
+    expect(names).not.toContain('run_command')
+    expect(names).not.toContain('write_file')
+    expect(names).not.toContain('return_value')
+  })
+
+  it('filterTools with no allowed tools offers only the always-allowed ones', () => {
+    const registry = getToolRegistryForAgent({
+      metadata: { ...builderDef.metadata, id: 'chat-none', allowedTools: [], filterTools: true },
+      prompt: 'p',
+    })
+    const names = registry.tools.map((t) => t.name)
+    expect(names).not.toContain('run_command')
+    expect(names).not.toContain('read_file')
+  })
+
   it('getToolRegistryForAgent filters out return_value even if in allowedTools', () => {
     const registry = getToolRegistryForAgent(builderWithReturnValueDef)
     const toolNames = registry.tools.map((t) => t.name)

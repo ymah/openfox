@@ -26,6 +26,8 @@ describe('Project REST API', () => {
       '/tmp/agent-default',
       '/tmp/agent-default-clear',
       '/tmp/delete-me',
+      '/tmp/atomic-project',
+      '/tmp/ghost-project-e2e',
     ]
     await Promise.all(dirs.map((d) => rm(d, { recursive: true, force: true }).catch(() => {})))
 
@@ -83,6 +85,33 @@ describe('Project REST API', () => {
       expect(data.project.workdir).toBe('/tmp/my-project')
       expect(data.project.id).toBeDefined()
       expect(data.project.createdAt).toBeDefined()
+    })
+
+    it('creates the project whole: type and defaultAgent in one call', async () => {
+      const response = await fetch(`${server.url}/api/projects`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: 'Atomic', workdir: '/tmp/atomic-project', type: 'dev', defaultAgent: 'builder' }),
+      })
+
+      expect(response.status).toBe(201)
+      const data: any = await response.json()
+      expect(data.project.type).toBe('dev')
+      expect(data.project.defaultAgent).toBe('builder')
+    })
+
+    it('rejects an unknown type with 400 and creates nothing on disk', async () => {
+      const { existsSync } = await import('node:fs')
+      const response = await fetch(`${server.url}/api/projects`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: 'Ghost', workdir: '/tmp/ghost-project-e2e', type: 'no-such-function' }),
+      })
+
+      expect(response.status).toBe(400)
+      const data: any = await response.json()
+      expect(data.error).toMatch(/Invalid project type/)
+      expect(existsSync('/tmp/ghost-project-e2e')).toBe(false)
     })
 
     it('returns 400 for missing required fields', async () => {

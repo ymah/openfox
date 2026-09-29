@@ -486,7 +486,14 @@ export async function injectContextDriftReminders(
         instructionContent: instructionContent ?? '',
         skills,
         buildNewSystemPrompt: () =>
-          buildTopLevelSystemPrompt(session.workdir, instructionContent || undefined, skills, subAgentDefs, modelName),
+          buildTopLevelSystemPrompt(
+            session.workdir,
+            instructionContent || undefined,
+            skills,
+            subAgentDefs,
+            modelName,
+            agentDef.metadata.basePrompt,
+          ),
       },
       append ?? createEventStoreAppend(sessionId),
     )
@@ -518,7 +525,7 @@ async function loadSessionContext(
   sessionId: string,
 ): Promise<{ instructionContent: string; skills: SkillMetadata[] }> {
   const session = sessionManager.requireSession(sessionId)
-  const { content: instructionContent } = await getAllInstructions(session.workdir, session.projectId)
+  const { content: instructionContent } = await getAllInstructions(session.workdir, session.projectId, sessionId)
   const runtimeConfig = getRuntimeConfig()
   const configDir = getGlobalConfigDir(runtimeConfig.mode ?? 'production')
   const skills = await getEnabledSkillMetadata(configDir, sessionManager.getProjectWorkdir(sessionId))
@@ -578,6 +585,7 @@ export async function buildCachedPrompt(
     skills,
     subAgentDefs,
     modelName,
+    agentDef.metadata.basePrompt,
   )
 
   const hash = computeDynamicContextHash(instructionContent, skills, toolFingerprint, modelName)

@@ -8,6 +8,7 @@
  * not through SessionManager.
  */
 
+import { getSessionChatSettings } from '../db/session-chat-settings.js'
 import type {
   Session,
   SessionSummary,
@@ -311,7 +312,8 @@ export class SessionManager {
     // budget on reasoning and return empty/garbled responses.
     const effort = this.providerManager.resolveModelEffort(providerId, model, reasoningEffort)
     const mode = effort === 'none' ? 'non-thinking' : 'thinking'
-    return this.providerManager.getModelSettings(providerId, model, mode)
+    const modelSettings = this.providerManager.getModelSettings(providerId, model, mode)
+    return sessionId ? applySessionSampling(modelSettings, sessionId) : modelSettings
   }
 
   getCurrentModelContext(sessionId?: string, agentId?: string): number {
@@ -2444,4 +2446,28 @@ export class SessionManager {
           : null,
     }
   }
+}
+
+type SamplingSettings = {
+  temperature?: number
+  topP?: number
+  topK?: number
+  maxTokens?: number
+  supportsVision?: boolean
+}
+
+/**
+ * A conversation's own sampling overrides win over the per-model settings, which
+ * win over the built-in profile. Only the fields the user actually set replace
+ * anything, so an untouched session behaves exactly as before.
+ */
+export function applySessionSampling<T extends SamplingSettings | undefined>(modelSettings: T, sessionId: string): T {
+  const { temperature, topP, maxTokens } = getSessionChatSettings(sessionId)
+  if (temperature === undefined && topP === undefined && maxTokens === undefined) return modelSettings
+  return {
+    ...(modelSettings ?? {}),
+    ...(temperature !== undefined ? { temperature } : {}),
+    ...(topP !== undefined ? { topP } : {}),
+    ...(maxTokens !== undefined ? { maxTokens } : {}),
+  } as T
 }

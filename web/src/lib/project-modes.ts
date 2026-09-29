@@ -29,6 +29,11 @@ export interface ProjectModeDef {
   description: { en: string; fr: string }
   tone: ProjectModeTone
   showsDevChrome: boolean
+  /**
+   * A conversational mode: the composer drops the controls that only make sense
+   * for an agent working on files (the permission-level selector).
+   */
+  chatChrome?: boolean
   /** Agent seeded as the project's defaultAgent at creation. */
   defaultAgent?: string
   /** Modes with a dedicated project home instead of the ordinary session list. */

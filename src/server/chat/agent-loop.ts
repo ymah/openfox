@@ -257,7 +257,7 @@ export async function runTopLevelAgentLoop(
       const runtimeConfig = getRuntimeConfig()
       const configDir = getGlobalConfigDir(runtimeConfig.mode ?? 'production')
       const skills = await getEnabledSkillMetadata(configDir, sessionManager.getProjectWorkdir(sessionId))
-      const { content: instructionContent } = await getAllInstructions(session.workdir, session.projectId)
+      const { content: instructionContent } = await getAllInstructions(session.workdir, session.projectId, sessionId)
       const toolRegistry = config.getToolRegistry()
 
       const assembledRequest = await config.assembleRequest({
@@ -311,7 +311,11 @@ export async function runTopLevelAgentLoop(
       await config.injectKickoff?.()
     }
 
-    const { content: instructionContent, files } = await getAllInstructions(session.workdir, session.projectId)
+    const { content: instructionContent, files } = await getAllInstructions(
+      session.workdir,
+      session.projectId,
+      sessionId,
+    )
     if (signal?.aborted) throw new Error('Aborted')
 
     const injectedFiles: InjectedFile[] = files.map((f) => ({

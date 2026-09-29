@@ -4,6 +4,8 @@
 
 ### Features
 
+- **Groundwork for conversational modes** — an agent can declare `basePrompt: assistant` (a general-purpose base prompt instead of the coding one) and `filterTools: true` (only its own tool definitions are sent). A project function can declare `initGit: false`. Each conversation can carry its own persona and sampling (temperature, top-p, max tokens) through `PUT /api/sessions/:id/chat-settings`, above the per-model settings.
+- **A project is created whole in one call** — `POST /api/projects` now accepts `type` and `defaultAgent` and rejects an unknown type before creating any folder. Creating a project of a disabled function used to end up, silently, as a plain dev project.
 - **OpenFox ships as a container** — a `Dockerfile`, `docker-compose.yml` and an `openfox` wrapper script; projects stay on the host, state lives in a volume, the port is published on loopback only. See `docs/DOCKER.md`. CI now builds the image on every pull request.
 
 ### Bug Fixes

@@ -10,9 +10,30 @@ import { CORE_PROJECT_TYPES } from '../../shared/types.js'
  * `type: 'writing'` would be rejected as invalid.
  */
 let pluginProjectTypes: string[] = []
+let pluginModeOptions = new Map<string, ProjectModeOptions>()
 
-export function setPluginProjectModes(types: string[]): void {
-  pluginProjectTypes = [...new Set(types)]
+/** Creation-time behaviour a plugin declares for its project function. */
+export interface ProjectModeOptions {
+  initGit?: boolean
+  defaultAgent?: string
+}
+
+export function setPluginProjectModes(modes: Array<string | ({ value: string } & ProjectModeOptions)>): void {
+  const normalized = modes.map((mode) => (typeof mode === 'string' ? { value: mode } : mode))
+  pluginProjectTypes = [...new Set(normalized.map((mode) => mode.value))]
+  pluginModeOptions = new Map(
+    normalized.map(({ value, initGit, defaultAgent }) => [
+      value,
+      {
+        ...(initGit !== undefined ? { initGit } : {}),
+        ...(defaultAgent !== undefined ? { defaultAgent } : {}),
+      },
+    ]),
+  )
+}
+
+export function getProjectModeOptions(type: string): ProjectModeOptions {
+  return pluginModeOptions.get(type) ?? {}
 }
 
 export function getKnownProjectTypes(): string[] {

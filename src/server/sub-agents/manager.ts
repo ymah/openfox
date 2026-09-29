@@ -297,7 +297,7 @@ export async function executeSubAgent(options: SubAgentExecutionOptions): Promis
 
   const effectiveWorkdir = sessionManager.getEffectiveWorkdir(session.id)
 
-  const { content: instructionContent } = await getAllInstructions(effectiveWorkdir, session.projectId)
+  const { content: instructionContent } = await getAllInstructions(effectiveWorkdir, session.projectId, session.id)
   const config = getRuntimeConfig()
   const configDir = getGlobalConfigDir(config.mode ?? 'production')
   const skills = await getEnabledSkillMetadata(configDir, session.workdir)

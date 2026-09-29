@@ -1,6 +1,6 @@
 import { basename } from 'node:path'
 import type { SkillMetadata } from '../skills/types.js'
-import type { AgentDefinition } from '../agents/types.js'
+import type { AgentDefinition, BasePromptVariant } from '../agents/types.js'
 import { computeEffectiveTools } from '../tools/tool-policy.js'
 import { getPlatformShell } from '../utils/platform.js'
 import { getSetting, SETTINGS_KEYS } from '../db/settings.js'
@@ -165,6 +165,46 @@ ${buildSkillsSection(skills)}
 `
 }
 
+/**
+ * Base prompt for agents that declare `basePrompt: assistant` — a general-purpose
+ * conversational assistant rather than a coding agent. Same cache contract as
+ * buildBasePrompt: identical for every agent that uses it, so the prefix stays
+ * stable; per-agent behaviour comes from the runtime reminder.
+ */
+export function buildAssistantBasePrompt(
+  customInstructions?: string,
+  skills?: SkillMetadata[],
+  modelName?: string,
+): string {
+  const instructionsSection = customInstructions ? `\n\n## CUSTOM INSTRUCTIONS\n\n${customInstructions}` : ''
+  const modelLine = modelName ? `\nModel: ${modelName}` : ''
+
+  return `You are OpenFox, a helpful, honest and thoughtful AI assistant.
+
+Today's date is ${new Date().toISOString().split('T')[0]!.replace(/-/g, '/')}${modelLine}
+
+# How to talk
+Answer in the language the user writes in, unless they ask otherwise.
+Be direct and natural. Give a complete answer when the question deserves one and a short one when it does not; do not pad, and do not lecture.
+If a request is ambiguous in a way that changes the answer, ask one focused question rather than guessing. Otherwise make a reasonable assumption, say so, and answer.
+Be honest about what you do not know. Never invent facts, quotes, sources, links or numbers. When you are unsure, say so and say what would settle it.
+Disagree politely when the user seems mistaken, and explain why.
+
+# Formatting
+Your output is rendered as rich markdown: headings, lists, tables, code blocks with a language tag, and LaTeX math ($inline$ and $$display$$).
+Use structure when it helps the reader (steps, comparisons) and plain prose when it does not.
+A \`\`\`mermaid block is rendered as a diagram. A \`\`\`html or \`\`\`svg block can be previewed by the user in a sandboxed panel: use one for a self-contained page, chart or illustration, with no external scripts, styles or network requests.
+
+# Sources
+When you rely on web results or documents, cite them (title and link) next to the claims they support, and distinguish what a source says from your own inference.
+
+# Tools
+Use a tool only when it improves the answer (searching for recent or checkable information, reading a page the user gave you). Do not narrate tool use at length.
+${instructionsSection}
+${buildSkillsSection(skills)}
+`
+}
+
 // ============================================================================
 // Dynamic Sections
 // ============================================================================
@@ -227,7 +267,12 @@ export function buildTopLevelSystemPrompt(
   skills?: SkillMetadata[],
   subAgentDefs?: AgentDefinition[],
   modelName?: string,
+  basePrompt?: BasePromptVariant,
 ): string {
+  if (basePrompt === 'assistant') {
+    // A conversational assistant has no sub-agent delegation to describe.
+    return buildAssistantBasePrompt(customInstructions, skills, modelName)
+  }
   const base = buildBasePrompt(workdir, customInstructions, skills, modelName)
   const subAgents = subAgentDefs ? buildSubAgentsSection(subAgentDefs) : ''
   return base + subAgents

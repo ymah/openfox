@@ -46,7 +46,12 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
       const res = await authFetch('/api/projects', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name, workdir }),
+        body: JSON.stringify({
+          name,
+          workdir,
+          ...(type && type !== 'dev' ? { type } : {}),
+          ...(defaultAgent ? { defaultAgent } : {}),
+        }),
       })
       if (!res.ok) {
         const data = await res.json().catch(() => ({}))
@@ -55,10 +60,10 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
         } as const
       }
       const data = await res.json()
-      let project = (data.project as Project) ?? null
-      if (project && (defaultAgent || (type && type !== 'dev'))) {
-        project = (await get().updateProject(project.id, { defaultAgent, type })) ?? project
-      }
+      // One call creates the project with its type and default agent, so a
+      // refusal (unknown type, plugin off) is reported instead of silently
+      // leaving a plain dev project behind.
+      const project = (data.project as Project) ?? null
       await projectsResource.refresh()
       return project
     } catch {

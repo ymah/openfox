@@ -5,6 +5,7 @@ import {
   buildSubAgentSystemPrompt,
   buildAgentReminder,
   buildSubAgentsSection,
+  buildAssistantBasePrompt,
 } from './prompts.js'
 import type { AgentDefinition } from '../agents/types.js'
 
@@ -295,5 +296,35 @@ describe('caveman thinking option (llm.cavemanThinking)', () => {
     expect(prompt).toContain('## THINKING STYLE')
     expect(prompt).toContain('caveman style')
     expect(prompt).toContain('Same meaning, far fewer tokens.')
+  })
+})
+
+describe('assistant base prompt (basePrompt: assistant)', () => {
+  it('is a conversational prompt with none of the coding-agent rules', () => {
+    const prompt = buildAssistantBasePrompt(undefined, undefined, 'm1')
+    expect(prompt).toContain('helpful, honest')
+    expect(prompt).toContain('Model: m1')
+    expect(prompt).not.toMatch(/lint|typecheck|Working directory|software engineering|NEVER commit/i)
+  })
+
+  it('carries custom instructions and skills like the coding prompt', () => {
+    const prompt = buildAssistantBasePrompt('Always answer in haiku', [
+      { id: 'memory', description: 'Remember things' },
+    ] as never)
+    expect(prompt).toContain('## CUSTOM INSTRUCTIONS')
+    expect(prompt).toContain('Always answer in haiku')
+    expect(prompt).toContain('**memory**')
+  })
+
+  it('is selected by buildTopLevelSystemPrompt and omits the sub-agent section', () => {
+    const chat = buildTopLevelSystemPrompt('/w', undefined, undefined, [mockVerifier], undefined, 'assistant')
+    expect(chat).toContain('helpful, honest')
+    expect(chat).not.toContain('AVAILABLE SUB-AGENTS')
+  })
+
+  it('leaves the coding prompt byte-for-byte unchanged when no variant is set', () => {
+    expect(buildTopLevelSystemPrompt('/w', undefined, undefined, [mockVerifier])).toBe(
+      buildBasePrompt('/w') + buildSubAgentsSection([mockVerifier]),
+    )
   })
 })

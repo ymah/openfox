@@ -424,7 +424,7 @@ export async function runAgentTurn(
 
   const session = options.sessionManager.requireSession(options.sessionId)
 
-  const { content: instructionContent } = await getAllInstructions(session.workdir, session.projectId)
+  const { content: instructionContent } = await getAllInstructions(session.workdir, session.projectId, session.id)
   const runtimeConfig = getRuntimeConfig()
   const configDir = getGlobalConfigDir(runtimeConfig.mode ?? 'production')
   const skills = await getEnabledSkillMetadata(configDir, options.sessionManager.getProjectWorkdir(options.sessionId))

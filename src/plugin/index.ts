@@ -158,6 +158,10 @@ export interface PluginAgent {
   /** Scopes the agent to a project function, e.g. 'dev' | 'gtd' | 'writing'. */
   category?: string
   results?: string[]
+  /** 'assistant' runs the agent under the general-purpose conversational base prompt. */
+  basePrompt?: 'assistant'
+  /** Send only this agent's allowed tool definitions instead of the full set. */
+  filterTools?: boolean
 }
 
 export interface PluginAgentSource {
@@ -188,6 +192,14 @@ export interface PluginWorkflowSource {
 export interface PluginProjectMode {
   value: string
   label: LocalizedString
+  /**
+   * Whether creating a project of this type runs `git init` in its folder.
+   * Defaults to true (the workspace setting decides); a function that is not
+   * about code, such as a chat space, sets false.
+   */
+  initGit?: boolean
+  /** Agent seeded as the project's default when the creator does not pick one. */
+  defaultAgent?: string
 }
 
 export interface PluginModelMetadata {

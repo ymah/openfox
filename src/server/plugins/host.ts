@@ -10,7 +10,7 @@ import { getBuiltInToolNames } from '../tools/index.js'
 import { setPluginCommands } from '../commands/registry.js'
 import { setPluginSkills } from '../skills/registry.js'
 import { setPluginAgents } from '../agents/registry.js'
-import type { AgentDefinition } from '../agents/types.js'
+import { isBasePromptVariant, type AgentDefinition } from '../agents/types.js'
 import type { WorkflowDefinition } from '../workflows/types.js'
 import { setPluginWorkflows, isValidWorkflowDefinition } from '../workflows/registry.js'
 import { setPluginProjectModes } from './project-modes.js'
@@ -337,7 +337,7 @@ export class PluginHost {
       this.registry.getOwnedCommands().map((entry) => toCommandDefinition(entry.command, entry.pluginId)),
     )
     setPluginModelMetadataProviders(this.registry.getModelMetadataProviders())
-    setPluginProjectModes(this.registry.getProjectModes().map((mode) => mode.value))
+    setPluginProjectModes(this.registry.getProjectModes())
     await Promise.all([this.refreshSkillSources(), this.refreshAgentSources(), this.refreshWorkflowSources()])
   }
 
@@ -375,6 +375,8 @@ export class PluginHost {
               ...(agent.color ? { color: agent.color } : {}),
               ...(agent.category ? { category: agent.category } : {}),
               ...(agent.results ? { results: agent.results } : {}),
+              ...(isBasePromptVariant(agent.basePrompt) ? { basePrompt: agent.basePrompt } : {}),
+              ...(agent.filterTools === true ? { filterTools: true } : {}),
             },
             prompt: agent.prompt,
           })
