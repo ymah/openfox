@@ -48,6 +48,14 @@ if [ ! -e "$CONFIG_DIR/config.json" ]; then
     | ${DROP:+$DROP} tee "$CONFIG_DIR/auth.json" >/dev/null
 fi
 
+# Web search without a key: `OPENFOX_SEARCH=searxng` points web_search at the
+# bundled SearXNG service. An explicit SEARXNG_URL always wins, and the variable
+# is left unset otherwise so the search engine chosen in Settings still applies.
+if [ "${OPENFOX_SEARCH:-}" = "searxng" ] && [ -z "${SEARXNG_URL:-}" ]; then
+  export SEARXNG_URL="http://searxng:8080"
+  log "web search: using the bundled SearXNG at $SEARXNG_URL"
+fi
+
 # AI providers running on the Docker host. Inside the container `localhost` is
 # the container itself, so a provider configured as http://localhost:1234 would
 # be unreachable. Forward the usual provider ports to the host instead, so the

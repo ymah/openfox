@@ -32,6 +32,9 @@ services:
       # 4-8 GB ceiling so the value below is the one that applies.
       OPENFOX_HEAP_INCREASED: '1'
       NODE_OPTIONS: '--max-old-space-size=${OPENFOX_HEAP_MB:-3072}'
+      # `searxng` points web_search at the bundled SearXNG service (profile
+      # `search` below). Empty leaves the search engine to Settings.
+      OPENFOX_SEARCH: '${OPENFOX_SEARCH:-}'
     mem_limit: ${OPENFOX_MEM_LIMIT:-4g}
 
     # Where new projects are created by default, and the one folder mounted below.
@@ -48,6 +51,34 @@ services:
     # Docker Desktop, needed explicitly on Linux.
     extra_hosts:
       - 'host.docker.internal:host-gateway'
+
+  # Web search without an API key: a private SearXNG meta-search instance, only
+  # reachable from the OpenFox container. Off by default; enable it with
+  #   COMPOSE_PROFILES=search   and   OPENFOX_SEARCH=searxng     (in .env)
+  # See docs/DOCKER.md.
+  searxng:
+    profiles: ['search']
+    image: searxng/searxng:latest
+    restart: unless-stopped
+    environment:
+      # The instance is not published, so this is not a credential; SearXNG just
+      # refuses to start with its placeholder default.
+      SEARXNG_SECRET: '${SEARXNG_SECRET:-openfox-internal-searxng-not-published}'
+    volumes:
+      - ./docker/searxng/settings.yml:/etc/searxng/settings.yml:ro
+    expose:
+      - '8080'
+    cap_drop:
+      - ALL
+    cap_add:
+      - CHOWN
+      - SETGID
+      - SETUID
+    logging:
+      driver: json-file
+      options:
+        max-size: '5m'
+        max-file: '2'
 
 volumes:
   openfox-data:

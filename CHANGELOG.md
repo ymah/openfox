@@ -4,6 +4,7 @@
 
 ### Features
 
+- **Web search without an API key (Docker)** — an optional private SearXNG service (`COMPOSE_PROFILES=search`, `OPENFOX_SEARCH=searxng`) that only the OpenFox container can reach, so `web_search` works with no Tavily account. See `docs/DOCKER.md`.
 - **Memory across conversations** — the chat assistants can remember durable facts about you (`memory_save`), look them up (`memory_search`, called at the start of a conversation) and forget them (`memory_forget`). A **Memory** page lists everything: edit it, forget one entry, wipe it all, or turn memory off so assistants neither read nor write it. Search is plain keyword scoring, no embedding model, and nothing is injected out of sight. Capped at 500 entries.
 - **Regenerate and versions in chat projects** — **Regenerate** under a reply keeps the current one and produces another as a new version; `‹ 2/3 ›` moves between them. Editing or replaying one of your messages does the same instead of overwriting the history. Versions are forked sessions, hidden from the conversation lists and reached through their original (`POST` and `GET /api/sessions/:id/versions`). Persona and sampling follow the conversation into each version.
 - **Persona and sampling per conversation** — in a Chat project the composer has a "Persona & sampling" popover: a free-form persona with ready-made presets (concise, explain simply, Socratic, formal, devil's advocate), temperature, top-p and max tokens. Empty fields use the model's own settings; a changed persona is applied to the running context immediately.

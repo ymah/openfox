@@ -108,6 +108,23 @@ mode is safer on the VM's own disk than on a shared filesystem.
   only listen on the container's loopback. On Docker Desktop this reaches services that
   are bound to `127.0.0.1` on the host, so LM Studio's default setting is enough.
 
+## Web search without a key
+
+`web_search` needs a search engine: Tavily (an API key) or SearXNG. The compose file bundles a private
+SearXNG so it works with no account and no key. Add two lines to `.env`, then `openfox rebuild`:
+
+```
+COMPOSE_PROFILES=search
+OPENFOX_SEARCH=searxng
+```
+
+- SearXNG is only reachable from the OpenFox container (`http://searxng:8080`); no port is published. Its
+  settings are in `docker/searxng/settings.yml` (JSON output enabled, rate limiter off).
+- `OPENFOX_SEARCH=searxng` sets `SEARXNG_URL` for OpenFox unless you already set one, and leaves it unset
+  otherwise so an engine chosen in Settings → Search still applies. A Tavily key, if configured, wins.
+- SearXNG queries public search engines on your behalf; results depend on what they return and may be
+  rate-limited by them.
+
 ## What the agent can and cannot use
 
 The agent runs shell commands **inside the container**, so it only has what the image

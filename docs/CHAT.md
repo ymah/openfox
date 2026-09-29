@@ -37,6 +37,12 @@ Type `/` in a conversation to launch one.
 - **Décider** — clarify, options, weighted criteria, matrix, recommendation and risks.
 - **Apprendre un sujet** — diagnosis, learning plan, first lesson, quiz.
 
+## Web search
+
+The Assistant, Researcher and Tutor use `web_search` and `web_fetch`. In Docker, a private SearXNG can provide
+the search with no API key — see `docs/DOCKER.md` ("Web search without a key"). Without any engine configured,
+`web_search` says so instead of failing obscurely.
+
 ## Memory
 
 The Assistant, Researcher and Tutor share a memory that spans every chat project. They read it with

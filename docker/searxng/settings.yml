@@ -1,0 +1,19 @@
+# SearXNG for OpenFox's web_search tool — see docs/DOCKER.md ("Web search without a key").
+# The instance is only reachable from the OpenFox container (no published port).
+use_default_settings: true
+
+server:
+  # Nothing outside the compose network can reach this instance, so the rate
+  # limiter (built for public instances) and the image proxy only get in the way.
+  limiter: false
+  image_proxy: false
+  # Overridden by the SEARXNG_SECRET environment variable.
+  secret_key: 'replaced-by-SEARXNG_SECRET'
+
+search:
+  # OpenFox asks for JSON; SearXNG refuses that unless it is enabled here.
+  formats:
+    - html
+    - json
+  safe_search: 0
+  autocomplete: ''
