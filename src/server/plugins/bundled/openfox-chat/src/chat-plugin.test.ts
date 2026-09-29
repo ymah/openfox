@@ -66,13 +66,14 @@ describe('openfox-chat agents', () => {
 })
 
 describe('openfox-chat workflows', () => {
-  it('ships the seven default workflows', () => {
+  it('ships the eight default workflows', () => {
     expect(workflows.map((w) => w.metadata.id).sort()).toEqual([
       'chat-decide',
       'chat-deep-research',
       'chat-draft-critique',
       'chat-fact-check',
       'chat-learn',
+      'chat-memory-review',
       'chat-summarize',
       'chat-translate-check',
     ])

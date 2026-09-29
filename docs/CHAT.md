@@ -36,6 +36,7 @@ Type `/` in a conversation to launch one.
 - **Traduire avec contrôle** — translation, back-translation to catch drift, final version.
 - **Décider** — clarify, options, weighted criteria, matrix, recommendation and risks.
 - **Apprendre un sujet** — diagnosis, learning plan, first lesson, quiz.
+- **Bilan de la mémoire** — reviews what is remembered, proposes a cleanup (duplicates, outdated, contradictory, too sensitive) and applies it only after you approve.
 
 ## Searching conversations
 

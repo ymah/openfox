@@ -1,0 +1,79 @@
+{
+  "metadata": {
+    "id": "chat-memory-review",
+    "name": "Chat — Bilan de la mémoire",
+    "description": "Passe en revue ce que les assistants retiennent : repère doublons, souvenirs périmés ou contradictoires, propose un nettoyage et l'applique après ton accord.",
+    "version": "1.0.0",
+    "color": "#64748b",
+    "category": "chat"
+  },
+  "entryStep": "review",
+  "settings": {
+    "maxIterations": 10
+  },
+  "steps": [
+    {
+      "id": "review",
+      "name": "Passer en revue",
+      "type": "agent",
+      "phase": "plan",
+      "agentId": "chat-assistant",
+      "prompt": "Fais le bilan de ta mémoire. Appelle memory_search sans requête avec limit 20, puis relance-le avec quelques requêtes différentes pour être sûr d'avoir tout vu. Liste les souvenirs (id + texte). Repère : les doublons ou quasi-doublons, ceux qui sont périmés ou contredits par un autre, ceux qui sont trop vagues pour servir, et ceux qui contiennent une information sensible qui ne devrait pas être gardée. Propose une liste numérotée d'actions précises (oublier tel id, fusionner tels ids en une phrase, reformuler tel id) avec la raison de chacune. Ne modifie RIEN à ce stade. S'il n'y a rien à nettoyer, dis-le. Puis appelle step_done().",
+      "transitions": [
+        {
+          "when": {
+            "type": "always"
+          },
+          "goto": "approve"
+        }
+      ]
+    },
+    {
+      "id": "approve",
+      "name": "Valider le nettoyage",
+      "type": "user",
+      "phase": "waiting",
+      "transitions": [
+        {
+          "when": {
+            "type": "step_result",
+            "result": "Appliquer"
+          },
+          "goto": "apply"
+        },
+        {
+          "when": {
+            "type": "step_result",
+            "result": "Ignorer"
+          },
+          "goto": "$done"
+        },
+        {
+          "when": {
+            "type": "always"
+          },
+          "goto": "$done"
+        }
+      ]
+    },
+    {
+      "id": "apply",
+      "name": "Appliquer",
+      "type": "agent",
+      "phase": "build",
+      "agentId": "chat-assistant",
+      "prompt": "Applique exactement les actions validées de la liste précédente : memory_forget pour chaque souvenir à oublier, et pour une fusion ou une reformulation, memory_save de la nouvelle phrase PUIS memory_forget des anciens ids. Ne fais rien d'autre. Termine par un court récapitulatif de ce qui a été fait. Puis appelle step_done().",
+      "transitions": [
+        {
+          "when": {
+            "type": "always"
+          },
+          "goto": "$done"
+        }
+      ]
+    }
+  ],
+  "startCondition": {
+    "type": "always"
+  }
+}
