@@ -25,6 +25,12 @@ if [ "$(id -u)" = "0" ]; then
       [ -e "$dir/$f" ] && chown "$RUN_UID:$RUN_GID" "$dir/$f"
     done
   done
+  # Node's os.userInfo() (used by shells, git, tooling) fails with ENOENT
+  # "uv_os_get_passwd" when the uid has no /etc/passwd entry, and OPENFOX_UID is
+  # typically a host uid (501 on macOS) the image has never heard of. Register it.
+  if ! getent passwd "$RUN_UID" >/dev/null 2>&1; then
+    echo "openfox:x:$RUN_UID:$RUN_GID:OpenFox:/home/openfox:/bin/bash" >> /etc/passwd
+  fi
   DROP="setpriv --reuid=$RUN_UID --regid=$RUN_GID --clear-groups"
 fi
 
