@@ -157,6 +157,8 @@ function mergeSessionIntoSummary(
   session: import('@shared/types.js').Session,
 ): import('@shared/types.js').SessionSummary[] {
   const existingSession = sessions.find((candidate) => candidate.id === session.id)
+  // A regenerated version is reached through its original, never listed on its own.
+  if (!existingSession && session.parentSessionId) return sessions
   const messageCount = session.messageCount ?? 0
   const nextSummary: import('@shared/types.js').SessionSummary = existingSession
     ? {

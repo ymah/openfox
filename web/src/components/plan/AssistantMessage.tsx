@@ -20,6 +20,7 @@ import { formatTime } from '../../lib/format-stats'
 import { copyToClipboard } from '../../lib/clipboard.js'
 import { useContextMenu } from '../../hooks/useContextMenu'
 import { useMessageContextMenu } from '../../hooks/useMessageContextMenu'
+import { ChatMessageActions } from './ChatMessageActions'
 
 interface AssistantMessageProps {
   message: Message
@@ -378,6 +379,8 @@ export const AssistantMessage = memo(function AssistantMessage({
             </span>
           </div>
         )}
+
+        {sessionId && <ChatMessageActions message={message} sessionId={sessionId} />}
       </div>
 
       {contextMenu(contextMenuItems)}

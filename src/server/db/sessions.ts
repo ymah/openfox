@@ -369,6 +369,9 @@ export function getSessionMessageCount(id: string): number {
   }
 }
 
+/** Branch sessions (regenerated replies) are reached through their parent, not listed. */
+const HIDE_BRANCHES = 's.id NOT IN (SELECT session_id FROM session_branches)'
+
 export function listSessions(): SessionSummary[] {
   const db = getDatabase()
 
@@ -392,6 +395,7 @@ export function listSessions(): SessionSummary[] {
       s.provider_model,
       s.message_count
     FROM sessions s
+    WHERE ${HIDE_BRANCHES}
     ORDER BY s.is_favorite DESC, s.updated_at DESC
   `,
     )
@@ -422,7 +426,7 @@ function listSessionsPaged(
   offset: number,
 ): { sessions: SessionSummary[]; hasMore: boolean } {
   const db = getDatabase()
-  const where = projectId ? 'WHERE s.project_id = ?' : ''
+  const where = projectId ? `WHERE s.project_id = ? AND ${HIDE_BRANCHES}` : `WHERE ${HIDE_BRANCHES}`
 
   const rows = db
     .prepare(
@@ -486,6 +490,7 @@ export function listHomeSessions(limit = 20): SessionSummary[] {
       s.provider_model,
       s.message_count
     FROM sessions s
+    WHERE ${HIDE_BRANCHES}
   `
 
   const rows = db.prepare(`${select} ORDER BY s.updated_at DESC LIMIT ?`).all(limit) as SessionSummaryRow[]
@@ -495,7 +500,7 @@ export function listHomeSessions(limit = 20): SessionSummary[] {
   const pinned = db
     .prepare(
       `${select}
-       WHERE (s.is_running = 1 OR s.workflow_phase IN ('waiting', 'blocked'))
+       AND (s.is_running = 1 OR s.workflow_phase IN ('waiting', 'blocked'))
          AND s.id NOT IN (SELECT id FROM sessions ORDER BY updated_at DESC LIMIT ?)`,
     )
     .all(limit) as SessionSummaryRow[]

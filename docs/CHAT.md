@@ -37,6 +37,15 @@ Type `/` in a conversation to launch one.
 - **Décider** — clarify, options, weighted criteria, matrix, recommendation and risks.
 - **Apprendre un sujet** — diagnosis, learning plan, first lesson, quiz.
 
+## Regenerate and versions
+
+Under the last reply of a turn, **Regenerate** keeps the reply you have and produces another one; `‹ 2/3 ›`
+switches between them. Editing one of your messages (or replaying it) works the same way, so nothing is
+overwritten. A version is a session forked just before your message: it carries the same history, persona and
+sampling, is hidden from the conversation list, and is reached through its original. The controls appear where
+versions diverge, in both the original and the version; a version of a version is reached by stepping back
+to the session it came from. Other project types keep the classic behaviour (edit/replay truncates history).
+
 ## Rich rendering
 
 Available in every conversation, chat project or not:

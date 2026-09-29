@@ -111,6 +111,7 @@ export interface Session {
   workdir: string
   workspace?: string // Optional workspace path
   branch?: string // Persisted branch for this session
+  parentSessionId?: string // Set on a regenerated/edited version: the session it was branched from (hidden from lists)
   mode: SessionMode
   phase: SessionPhase // Current workflow phase
   isRunning: boolean // Is the agent actively working?

@@ -152,6 +152,23 @@ function runMigrations(db: Database.Database): void {
     )
   `)
 
+  // Regenerated / edited replies live in their own session, forked from the one
+  // they diverge from. This records the relationship: `parent_session_id` is the
+  // session it was forked from and `prev_message_id` the last message the two
+  // share (null when the branch starts at the very first message), which is what
+  // lets the UI show "< 2/3 >" under the reply. Branch sessions are hidden from
+  // the conversation lists; the cascade removes the row with either session.
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS session_branches (
+      session_id TEXT PRIMARY KEY,
+      parent_session_id TEXT NOT NULL,
+      prev_message_id TEXT,
+      created_at TEXT NOT NULL,
+      FOREIGN KEY (session_id) REFERENCES sessions(id) ON DELETE CASCADE,
+      FOREIGN KEY (parent_session_id) REFERENCES sessions(id) ON DELETE CASCADE
+    )
+  `)
+
   // Create notifications table for plugin-emitted in-app notifications
   db.exec(`
     CREATE TABLE IF NOT EXISTS notifications (

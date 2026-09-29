@@ -71,6 +71,7 @@ import { createNotificationRoutes } from './routes/notifications.js'
 import { pluginAssetToken } from './plugins/asset-auth.js'
 import { registerSessionFavoriteRoute } from './routes/session-favorite.js'
 import { registerSessionChatSettingsRoute } from './routes/session-chat-settings.js'
+import { registerSessionBranchRoutes } from './routes/session-branches.js'
 import { logger, setLogLevel } from './utils/logger.js'
 import { VERSION } from '../constants.js'
 import {
@@ -579,6 +580,10 @@ export async function createServerHandle(config: Config): Promise<ServerHandle> 
   const sessionChatSettingsRouter = express.Router()
   registerSessionChatSettingsRoute(sessionChatSettingsRouter, sessionManager)
   app.use('/api', sessionChatSettingsRouter)
+
+  const sessionBranchRouter = express.Router()
+  registerSessionBranchRoutes(sessionBranchRouter, { sessionManager, toClientSession })
+  app.use('/api', sessionBranchRouter)
 
   // Project tasks: domain service + REST routes + agent tool wiring.
   //

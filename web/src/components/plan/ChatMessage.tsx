@@ -19,6 +19,9 @@ import { shouldAutofocus } from '../../lib/device'
 import { useLocation } from 'wouter'
 import { useContextMenu } from '../../hooks/useContextMenu'
 import { useMessageContextMenu } from '../../hooks/useMessageContextMenu'
+import { useCurrentProject } from '../../hooks/useCurrentProject'
+import { getProjectMode } from '../../lib/project-modes'
+import { branchFromMessage } from '../../lib/branches'
 
 interface ChatMessageProps {
   message: Message
@@ -40,6 +43,9 @@ function UserMessage({ message, messageId, sessionId }: UserMessageProps) {
   const isSystemGenerated = message.isSystemGenerated
   const loadSession = useSessionStore((s) => s.loadSession)
   const [, navigate] = useLocation()
+  // In a chat project, replaying or editing a message keeps the original reply as
+  // another version (a branch) instead of overwriting the history.
+  const chatMode = getProjectMode(useCurrentProject()?.type).chatChrome === true
   const [hovered, setHovered] = useState(false)
   const [copied, setCopied] = useState(false)
   const [editing, setEditing] = useState(false)
@@ -90,6 +96,13 @@ function UserMessage({ message, messageId, sessionId }: UserMessageProps) {
     if (!sessionId || !messageId || pending) return
     setPending(true)
     setError(null)
+    if (chatMode) {
+      const result = await branchFromMessage(sessionId, messageId)
+      setPending(false)
+      if ('error' in result) setError(result.error)
+      else navigate(`/p/${result.session.projectId}/s/${result.session.id}`)
+      return
+    }
     const ok = await replayMessage(sessionId, messageId)
     setPending(false)
     if (ok) {
@@ -104,6 +117,20 @@ function UserMessage({ message, messageId, sessionId }: UserMessageProps) {
     if (!sessionId || !messageId || !editContent.trim() || pending) return
     setPending(true)
     setError(null)
+    if (chatMode) {
+      const result = await branchFromMessage(sessionId, messageId, {
+        content: editContent,
+        attachments: editAttachments,
+      })
+      setPending(false)
+      if ('error' in result) {
+        setError(result.error)
+      } else {
+        setEditing(false)
+        navigate(`/p/${result.session.projectId}/s/${result.session.id}`)
+      }
+      return
+    }
     const ok = await replayMessage(sessionId, messageId, editContent, editAttachments)
     setPending(false)
     if (ok) {
