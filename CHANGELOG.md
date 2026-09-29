@@ -1,5 +1,18 @@
 # Changelog
 
+## 2.0.160-fox.4 - 2026-09-29
+
+### Features
+
+- **A plugin can own a whole project function** — including its pages. Bundled plugins may ship their own project modes and React pages, compiled into the app at build time, so the writing mode's Codex, manuscript and scene editor now live in `openfox-writing` with its agents and workflows.
+- **Disabling a project function removes all of it** — its pages, its agents, its workflows and the project type itself, instead of leaving a half-working mode behind.
+
+### Bug Fixes
+
+- **No more dev chrome on a non-dev project** — a project whose function was unavailable fell back to the dev screens, silently showing git/workspace/terminal controls; it now says the function is unavailable.
+- **Plugin file access is scoped to the project** — the working directory for a plugin call was taken from the request, so it is now resolved from the project on the server and the caller's value ignored.
+- **Two plugins can declare the same RPC method name** without the second overwriting the first.
+
 ## 2.0.160-fox.3 - 2026-09-28
 
 ### Enhancements
