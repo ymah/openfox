@@ -1,0 +1,106 @@
+{
+  "metadata": {
+    "id": "chat-learn",
+    "name": "Chat — Apprendre un sujet",
+    "description": "Diagnostic rapide, plan de progression adapté, première leçon puis mini-quiz avec correction.",
+    "version": "1.0.0",
+    "color": "#10b981",
+    "category": "chat",
+    "parameters": [
+      {
+        "id": "topic",
+        "label": "Sujet",
+        "description": "Ce que tu veux apprendre",
+        "position": 0,
+        "required": true
+      },
+      {
+        "id": "level",
+        "label": "Niveau",
+        "description": "débutant, intermédiaire ou avancé (défaut : à déterminer)",
+        "position": 1,
+        "required": false
+      },
+      {
+        "id": "duration",
+        "label": "Durée",
+        "description": "Temps disponible (ex. 30 min, 2 semaines)",
+        "position": 2,
+        "required": false
+      }
+    ]
+  },
+  "entryStep": "diagnose",
+  "settings": {
+    "maxIterations": 16
+  },
+  "steps": [
+    {
+      "id": "diagnose",
+      "name": "Diagnostic",
+      "type": "agent",
+      "phase": "plan",
+      "agentId": "chat-tutor",
+      "prompt": "Sujet : {{topic}}\nNiveau annoncé : {{level}}\nTemps disponible : {{duration}}\n\nPose 2 ou 3 questions courtes (avec ask_user) pour situer ce que l'apprenant sait déjà et son objectif. Résume ensuite son point de départ en une ligne. Puis appelle step_done().",
+      "transitions": [
+        {
+          "when": {
+            "type": "always"
+          },
+          "goto": "plan"
+        }
+      ]
+    },
+    {
+      "id": "plan",
+      "name": "Plan de progression",
+      "type": "agent",
+      "phase": "build",
+      "agentId": "chat-tutor",
+      "prompt": "Propose un plan de progression adapté au niveau et au temps disponible : 4 à 8 étapes, chacune avec son objectif et une façon de vérifier qu'elle est acquise. Sois réaliste sur la durée. Puis appelle step_done().",
+      "transitions": [
+        {
+          "when": {
+            "type": "always"
+          },
+          "goto": "lesson"
+        }
+      ]
+    },
+    {
+      "id": "lesson",
+      "name": "Première leçon",
+      "type": "agent",
+      "phase": "build",
+      "agentId": "chat-tutor",
+      "prompt": "Donne la première leçon : l'intuition, l'énoncé précis, un exemple résolu pas à pas, puis un petit exercice pour l'apprenant. Un seul concept à la fois. Puis appelle step_done().",
+      "transitions": [
+        {
+          "when": {
+            "type": "always"
+          },
+          "goto": "quiz"
+        }
+      ]
+    },
+    {
+      "id": "quiz",
+      "name": "Mini-quiz",
+      "type": "agent",
+      "phase": "done",
+      "agentId": "chat-tutor",
+      "prompt": "Pose 3 questions courtes sur la leçon, une à la fois avec ask_user, en t'adaptant à chaque réponse. À la fin, corrige, explique les erreurs par leur cause, et indique quoi revoir ou la prochaine étape du plan. Puis appelle step_done().",
+      "transitions": [
+        {
+          "when": {
+            "type": "always"
+          },
+          "goto": "$done"
+        }
+      ]
+    }
+  ],
+  "startCondition": {
+    "type": "always"
+  }
+}

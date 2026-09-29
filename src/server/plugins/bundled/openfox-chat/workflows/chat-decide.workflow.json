@@ -1,0 +1,99 @@
+{
+  "metadata": {
+    "id": "chat-decide",
+    "name": "Chat — Décider",
+    "description": "Aide à trancher : clarifie la décision, génère des options, pondère des critères, compare et recommande avec les risques.",
+    "version": "1.0.0",
+    "color": "#f97316",
+    "category": "chat",
+    "parameters": [
+      {
+        "id": "decision",
+        "label": "Décision",
+        "description": "La décision à prendre",
+        "position": 0,
+        "required": true
+      },
+      {
+        "id": "constraints",
+        "label": "Contraintes",
+        "description": "Budget, délais, préférences, ce qui est non négociable",
+        "position": 1,
+        "required": false
+      }
+    ]
+  },
+  "entryStep": "clarify",
+  "settings": {
+    "maxIterations": 12
+  },
+  "steps": [
+    {
+      "id": "clarify",
+      "name": "Clarifier",
+      "type": "agent",
+      "phase": "plan",
+      "agentId": "chat-assistant",
+      "prompt": "Décision : {{decision}}\nContraintes connues : {{constraints}}\n\nPose au plus 3 questions (avec ask_user) sur ce qui changerait vraiment le choix : objectif réel, contraintes dures, ce qui compte le plus. Si tout est déjà clair, passe directement à la suite en reformulant la décision en une ligne. Puis appelle step_done().",
+      "transitions": [
+        {
+          "when": {
+            "type": "always"
+          },
+          "goto": "options"
+        }
+      ]
+    },
+    {
+      "id": "options",
+      "name": "Options",
+      "type": "agent",
+      "phase": "build",
+      "agentId": "chat-brainstorm",
+      "prompt": "Génère les options réalistes, y compris « ne rien faire » et au moins une option moins évidente. Une ligne par option, sans les juger encore. Puis appelle step_done().",
+      "transitions": [
+        {
+          "when": {
+            "type": "always"
+          },
+          "goto": "matrix"
+        }
+      ]
+    },
+    {
+      "id": "matrix",
+      "name": "Critères et matrice",
+      "type": "agent",
+      "phase": "build",
+      "agentId": "chat-assistant",
+      "prompt": "Propose 4 à 6 critères adaptés à la décision, avec un poids chacun (justifie-le brièvement). Présente une matrice options × critères avec une note et un mot d'explication par case, puis le score pondéré. Signale les notes qui reposent sur une hypothèse. Puis appelle step_done().",
+      "transitions": [
+        {
+          "when": {
+            "type": "always"
+          },
+          "goto": "recommend"
+        }
+      ]
+    },
+    {
+      "id": "recommend",
+      "name": "Recommandation",
+      "type": "agent",
+      "phase": "done",
+      "agentId": "chat-assistant",
+      "prompt": "Recommande une option et dis pourquoi. Donne les 2 ou 3 principaux risques, comment les réduire, ce qui te ferait changer d'avis, et la première action concrète à faire. Reste honnête sur l'incertitude. Puis appelle step_done().",
+      "transitions": [
+        {
+          "when": {
+            "type": "always"
+          },
+          "goto": "$done"
+        }
+      ]
+    }
+  ],
+  "startCondition": {
+    "type": "always"
+  }
+}

@@ -1,0 +1,19 @@
+{
+  "name": "openfox-chat",
+  "version": "1.0.0",
+  "description": "General-purpose chat assistant project function: conversational agents, useful workflows and a chat home.",
+  "private": true,
+  "type": "module",
+  "main": "./src/index.js",
+  "openfox": {
+    "apiVersion": 2,
+    "entry": "./src/index.js",
+    "displayName": "Chat",
+    "description": "Adds a general-purpose AI chat function: conversation spaces, assistant agents (research, tutor, translator, editor, brainstorm) and ready-made workflows.",
+    "capabilities": [
+      "agents",
+      "workflows",
+      "ui"
+    ]
+  }
+}

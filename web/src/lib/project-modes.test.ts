@@ -2,10 +2,20 @@ import { describe, it, expect } from 'vitest'
 import { PROJECT_MODES, DEFAULT_PROJECT_TYPE, getProjectMode } from './project-modes'
 
 describe('PROJECT_MODES', () => {
-  it('includes dev, gtd, and writing, each with a unique value', () => {
+  it('includes dev, chat, gtd, and writing, each with a unique value', () => {
     const values = PROJECT_MODES.map((m) => m.value)
-    expect(values).toEqual(['dev', 'gtd', 'writing'])
+    expect(values).toEqual(['dev', 'chat', 'gtd', 'writing'])
     expect(new Set(values).size).toBe(values.length)
+  })
+
+  it('chat is a conversational mode: no dev chrome, chat composer, its own home', () => {
+    const chat = PROJECT_MODES.find((m) => m.value === 'chat')
+    expect(chat).toMatchObject({
+      showsDevChrome: false,
+      chatChrome: true,
+      hasCustomHome: true,
+      defaultAgent: 'chat-assistant',
+    })
   })
 
   it('defaults to dev', () => {

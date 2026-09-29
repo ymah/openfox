@@ -11,7 +11,7 @@ import { BUNDLED_PLUGIN_MODES } from './bundled-plugin-modes'
  * removes the function whole — its mode, its pages, its agents and its
  * workflows — instead of leaving a half-working project type behind.
  */
-export type ProjectModeTone = 'primary' | 'amber' | 'rose'
+export type ProjectModeTone = 'primary' | 'amber' | 'rose' | 'sky'
 
 /**
  * Tailwind needs to see class names verbatim in source, so a mode declares a
@@ -21,6 +21,7 @@ const TONE_CLASSES: Record<ProjectModeTone, string> = {
   primary: 'bg-accent-primary/20 text-accent-primary',
   amber: 'bg-amber-500/20 text-amber-500',
   rose: 'bg-rose-500/20 text-rose-500',
+  sky: 'bg-sky-500/20 text-sky-500',
 }
 
 export interface ProjectModeDef {

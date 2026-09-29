@@ -1,0 +1,90 @@
+{
+  "metadata": {
+    "id": "chat-translate-check",
+    "name": "Chat — Traduire avec contrôle",
+    "description": "Traduit, rétro-traduit pour repérer les écarts, puis livre une version finale avec les choix délicats.",
+    "version": "1.0.0",
+    "color": "#f59e0b",
+    "category": "chat",
+    "parameters": [
+      {
+        "id": "text",
+        "label": "Texte",
+        "description": "Le texte à traduire",
+        "position": 0,
+        "required": true
+      },
+      {
+        "id": "languages",
+        "label": "Langues",
+        "description": "ex. français → anglais (défaut : détecter et traduire vers le français)",
+        "position": 1,
+        "required": false
+      },
+      {
+        "id": "register",
+        "label": "Registre",
+        "description": "formel, neutre, familier, technique, littéraire (défaut : celui du texte)",
+        "position": 2,
+        "required": false
+      }
+    ]
+  },
+  "entryStep": "translate",
+  "settings": {
+    "maxIterations": 8
+  },
+  "steps": [
+    {
+      "id": "translate",
+      "name": "Traduire",
+      "type": "agent",
+      "phase": "build",
+      "agentId": "chat-translator",
+      "prompt": "Texte : {{text}}\nLangues : {{languages}}\nRegistre : {{register}}\n\nTraduis en respectant le sens, le ton et le registre. Conserve noms, chiffres, mise en forme et code. Donne la traduction seule. Puis appelle step_done().",
+      "transitions": [
+        {
+          "when": {
+            "type": "always"
+          },
+          "goto": "backcheck"
+        }
+      ]
+    },
+    {
+      "id": "backcheck",
+      "name": "Rétro-traduction",
+      "type": "agent",
+      "phase": "build",
+      "agentId": "chat-translator",
+      "prompt": "Sans regarder le texte d'origine, rétro-traduis ta traduction dans la langue source, puis compare avec l'original : liste chaque écart de sens, de nuance, de registre ou d'omission. S'il n'y en a pas, dis-le. Puis appelle step_done().",
+      "transitions": [
+        {
+          "when": {
+            "type": "always"
+          },
+          "goto": "final"
+        }
+      ]
+    },
+    {
+      "id": "final",
+      "name": "Version finale",
+      "type": "agent",
+      "phase": "done",
+      "agentId": "chat-translator",
+      "prompt": "Corrige la traduction d'après les écarts trouvés et donne la version finale, propre et prête à copier. Ajoute ensuite, seulement s'il y en a, la liste courte des choix délicats (expressions idiomatiques, mots ambigus, références culturelles) avec l'alternative possible. Puis appelle step_done().",
+      "transitions": [
+        {
+          "when": {
+            "type": "always"
+          },
+          "goto": "$done"
+        }
+      ]
+    }
+  ],
+  "startCondition": {
+    "type": "always"
+  }
+}

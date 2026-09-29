@@ -1,0 +1,111 @@
+{
+  "metadata": {
+    "id": "chat-draft-critique",
+    "name": "Chat — Rédiger puis critiquer",
+    "description": "Rédige un texte, le fait critiquer par le Relecteur, le révise, et propose un nouveau tour tant que tu le souhaites.",
+    "version": "1.0.0",
+    "color": "#ec4899",
+    "category": "chat",
+    "parameters": [
+      {
+        "id": "brief",
+        "label": "Consigne",
+        "description": "Ce qu'il faut écrire (sujet, destinataire, contraintes)",
+        "position": 0,
+        "required": true
+      },
+      {
+        "id": "tone",
+        "label": "Ton",
+        "description": "Le ton voulu (défaut : naturel et clair)",
+        "position": 1,
+        "required": false
+      }
+    ]
+  },
+  "entryStep": "draft",
+  "settings": {
+    "maxIterations": 16
+  },
+  "steps": [
+    {
+      "id": "draft",
+      "name": "Brouillon",
+      "type": "agent",
+      "phase": "build",
+      "agentId": "chat-assistant",
+      "prompt": "Consigne : {{brief}}\nTon : {{tone}} (si vide, naturel et clair).\n\nRédige un premier jet complet, prêt à être relu. Si un élément essentiel manque à la consigne, pose une question avec ask_user avant d'écrire. Puis appelle step_done().",
+      "transitions": [
+        {
+          "when": {
+            "type": "always"
+          },
+          "goto": "critique"
+        }
+      ]
+    },
+    {
+      "id": "critique",
+      "name": "Critique",
+      "type": "agent",
+      "phase": "build",
+      "agentId": "chat-editor",
+      "prompt": "Critique le dernier texte comme un relecteur exigeant : clarté, structure, rythme, ton, précision, passages faibles ou superflus. Donne une liste courte et priorisée de corrections concrètes (cite les passages). Ne réécris pas encore. Puis appelle step_done().",
+      "transitions": [
+        {
+          "when": {
+            "type": "always"
+          },
+          "goto": "revise"
+        }
+      ]
+    },
+    {
+      "id": "revise",
+      "name": "Révision",
+      "type": "agent",
+      "phase": "build",
+      "agentId": "chat-assistant",
+      "prompt": "Applique la critique : réécris le texte complet en tenant compte de chaque point pertinent (dis en une ligne si tu en écartes un, et pourquoi). Donne la nouvelle version, prête à copier. Puis appelle step_done().",
+      "transitions": [
+        {
+          "when": {
+            "type": "always"
+          },
+          "goto": "again"
+        }
+      ]
+    },
+    {
+      "id": "again",
+      "name": "Encore un tour ?",
+      "type": "user",
+      "phase": "waiting",
+      "transitions": [
+        {
+          "when": {
+            "type": "step_result",
+            "result": "Encore un tour"
+          },
+          "goto": "critique"
+        },
+        {
+          "when": {
+            "type": "step_result",
+            "result": "Terminer"
+          },
+          "goto": "$done"
+        },
+        {
+          "when": {
+            "type": "always"
+          },
+          "goto": "$done"
+        }
+      ]
+    }
+  ],
+  "startCondition": {
+    "type": "always"
+  }
+}

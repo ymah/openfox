@@ -1,0 +1,76 @@
+{
+  "metadata": {
+    "id": "chat-fact-check",
+    "name": "Chat — Vérifier des affirmations",
+    "description": "Extrait les affirmations vérifiables d'un texte et les confronte à des sources : confirmé, nuancé, infirmé ou introuvable.",
+    "version": "1.0.0",
+    "color": "#ef4444",
+    "category": "chat",
+    "parameters": [
+      {
+        "id": "text",
+        "label": "Texte ou URL",
+        "description": "Le texte à vérifier, ou l'adresse de la page",
+        "position": 0,
+        "required": true
+      }
+    ]
+  },
+  "entryStep": "extract",
+  "settings": {
+    "maxIterations": 12
+  },
+  "steps": [
+    {
+      "id": "extract",
+      "name": "Extraire les affirmations",
+      "type": "agent",
+      "phase": "plan",
+      "agentId": "chat-researcher",
+      "prompt": "Matériau à vérifier : {{text}}\n\nSi c'est une adresse, lis la page avec web_fetch. Extrais uniquement les affirmations factuelles vérifiables (chiffres, dates, attributions, faits scientifiques ou historiques), numérotées, en une phrase chacune. Ignore les opinions. Puis appelle step_done().",
+      "transitions": [
+        {
+          "when": {
+            "type": "always"
+          },
+          "goto": "check"
+        }
+      ]
+    },
+    {
+      "id": "check",
+      "name": "Vérifier chaque affirmation",
+      "type": "agent",
+      "phase": "build",
+      "agentId": "chat-researcher",
+      "prompt": "Pour chaque affirmation, cherche des sources indépendantes et fiables (privilégie les sources primaires) et lis-les avec web_fetch. Conclus par un verdict : Confirmé, Nuancé (partiellement vrai, contexte manquant), Infirmé ou Introuvable. Puis appelle step_done().",
+      "transitions": [
+        {
+          "when": {
+            "type": "always"
+          },
+          "goto": "table"
+        }
+      ]
+    },
+    {
+      "id": "table",
+      "name": "Tableau des verdicts",
+      "type": "agent",
+      "phase": "done",
+      "agentId": "chat-researcher",
+      "prompt": "Présente un tableau : n° · affirmation · verdict · explication en une phrase · source (titre + lien). Ajoute ensuite un court bilan (combien confirmées / nuancées / infirmées / introuvables) et signale les affirmations pour lesquelles ta confiance reste faible. Puis appelle step_done().",
+      "transitions": [
+        {
+          "when": {
+            "type": "always"
+          },
+          "goto": "$done"
+        }
+      ]
+    }
+  ],
+  "startCondition": {
+    "type": "always"
+  }
+}

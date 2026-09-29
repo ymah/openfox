@@ -1,0 +1,67 @@
+{
+  "metadata": {
+    "id": "chat-summarize",
+    "name": "Chat — Résumer un document",
+    "description": "Résume une page web ou un texte à trois niveaux (une phrase, points clés, détail) puis contrôle la fidélité.",
+    "version": "1.0.0",
+    "color": "#14b8a6",
+    "category": "chat",
+    "parameters": [
+      {
+        "id": "source",
+        "label": "Source",
+        "description": "Adresse (URL) ou texte collé à résumer",
+        "position": 0,
+        "required": true
+      },
+      {
+        "id": "length",
+        "label": "Longueur",
+        "description": "courte, moyenne ou longue (défaut : moyenne)",
+        "position": 1,
+        "required": false
+      }
+    ]
+  },
+  "entryStep": "summarize",
+  "settings": {
+    "maxIterations": 8
+  },
+  "steps": [
+    {
+      "id": "summarize",
+      "name": "Résumer",
+      "type": "agent",
+      "phase": "build",
+      "agentId": "chat-assistant",
+      "prompt": "Source à résumer : {{source}}\nLongueur souhaitée : {{length}} (si vide, moyenne).\n\nSi c'est une adresse, lis la page complète avec web_fetch. Produis trois niveaux : 1) Résumé en une phrase ; 2) Points clés (puces) ; 3) Résumé détaillé structuré, à la longueur demandée. N'ajoute rien qui ne soit pas dans la source. Puis appelle step_done().",
+      "transitions": [
+        {
+          "when": {
+            "type": "always"
+          },
+          "goto": "check"
+        }
+      ]
+    },
+    {
+      "id": "check",
+      "name": "Contrôler la fidélité",
+      "type": "agent",
+      "phase": "done",
+      "agentId": "chat-assistant",
+      "prompt": "Relis ton résumé face à la source : y a-t-il une affirmation absente de la source, un chiffre ou un nom altéré, une nuance perdue ? Corrige et donne la version finale des trois niveaux ; s'il n'y a rien à corriger, dis-le en une ligne. Puis appelle step_done().",
+      "transitions": [
+        {
+          "when": {
+            "type": "always"
+          },
+          "goto": "$done"
+        }
+      ]
+    }
+  ],
+  "startCondition": {
+    "type": "always"
+  }
+}

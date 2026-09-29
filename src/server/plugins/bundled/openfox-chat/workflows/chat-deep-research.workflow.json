@@ -1,0 +1,99 @@
+{
+  "metadata": {
+    "id": "chat-deep-research",
+    "name": "Chat — Recherche approfondie",
+    "description": "Décompose une question, lit de vraies sources, recoupe et rédige une synthèse citée avec niveau de confiance.",
+    "version": "1.0.0",
+    "color": "#6366f1",
+    "category": "chat",
+    "parameters": [
+      {
+        "id": "question",
+        "label": "Question",
+        "description": "La question à explorer",
+        "position": 0,
+        "required": true
+      },
+      {
+        "id": "depth",
+        "label": "Profondeur",
+        "description": "rapide, standard ou approfondie (défaut : standard)",
+        "position": 1,
+        "required": false
+      }
+    ]
+  },
+  "entryStep": "plan",
+  "settings": {
+    "maxIterations": 14
+  },
+  "steps": [
+    {
+      "id": "plan",
+      "name": "Cadrer",
+      "type": "agent",
+      "phase": "plan",
+      "agentId": "chat-researcher",
+      "prompt": "Question à explorer : {{question}}\nProfondeur demandée : {{depth}} (si vide, standard).\n\nReformule la question en une ligne, puis liste les sous-questions qui déterminent la réponse (2 à 3 en rapide, 4 à 6 en standard, 6 à 10 en approfondie). Pour chacune, indique quel type de source la tranchera. Ne cherche pas encore. Puis appelle step_done().",
+      "transitions": [
+        {
+          "when": {
+            "type": "always"
+          },
+          "goto": "research"
+        }
+      ]
+    },
+    {
+      "id": "research",
+      "name": "Chercher et lire",
+      "type": "agent",
+      "phase": "build",
+      "agentId": "chat-researcher",
+      "prompt": "Pour chaque sous-question du plan, lance plusieurs recherches formulées différemment, puis OUVRE les sources les plus fiables avec web_fetch et lis-les (pas seulement les extraits). Note pour chaque source : titre, lien, date et ce qu'elle établit. Signale les contradictions entre sources. Puis appelle step_done().",
+      "transitions": [
+        {
+          "when": {
+            "type": "always"
+          },
+          "goto": "report"
+        }
+      ]
+    },
+    {
+      "id": "report",
+      "name": "Synthèse citée",
+      "type": "agent",
+      "phase": "build",
+      "agentId": "chat-researcher",
+      "prompt": "Rédige la synthèse : la réponse d'abord, puis les preuves. Chaque affirmation non triviale porte une citation (titre + lien). Distingue ce que disent les sources de ton interprétation. Termine par ce que tu n'as pas pu établir et un niveau de confiance (élevé / moyen / faible). Puis appelle step_done().",
+      "transitions": [
+        {
+          "when": {
+            "type": "always"
+          },
+          "goto": "verify"
+        }
+      ]
+    },
+    {
+      "id": "verify",
+      "name": "Relecture critique",
+      "type": "agent",
+      "phase": "done",
+      "agentId": "chat-researcher",
+      "prompt": "Relis ta synthèse comme un relecteur sceptique : repère toute affirmation sans source, toute citation qui ne soutient pas vraiment la phrase, toute conclusion plus forte que les preuves. Corrige-les directement et donne la version finale corrigée, en signalant en une ligne ce que tu as modifié. Puis appelle step_done().",
+      "transitions": [
+        {
+          "when": {
+            "type": "always"
+          },
+          "goto": "$done"
+        }
+      ]
+    }
+  ],
+  "startCondition": {
+    "type": "always"
+  }
+}
