@@ -1,5 +1,6 @@
 import { useT } from '../../hooks/useT'
-import { PROJECT_MODES, modeClassName } from '../../lib/project-modes'
+import { modeClassName } from '../../lib/project-modes'
+import { useProjectModes } from '../../hooks/useProjectModes'
 import type { ProjectType } from '@shared/types.js'
 
 export type { ProjectType }
@@ -17,12 +18,13 @@ interface ProjectTypeToggleProps {
  */
 export function ProjectTypeToggle({ value, onChange }: ProjectTypeToggleProps) {
   const t = useT()
-  const activeMode = PROJECT_MODES.find((m) => m.value === value) ?? PROJECT_MODES[0]!
+  const modes = useProjectModes()
+  const activeMode = modes.find((m) => m.value === value) ?? modes[0]!
 
   return (
     <div>
       <div className="flex items-center gap-1 p-0.5 rounded bg-bg-tertiary/50 w-fit">
-        {PROJECT_MODES.map((mode) => (
+        {modes.map((mode) => (
           <button
             key={mode.value}
             type="button"

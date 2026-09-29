@@ -4,7 +4,17 @@ import { cleanup, render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { ProjectTypeToggle } from './ProjectTypeToggle'
 
+let enabledPlugins = ['openfox-gtd', 'openfox-writing']
+vi.mock('../../hooks/usePlugins', () => ({
+  usePlugins: () => ({
+    plugins: enabledPlugins.map((id) => ({ id, enabled: true })),
+    loading: false,
+    error: null,
+  }),
+}))
+
 afterEach(() => {
+  enabledPlugins = ['openfox-gtd', 'openfox-writing']
   cleanup()
 })
 
@@ -25,5 +35,12 @@ describe('ProjectTypeToggle', () => {
   it('shows GTD-specific help text when gtd is selected', () => {
     render(<ProjectTypeToggle value="gtd" onChange={vi.fn()} />)
     expect(screen.getByText(/This folder becomes a GTD vault/)).toBeTruthy()
+  })
+
+  it('offers only the functions whose plugin is enabled', () => {
+    enabledPlugins = ['openfox-writing']
+    render(<ProjectTypeToggle value="dev" onChange={vi.fn()} />)
+    expect(screen.queryByText('GTD')).toBeNull()
+    expect(screen.getByText('Dev')).toBeTruthy()
   })
 })

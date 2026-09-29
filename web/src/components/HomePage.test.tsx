@@ -89,6 +89,15 @@ const projectFixtures: {
   },
 ]
 
+let enabledPlugins = ['openfox-gtd', 'openfox-writing']
+vi.mock('../hooks/usePlugins', () => ({
+  usePlugins: () => ({
+    plugins: enabledPlugins.map((id) => ({ id, enabled: true })),
+    loading: false,
+    error: null,
+  }),
+}))
+
 vi.mock('../hooks/useProjects', () => ({
   useProjects: () => ({ projects: projectFixtures, refresh: vi.fn(), loading: false }),
 }))
@@ -730,6 +739,7 @@ describe('HomePage', () => {
 
 describe('HomePage — project mode tabs', () => {
   afterEach(() => {
+    enabledPlugins = ['openfox-gtd', 'openfox-writing']
     try {
       localStorage.clear()
     } catch {
@@ -746,6 +756,24 @@ describe('HomePage — project mode tabs', () => {
     expect(container.textContent).toContain('Project Alpha')
     expect(container.textContent).not.toContain('Project Beta')
     expect(container.textContent).toContain('Project Gamma')
+  })
+
+  it('hides the tab of a disabled plugin and gathers its projects under Unavailable', async () => {
+    enabledPlugins = ['openfox-writing']
+    projectFixtures[1]!.type = 'gtd' // Project Beta
+    const { HomePage } = await import('./HomePage')
+    const container = render(<HomePage />)
+
+    const tabs = Array.from(container.querySelectorAll('[role="tab"]')).map((b) => b.textContent)
+    expect(tabs).not.toContain('GTD')
+    expect(tabs).toContain('Unavailable')
+    expect(container.textContent).not.toContain('Project Beta')
+
+    const orphanTab = Array.from(container.querySelectorAll('[role="tab"]')).find(
+      (b) => b.textContent === 'Unavailable',
+    )
+    await userEvent.click(orphanTab!)
+    expect(container.textContent).toContain('Project Beta')
   })
 
   it('switching to the GTD tab shows only gtd-typed projects', async () => {

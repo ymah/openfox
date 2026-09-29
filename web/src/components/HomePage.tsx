@@ -12,7 +12,8 @@ import { OpenProjectModal } from './CreateSessionModal'
 import { DeleteProjectConfirmationModal } from './DeleteProjectConfirmationModal'
 import { formatRelativeDate } from '../lib/format-date'
 import { sortProjectsStarredFirst } from '../lib/projects'
-import { PROJECT_MODES, DEFAULT_PROJECT_TYPE, modeClassName } from '../lib/project-modes'
+import { PROJECT_MODES, DEFAULT_PROJECT_TYPE, modeClassName, type ProjectModeDef } from '../lib/project-modes'
+import { useProjectModes } from '../hooks/useProjectModes'
 import type { ProjectType } from '@shared/types.js'
 import {
   SearchIcon,
@@ -34,6 +35,17 @@ import type { Translation } from '@shared/i18n/index.js'
 import type { SessionSummary, ProjectTaskCounts } from '@shared/types.js'
 
 const HOME_SESSION_LIMIT = 20
+const UNAVAILABLE_TAB = '__unavailable__'
+const UNAVAILABLE_MODE: ProjectModeDef = {
+  value: UNAVAILABLE_TAB,
+  label: { en: 'Unavailable', fr: 'Indisponible' },
+  description: {
+    en: 'Projects whose function is disabled — enable its plugin in Settings → Plugins, or delete them here.',
+    fr: 'Projets dont la fonction est désactivée — activez son plugin dans Réglages → Plugins, ou supprimez-les ici.',
+  },
+  tone: 'amber',
+  showsDevChrome: false,
+}
 const ACTIVE_MODE_STORAGE_KEY = 'openfox.home.activeProjectMode'
 
 function readStoredActiveMode(): ProjectType {
@@ -159,16 +171,16 @@ export function HomePage() {
   const [searchQuery, setSearchQuery] = useState('')
   const [debouncedQuery, setDebouncedQuery] = useState('')
   const [tasksProjectId, setTasksProjectId] = useState<string | null>(null)
-  const [activeMode, setActiveMode] = useState<ProjectType>(readStoredActiveMode)
+  const [selectedMode, setActiveMode] = useState<ProjectType>(readStoredActiveMode)
   const searchRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
     try {
-      localStorage.setItem(ACTIVE_MODE_STORAGE_KEY, activeMode)
+      localStorage.setItem(ACTIVE_MODE_STORAGE_KEY, selectedMode)
     } catch {
       // ignore (private browsing / storage disabled)
     }
-  }, [activeMode])
+  }, [selectedMode])
 
   // The home page shows only the 20 most recent sessions; the full corpus
   // (with prompts) is loaded on demand when the user searches.
@@ -176,6 +188,19 @@ export function HomePage() {
   const hasFullCorpus = useSessionStore((state) => state.searchSessions !== null)
   const sessionsWithPendingConfirmations = useSessionStore((state) => state.sessionsWithPendingConfirmations)
   const { projects, loading } = useProjects()
+
+  // Tabs follow the plugins that are enabled. A project whose function is
+  // switched off would otherwise vanish with its tab and could no longer be
+  // deleted, so those gather under an "Unavailable" tab that only exists while
+  // there is one.
+  const availableModes = useProjectModes()
+  const tabOf = (type: ProjectType | undefined): ProjectType => {
+    const resolved = type ?? DEFAULT_PROJECT_TYPE
+    return availableModes.some((m) => m.value === resolved) ? resolved : UNAVAILABLE_TAB
+  }
+  const hasOrphans = projects.some((p) => tabOf(p.type) === UNAVAILABLE_TAB)
+  const tabs = hasOrphans ? [...availableModes, UNAVAILABLE_MODE] : availableModes
+  const activeMode = tabs.some((m) => m.value === selectedMode) ? selectedMode : DEFAULT_PROJECT_TYPE
   const listHomeSessions = useSessionStore((state) => state.listHomeSessions)
   const ensureFullSessionList = useSessionStore((state) => state.ensureFullSessionList)
   const deleteProject = useProjectStore((state) => state.deleteProject)
@@ -219,7 +244,7 @@ export function HomePage() {
       const project = projectById.get(s.projectId)
       // Stay within the active mode tab — search must not leak sessions from
       // the other function's projects into this view.
-      if ((project?.type ?? DEFAULT_PROJECT_TYPE) !== activeMode) return false
+      if (tabOf(project?.type) !== activeMode) return false
       const projectName = project?.name ?? ''
       const title = s.title ?? ''
       const prompts = s.recentUserPrompts?.map((p) => p.content) ?? []
@@ -269,7 +294,7 @@ export function HomePage() {
   // defensively, scope to the active mode tab, and cap at the homepage budget.
   const recentSessions = useMemo(() => {
     return [...sessions]
-      .filter((s) => (projectById.get(s.projectId)?.type ?? DEFAULT_PROJECT_TYPE) === activeMode)
+      .filter((s) => tabOf(projectById.get(s.projectId)?.type) === activeMode)
       .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())
       .slice(0, HOME_SESSION_LIMIT)
   }, [sessions, projectById, activeMode])
@@ -289,7 +314,7 @@ export function HomePage() {
   // alphabetical within each group. Scoped to the active mode tab — the root
   // of the dev/GTD "tree": each mode only ever sees its own projects here.
   const sortedProjects = useMemo(
-    () => sortProjectsStarredFirst(projects.filter((p) => (p.type ?? DEFAULT_PROJECT_TYPE) === activeMode)),
+    () => sortProjectsStarredFirst(projects.filter((p) => tabOf(p.type) === activeMode)),
     [projects, activeMode],
   )
 
@@ -345,7 +370,7 @@ export function HomePage() {
           aria-label={t({ en: 'Project function', fr: 'Fonction du projet' })}
           className="mb-6 md:mb-8 flex items-center gap-1 p-1 rounded-lg bg-bg-secondary border border-border w-fit"
         >
-          {PROJECT_MODES.map((mode) => (
+          {tabs.map((mode) => (
             <button
               key={mode.value}
               type="button"
