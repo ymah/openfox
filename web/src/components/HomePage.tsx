@@ -14,6 +14,7 @@ import { formatRelativeDate } from '../lib/format-date'
 import { sortProjectsStarredFirst } from '../lib/projects'
 import { PROJECT_MODES, DEFAULT_PROJECT_TYPE, modeClassName, type ProjectModeDef } from '../lib/project-modes'
 import { useProjectModes } from '../hooks/useProjectModes'
+import { MessageSearchResults } from './MessageSearchResults'
 import type { ProjectType } from '@shared/types.js'
 import {
   SearchIcon,
@@ -170,6 +171,7 @@ export function HomePage() {
   const [projectToDelete, setProjectToDelete] = useState<{ id: string; name: string } | null>(null)
   const [searchQuery, setSearchQuery] = useState('')
   const [debouncedQuery, setDebouncedQuery] = useState('')
+  const [contentHitCount, setContentHitCount] = useState(0)
   const [tasksProjectId, setTasksProjectId] = useState<string | null>(null)
   const [selectedMode, setActiveMode] = useState<ProjectType>(readStoredActiveMode)
   const searchRef = useRef<HTMLInputElement>(null)
@@ -336,7 +338,7 @@ export function HomePage() {
   }
 
   const isSearching = debouncedQuery.length > 0
-  const hasNoResults = isSearching && matchCount === 0
+  const hasNoResults = isSearching && matchCount === 0 && contentHitCount === 0
 
   return (
     <ScrollArea className="flex-1 flex flex-col bg-primary">
@@ -446,7 +448,7 @@ export function HomePage() {
                 })}
               </p>
             </div>
-          ) : visibleSessions.length > 0 ? (
+          ) : isSearching && matchCount === 0 ? null : visibleSessions.length > 0 ? (
             <div className="bg-bg-secondary border border-border rounded-lg overflow-hidden divide-y divide-border">
               {visibleSessions.map((session) => {
                 const project = projectById.get(session.projectId)
@@ -522,6 +524,13 @@ export function HomePage() {
                 fr: 'Aucune session pour le moment. Commencez-en une depuis un projet ci-dessous.',
               })}
             </div>
+          )}
+          {isSearching && (
+            <MessageSearchResults
+              query={debouncedQuery}
+              include={(projectId) => tabOf(projectById.get(projectId)?.type) === activeMode}
+              onCount={setContentHitCount}
+            />
           )}
         </div>
 

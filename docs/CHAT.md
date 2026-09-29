@@ -37,6 +37,15 @@ Type `/` in a conversation to launch one.
 - **Décider** — clarify, options, weighted criteria, matrix, recommendation and risks.
 - **Apprendre un sujet** — diagnosis, learning plan, first lesson, quiz.
 
+## Searching conversations
+
+The home page search looks at titles, project names and your recent prompts, and also — under **In
+conversation text** — at the words of every message, yours and the assistants' (not tool output, thinking or
+system prompts). It ignores accents and case and matches the start of words (`lyo` finds `Lyon`). The index is
+derived data: it is updated as you chat, rebuilt for a session when its history is rewritten (edit, truncate,
+fork, import), removed with the conversation, and built once in the background for conversations that predate
+it. Regenerated versions are not listed separately. `GET /api/search/messages?q=…&projectId=…`.
+
 ## Web search
 
 The Assistant, Researcher and Tutor use `web_search` and `web_fetch`. In Docker, a private SearXNG can provide

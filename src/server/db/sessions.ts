@@ -5,6 +5,7 @@
  * is stored in the events table and derived via EventStore folding.
  */
 
+import { removeSessionFromSearch } from './message-search.js'
 import type { Session, SessionSummary, SessionMode, SessionPhase } from '../../shared/types.js'
 import { getDatabase } from './index.js'
 import { resolveDefaultAgentId } from '../agents/registry.js'
@@ -535,6 +536,7 @@ export function updateSessionBranch(id: string, branch: string): void {
 
 export function deleteSession(id: string): void {
   const db = getDatabase()
+  removeSessionFromSearch(db, id)
   db.prepare('DELETE FROM sessions WHERE id = ?').run(id)
 }
 

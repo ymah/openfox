@@ -1,3 +1,4 @@
+import { createMessageSearchTable } from './message-search.js'
 import Database from 'better-sqlite3'
 import type { Config } from '../config.js'
 import { logger } from '../utils/logger.js'
@@ -168,6 +169,9 @@ function runMigrations(db: Database.Database): void {
       FOREIGN KEY (parent_session_id) REFERENCES sessions(id) ON DELETE CASCADE
     )
   `)
+
+  // Full-text index of what was said in conversations (derived data).
+  createMessageSearchTable(db)
 
   // Create notifications table for plugin-emitted in-app notifications
   db.exec(`

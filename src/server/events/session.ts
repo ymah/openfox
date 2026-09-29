@@ -18,6 +18,8 @@
  */
 
 import { updateSessionMessageCount } from '../db/sessions.js'
+import { getDatabase } from '../db/index.js'
+import { reindexSession } from '../db/message-search.js'
 import type {
   SessionMode,
   SessionPhase,
@@ -820,6 +822,8 @@ export function truncateSessionMessages(sessionId: string, messageIndex: number)
 
   const removed = messages.length - lastKept
   updateSessionMessageCount(sessionId, -removed)
+  // The search index still holds the removed messages.
+  reindexSession(getDatabase(), sessionId)
 }
 
 // ============================================================================

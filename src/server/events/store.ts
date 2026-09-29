@@ -14,6 +14,7 @@
  * - Snapshots enable efficient replay (skip to snapshot, replay from there)
  */
 
+import { indexEventForSearch, reindexSession } from '../db/message-search.js'
 import type Database from 'better-sqlite3'
 import { existsSync, statSync, unlinkSync } from 'node:fs'
 import type { TurnEvent, StoredEvent, SessionSnapshot, SnapshotMessage } from './types.js'
@@ -257,6 +258,7 @@ export class EventStore {
     }
 
     this.invalidateSessionCache(sessionId)
+    indexEventForSearch(this.db, sessionId, event)
 
     const stored: StoredEvent = {
       seq,
@@ -310,6 +312,7 @@ export class EventStore {
         transaction()
 
         this.invalidateSessionCache(sessionId)
+        for (const event of events) indexEventForSearch(this.db, sessionId, event)
 
         // Notify after transaction commits
         for (const stored of results) {
@@ -347,6 +350,7 @@ export class EventStore {
     transaction()
 
     this.invalidateSessionCache(sessionId)
+    reindexSession(this.db, sessionId)
 
     const stored: StoredEvent[] = events.map((event) => ({ ...event, sessionId }))
     for (const event of stored) {

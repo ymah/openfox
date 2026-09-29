@@ -11,6 +11,7 @@ import { isKnownProjectType } from './plugins/project-modes.js'
 import type { ServerHandle } from './context.js'
 import type { VisionBackend } from './llm/vision-fallback.js'
 import { initDatabase } from './db/index.js'
+import { backfillMessageSearch } from './db/message-search.js'
 import { getProject, deleteProject } from './db/projects.js'
 import { initEventStore, getEventStore, combineEventsWithSnapshot } from './events/index.js'
 import { buildMessagesFromStoredEvents } from './events/folding.js'
@@ -72,6 +73,7 @@ import { pluginAssetToken } from './plugins/asset-auth.js'
 import { registerSessionFavoriteRoute } from './routes/session-favorite.js'
 import { registerSessionChatSettingsRoute } from './routes/session-chat-settings.js'
 import { registerSessionBranchRoutes } from './routes/session-branches.js'
+import { registerMessageSearchRoute } from './routes/message-search.js'
 import { logger, setLogLevel } from './utils/logger.js'
 import { VERSION } from '../constants.js'
 import {
@@ -119,6 +121,10 @@ export async function createServerHandle(config: Config): Promise<ServerHandle> 
 
   // Initialize event store
   initEventStore(db)
+
+  // Index conversations that predate full-text search, in the background: it
+  // yields between sessions, and search simply returns what is indexed so far.
+  void backfillMessageSearch(db)
 
   // Deferred broadcast for the project-tasks service. The tasks router must be
   // mounted before the Vite middleware (dev mode), but the WebSocket server
@@ -584,6 +590,10 @@ export async function createServerHandle(config: Config): Promise<ServerHandle> 
   const sessionBranchRouter = express.Router()
   registerSessionBranchRoutes(sessionBranchRouter, { sessionManager, toClientSession })
   app.use('/api', sessionBranchRouter)
+
+  const messageSearchRouter = express.Router()
+  registerMessageSearchRoute(messageSearchRouter)
+  app.use('/api', messageSearchRouter)
 
   // Project tasks: domain service + REST routes + agent tool wiring.
   //
