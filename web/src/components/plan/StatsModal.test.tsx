@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, fireEvent, waitFor } from '@testing-library/react'
+import { render, screen, fireEvent, waitFor, cleanup } from '@testing-library/react'
 import { StatsModal } from './StatsModal'
 import { computeSessionStatsSummary } from '@shared/stats.js'
 import { authFetch } from '../../lib/api'
@@ -49,6 +49,7 @@ function summaryFor(count: number): SessionStatsSummary {
 }
 
 beforeEach(() => {
+  cleanup()
   authFetchMock.mockReset()
 })
 
@@ -92,6 +93,17 @@ describe('StatsModal', () => {
     // Re-open with the same session keeps the cached detail — no second stats fetch.
     rerender(<StatsModal isOpen onClose={() => {}} summary={summary} sessionId="s1" />)
     expect(authFetchMock.mock.calls.filter(([url]) => url === '/api/sessions/s1/stats')).toHaveLength(1)
+  })
+
+  it('does not refetch in a loop when the auto-load fails', async () => {
+    authFetchMock.mockResolvedValue({ ok: false, status: 500 } as Response)
+
+    render(<StatsModal isOpen onClose={() => {}} summary={summaryFor(3)} sessionId="s1" />)
+
+    const statsCalls = () => authFetchMock.mock.calls.filter(([url]) => url === '/api/sessions/s1/stats').length
+    await waitFor(() => expect(statsCalls()).toBe(1))
+    await new Promise((resolve) => setTimeout(resolve, 100))
+    expect(statsCalls()).toBe(1)
   })
 
   it('auto-loads the full log for small sessions without a button', async () => {

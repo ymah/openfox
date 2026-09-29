@@ -8,6 +8,7 @@
 
 ### Bug Fixes
 
+- **Session stats no longer flicker or hammer the server** — for a small session whose detail load failed or came back empty, the stats window kept refetching in an endless loop. It now tries once per session and leaves the "Load full stats" button for a manual retry.
 - **Docker: chat turns no longer fail with `uv_os_get_passwd` ENOENT** — the host uid the container runs as (501 on macOS) had no `/etc/passwd` entry, so anything asking Node for the current user failed. The entrypoint now registers it.
 - **The test suite no longer writes into your real data directory** — tests left git worktrees under the real OpenFox data folder, never cleaned up. `OPENFOX_DATA_DIR` now redirects it, and tests use a throwaway directory removed afterwards.
 - **Fewer false failures in the path-security e2e tests** — five hard-coded 500 ms waits replaced by the default timeout.

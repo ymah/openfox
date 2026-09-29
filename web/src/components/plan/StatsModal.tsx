@@ -131,6 +131,10 @@ export function StatsModal({ isOpen, onClose, summary, sessionId }: StatsModalPr
   const [loadError, setLoadError] = useState<string | null>(null)
   // Guards against a stale in-flight fetch landing after a session switch.
   const loadRequestRef = useRef(0)
+  // Session the auto-load was already attempted for. Without it a failed (or
+  // empty) load leaves fullStats null and loadingFull false, which is exactly
+  // the state that triggers the auto-load — an endless refetch/re-render loop.
+  const autoLoadedForRef = useRef<string | null>(null)
 
   const modelGroups = fullStats?.modelGroups ?? summary?.modelGroups ?? []
 
@@ -144,6 +148,7 @@ export function StatsModal({ isOpen, onClose, summary, sessionId }: StatsModalPr
   // switches, and invalidate any in-flight request so it can't land late.
   useEffect(() => {
     loadRequestRef.current += 1
+    autoLoadedForRef.current = null
     setFullStats(null)
     setLoadError(null)
     setLoadingFull(false)
@@ -177,11 +182,12 @@ export function StatsModal({ isOpen, onClose, summary, sessionId }: StatsModalPr
   // behind a button. Once loaded it stays cached across re-opens.
   useEffect(() => {
     if (!isOpen) return
-    if (fullStats || loadingFull || !summary) return
+    if (fullStats || loadingFull || !summary || autoLoadedForRef.current === sessionId) return
     if (summary.responseCount > 0 && summary.responseCount <= AUTO_LOAD_THRESHOLD) {
+      autoLoadedForRef.current = sessionId
       void loadFull()
     }
-  }, [isOpen, fullStats, loadingFull, summary, loadFull])
+  }, [isOpen, fullStats, loadingFull, summary, loadFull, sessionId])
 
   const currentStats = useMemo(() => {
     if (!fullStats) return undefined
