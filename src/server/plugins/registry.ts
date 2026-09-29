@@ -20,6 +20,7 @@ import type {
   PluginSkillSource,
   PluginAgentSource,
   PluginWorkflowSource,
+  PluginProjectMode,
   PluginTool,
   PluginTransitionContext,
 } from '../../plugin/index.js'
@@ -46,6 +47,7 @@ type Kind =
   | 'skillSource'
   | 'agentSource'
   | 'workflowSource'
+  | 'projectMode'
   | 'hook'
   | 'rpc'
   | 'transition'
@@ -143,6 +145,10 @@ export class PluginRegistry implements ProviderPluginRegistry, PluginRegistryCon
     this.register('workflowSource', source.id, source)
   }
 
+  registerProjectMode(mode: PluginProjectMode): void {
+    this.register('projectMode', mode.value, mode)
+  }
+
   registerSettings(schema: PluginSettingsSchema): void {
     this.register('settings', this.currentPluginId ?? UNKNOWN_PLUGIN, schema)
   }
@@ -188,7 +194,10 @@ export class PluginRegistry implements ProviderPluginRegistry, PluginRegistryCon
   }
 
   registerRpc(method: string, handler: PluginRpcHandler): void {
-    this.register('rpc', method, handler)
+    // Keyed by plugin, like transition handlers: a bare method name meant the
+    // second plugin to declare e.g. 'list' collided with the first, silently
+    // taking over or being rejected as a conflict.
+    this.register('rpc', `${this.currentPluginId ?? UNKNOWN_PLUGIN}:${method}`, handler)
   }
 
   registerAsset(relativePath: string): void {
@@ -251,6 +260,10 @@ export class PluginRegistry implements ProviderPluginRegistry, PluginRegistryCon
     return this.list<PluginWorkflowSource>('workflowSource')
   }
 
+  getProjectModes(): PluginProjectMode[] {
+    return this.list<PluginProjectMode>('projectMode')
+  }
+
   getSettingsSchema(pluginId: string): PluginSettingsSchema | undefined {
     return this.get<PluginSettingsSchema>('settings', pluginId)
   }
@@ -284,7 +297,7 @@ export class PluginRegistry implements ProviderPluginRegistry, PluginRegistryCon
   }
 
   getRpcHandler(pluginId: string, method: string): PluginRpcHandler | undefined {
-    const entry = this.entries.get('rpc')?.get(method)
+    const entry = this.entries.get('rpc')?.get(`${pluginId}:${method}`)
     return entry && entry.pluginId === pluginId ? (entry.value as PluginRpcHandler) : undefined
   }
 
@@ -319,6 +332,7 @@ export class PluginRegistry implements ProviderPluginRegistry, PluginRegistryCon
       skillSources: count('skillSource'),
       agentSources: count('agentSource'),
       workflowSources: count('workflowSource'),
+      projectModes: count('projectMode'),
       hooks: [...this.hookHandlers.values()].flat().filter((h) => h.pluginId === pluginId).length,
       rpcMethods: count('rpc'),
       transitions: count('transition'),

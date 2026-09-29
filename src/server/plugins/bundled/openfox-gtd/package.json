@@ -13,7 +13,8 @@
     "capabilities": [
       "agents",
       "workflows",
-      "skills"
+      "skills",
+      "ui"
     ]
   }
 }

@@ -669,23 +669,53 @@ describe('bundled plugins', () => {
     const host = makeBundledHost()
     const diagnostics = await host.start()
 
-    const diagnostic = diagnostics.find((d) => d.packageName === 'openfox-gtd')
-    expect(diagnostic, 'openfox-gtd should be discovered without being installed').toBeDefined()
-    expect(diagnostic?.loaded).toBe(true)
-    expect(diagnostic?.error).toBeUndefined()
+    const byName = new Map(diagnostics.map((d) => [d.packageName, d]))
+    for (const name of ['openfox-gtd', 'openfox-writing']) {
+      const diagnostic = byName.get(name)
+      expect(diagnostic, `${name} should be discovered without being installed`).toBeDefined()
+      expect(diagnostic?.loaded).toBe(true)
+      expect(diagnostic?.error).toBeUndefined()
+    }
   })
 
-  it('contributes the GTD agents, workflows and skill', async () => {
+  it('contributes the GTD and writing agents, workflows and skills', async () => {
     const host = makeBundledHost()
     await host.start()
 
     const agents = await loadAllAgents(configDirectory)
-    expect(agents.map((a) => a.metadata.id)).toContain('gtd-secretary')
-    // The category is what the UI filters on to scope a project function.
+    const ids = agents.map((a) => a.metadata.id)
+    expect(ids).toContain('gtd-secretary')
+    expect(ids).toContain('writing-drafter')
+    // Categories are what the UI filters on to scope a project function.
     expect(agents.find((a) => a.metadata.id === 'gtd-secretary')?.metadata.category).toBe('gtd')
+    expect(agents.find((a) => a.metadata.id === 'writing-drafter')?.metadata.category).toBe('writing')
 
-    expect((await loadAllWorkflows(configDirectory)).map((w) => w.metadata.id)).toContain('gtd-capture')
-    expect((await loadAllSkills(configDirectory)).map((s) => s.metadata.id)).toContain('gtd')
+    const workflowIds = (await loadAllWorkflows(configDirectory)).map((w) => w.metadata.id)
+    expect(workflowIds).toContain('gtd-capture')
+    expect(workflowIds).toContain('writing-draft-scene')
+
+    const skillIds = (await loadAllSkills(configDirectory)).map((s) => s.metadata.id)
+    expect(skillIds).toContain('gtd')
+    expect(skillIds).toContain('writing')
+  })
+
+  it('contributes the project functions it owns, so the core can validate them', async () => {
+    const { isKnownProjectType } = await import('./project-modes.js')
+    const host = makeBundledHost()
+    await host.start()
+
+    // 'dev' is the core's own; the others exist only because their plugin says so.
+    expect(isKnownProjectType('dev')).toBe(true)
+    expect(isKnownProjectType('gtd')).toBe(true)
+    expect(isKnownProjectType('writing')).toBe(true)
+    expect(isKnownProjectType('not-a-function')).toBe(false)
+
+    // Disabling a plugin withdraws its function, so a PATCH setting that type is
+    // rejected instead of persisting a type nothing can render.
+    await host.disable('openfox-writing')
+    expect(isKnownProjectType('writing')).toBe(false)
+    expect(isKnownProjectType('gtd')).toBe(true)
+    expect(isKnownProjectType('dev')).toBe(true)
   })
 
   it('keeps gtd-build visually distinct from the core default workflow', async () => {

@@ -340,6 +340,7 @@ export interface PluginContributionSummary {
   skillSources: number
   agentSources: number
   workflowSources: number
+  projectModes: number
   hooks: number
   rpcMethods: number
   transitions: number
@@ -407,6 +408,7 @@ export const EMPTY_PLUGIN_CONTRIBUTIONS: PluginContributionSummary = {
   skillSources: 0,
   agentSources: 0,
   workflowSources: 0,
+  projectModes: 0,
   hooks: 0,
   rpcMethods: 0,
   transitions: 0,

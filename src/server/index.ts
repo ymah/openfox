@@ -7,7 +7,7 @@ import { readFile } from 'node:fs/promises'
 import { createServer as createViteServer, type ViteDevServer } from 'vite'
 
 import type { Config, ModelConfig, ProviderBackend, ProjectType } from '../shared/types.js'
-import { PROJECT_TYPES } from '../shared/types.js'
+import { isKnownProjectType } from './plugins/project-modes.js'
 import type { ServerHandle } from './context.js'
 import type { VisionBackend } from './llm/vision-fallback.js'
 import { initDatabase } from './db/index.js'
@@ -511,7 +511,9 @@ export async function createServerHandle(config: Config): Promise<ServerHandle> 
     if (dangerLevel !== undefined) updates.dangerLevel = dangerLevel as 'normal' | 'dangerous' | null
     if (defaultAgent !== undefined) updates.defaultAgent = defaultAgent as string | null
     if (type !== undefined) {
-      if (type !== null && !PROJECT_TYPES.includes(type as ProjectType)) {
+      // Validated at runtime: the core only owns 'dev', every other project
+      // function is declared by the plugin that provides it.
+      if (type !== null && !isKnownProjectType(String(type))) {
         return res.status(400).json({ error: `Invalid project type: ${String(type)}` })
       }
       updates.type = type as ProjectType | null
@@ -575,12 +577,6 @@ export async function createServerHandle(config: Config): Promise<ServerHandle> 
   const tasksRouter = express.Router()
   registerTaskRoutes(tasksRouter, tasksService)
   app.use('/api', tasksRouter)
-
-  // Writing-mode vault endpoints (Codex + manuscript), project-scoped file CRUD.
-  const { registerWritingRoutes } = await import('./routes/writing.js')
-  const writingRouter = express.Router()
-  registerWritingRoutes(writingRouter)
-  app.use('/api', writingRouter)
 
   // Branch management endpoints (project-scoped, repo operations)
 

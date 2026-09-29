@@ -1,10 +1,10 @@
 import { useEffect, useState, useCallback, useRef } from 'react'
 import { useLocation } from 'wouter'
-import { ScrollArea } from '../shared/ScrollArea'
-import { Button } from '../shared/Button'
-import { Input } from '../shared/Input'
-import { useT } from '../../hooks/useT'
-import { authFetch } from '../../lib/api'
+import { ScrollArea } from '@/components/shared/ScrollArea'
+import { Button } from '@/components/shared/Button'
+import { Input } from '@/components/shared/Input'
+import { useT } from '@/hooks/useT'
+import { getManuscript, saveScene } from './vault-client'
 import { slugify, nextNumberedSlug, findSlugByTitle } from './utils'
 import type { ActSummary } from './types'
 
@@ -38,9 +38,7 @@ export function ManuscriptView({ projectId }: ManuscriptViewProps) {
     const seq = ++loadSeq.current
     setLoading(true)
     try {
-      const res = await authFetch(`/api/projects/${projectId}/manuscript`)
-      if (!res.ok) throw new Error(`HTTP ${res.status}`)
-      const data = await res.json()
+      const data = await getManuscript(projectId)
       if (seq !== loadSeq.current) return
       setActs(Array.isArray(data.acts) ? data.acts : [])
       setError(null)
@@ -88,15 +86,7 @@ export function ManuscriptView({ projectId }: ManuscriptViewProps) {
       const sceneSlug = nextNumberedSlug(sceneSlugs, 'scene')
 
       const path = `manuscript/${actSlug}/${chapterSlug}/${sceneSlug}.md`
-      const res = await authFetch(`/api/projects/${projectId}/manuscript/scene?path=${encodeURIComponent(path)}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          frontmatter: { status: 'draft', summary: sceneSummary.trim() },
-          body: '',
-        }),
-      })
-      if (!res.ok) throw new Error(`HTTP ${res.status}`)
+      await saveScene(projectId, path, { status: 'draft', summary: sceneSummary.trim() }, '')
       setShowNewScene(false)
       setActTitle('')
       setChapterTitle('')

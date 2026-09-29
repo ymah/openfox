@@ -16,4 +16,5 @@ export function register(registry) {
   registry.registerSkillSource(
     skillSource('gtd-skill', { en: 'GTD reference', fr: 'Référence GTD' }, join(root, 'skill')),
   )
+  registry.registerProjectMode({ value: 'gtd', label: { en: 'GTD', fr: 'GTD' } })
 }

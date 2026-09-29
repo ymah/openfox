@@ -1,4 +1,5 @@
-import { PROJECT_TYPES, type ProjectType } from '@shared/types.js'
+import type { ProjectType } from '@shared/types.js'
+import { PROJECT_MODES } from './project-modes'
 
 /**
  * Groups items with an optional `category` string for display in a flat
@@ -17,11 +18,10 @@ export interface CategoryGroup<T> {
  * user/project agents predating this field) come last, ungrouped. */
 export function groupByCategory<T extends { category?: string }>(
   items: T[],
-  // Derived from PROJECT_TYPES rather than written out here: the literal list
-  // used to be ['dev', 'gtd'], so 'writing' was silently demoted to the
-  // "unknown category" bucket and sorted alphabetically among strangers. A
-  // future project function would have been forgotten the same way.
-  order: string[] = [...PROJECT_TYPES],
+  // Derived from the project-mode registry (core modes plus the ones bundled
+  // plugins declare): the literal list used to be ['dev', 'gtd'], so 'writing'
+  // was silently demoted to the "unknown category" bucket.
+  order: string[] = PROJECT_MODES.map((mode) => mode.value),
 ): CategoryGroup<T>[] {
   const buckets = new Map<string | null, T[]>()
   for (const item of items) {

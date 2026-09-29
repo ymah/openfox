@@ -2,7 +2,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { cleanup, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { authFetch } from '../../lib/api'
+import { getScene, saveScene } from './vault-client'
 import { SceneWriteView } from './SceneWriteView'
 
 const mockNavigate = vi.fn()
@@ -14,23 +14,23 @@ vi.mock('wouter', () => ({
 }))
 
 const mockCreateSession = vi.fn()
-vi.mock('../../stores/session', () => ({
+vi.mock('@/stores/session', () => ({
   useSessionStore: (selector: (s: unknown) => unknown) => selector({ createSession: mockCreateSession }),
 }))
 
-vi.mock('../../lib/api', () => ({
-  authFetch: vi.fn(),
+vi.mock('./vault-client', () => ({
+  getScene: vi.fn(),
+  saveScene: vi.fn(),
 }))
 
-const mockedAuthFetch = vi.mocked(authFetch)
-
-function jsonResponse(data: unknown): Response {
-  return { ok: true, json: () => Promise.resolve(data) } as Response
-}
+const mockedGetScene = vi.mocked(getScene)
+const mockedSaveScene = vi.mocked(saveScene)
 
 describe('SceneWriteView', () => {
   beforeEach(() => {
-    mockedAuthFetch.mockReset()
+    mockedGetScene.mockReset()
+    mockedSaveScene.mockReset()
+    mockedSaveScene.mockResolvedValue({ path: scenePath } as never)
     mockNavigate.mockReset()
     mockCreateSession.mockReset()
     localStorage.clear()
@@ -41,9 +41,11 @@ describe('SceneWriteView', () => {
   })
 
   it('loads and displays the scene frontmatter and body', async () => {
-    mockedAuthFetch.mockResolvedValue(
-      jsonResponse({ path: scenePath, frontmatter: { title: 'Opening', status: 'draft' }, body: 'Once upon a time.' }),
-    )
+    mockedGetScene.mockResolvedValue({
+      path: scenePath,
+      frontmatter: { title: 'Opening', status: 'draft' },
+      body: 'Once upon a time.',
+    })
     render(<SceneWriteView projectId="p1" />)
 
     await waitFor(() => expect(screen.getByDisplayValue('Opening')).toBeTruthy())
@@ -51,47 +53,43 @@ describe('SceneWriteView', () => {
   })
 
   it('autosaves an edit to the body after the debounce delay', async () => {
-    mockedAuthFetch.mockResolvedValue(jsonResponse({ path: scenePath, frontmatter: {}, body: '' }))
+    mockedGetScene.mockResolvedValue({ path: scenePath, frontmatter: {}, body: '' })
     render(<SceneWriteView projectId="p1" />)
 
-    await waitFor(() => expect(mockedAuthFetch).toHaveBeenCalledTimes(1))
+    await waitFor(() => expect(mockedGetScene).toHaveBeenCalledTimes(1))
 
     const textarea = screen.getByPlaceholderText('Write the scene…')
     await userEvent.type(textarea, 'New prose.')
 
     await waitFor(
       () => {
-        const putCall = mockedAuthFetch.mock.calls.find((c) => (c[1] as RequestInit | undefined)?.method === 'PUT')
-        expect(putCall).toBeTruthy()
-        expect(JSON.parse((putCall![1] as RequestInit).body as string).body).toBe('New prose.')
+        expect(mockedSaveScene).toHaveBeenCalled()
+        expect(mockedSaveScene.mock.calls[0]?.[3]).toBe('New prose.')
       },
       { timeout: 3000 },
     )
   })
 
   it('does not arm autosave after a failed load (would overwrite the file with an empty body)', async () => {
-    mockedAuthFetch.mockResolvedValue({
-      ok: false,
-      status: 500,
-      json: () => Promise.resolve({ error: 'boom' }),
-    } as Response)
+    mockedGetScene.mockRejectedValue(new Error('HTTP 500'))
     render(<SceneWriteView projectId="p1" />)
 
     await waitFor(() => expect(screen.getByText(/Could not load this scene/)).toBeTruthy())
     // No editor rendered → nothing to type into, and no PUT can ever be issued
     expect(screen.queryByPlaceholderText('Write the scene…')).toBeNull()
     await new Promise((resolve) => setTimeout(resolve, 1500))
-    expect(mockedAuthFetch.mock.calls.some((c) => (c[1] as RequestInit | undefined)?.method === 'PUT')).toBe(false)
+    expect(mockedSaveScene).not.toHaveBeenCalled()
   })
 
   it('ignores a late response from a previous load once the scene changed', async () => {
-    let resolveFirst!: (r: Response) => void
-    const first = new Promise<Response>((resolve) => {
+    type Scene = { path: string; frontmatter: Record<string, unknown>; body: string }
+    let resolveFirst!: (r: Scene) => void
+    const first = new Promise<Scene>((resolve) => {
       resolveFirst = resolve
     })
-    mockedAuthFetch
+    mockedGetScene
       .mockReturnValueOnce(first)
-      .mockResolvedValueOnce(jsonResponse({ path: scenePath, frontmatter: { title: 'Scene B' }, body: 'B body' }))
+      .mockResolvedValueOnce({ path: scenePath, frontmatter: { title: 'Scene B' }, body: 'B body' })
 
     const { rerender } = render(<SceneWriteView projectId="p1" />)
     // A project switch re-runs the load effect (same path in the mocked router)
@@ -99,16 +97,14 @@ describe('SceneWriteView', () => {
     await waitFor(() => expect(screen.getByDisplayValue('B body')).toBeTruthy())
 
     // The first (stale) response finally arrives — it must not replace B
-    resolveFirst(jsonResponse({ path: scenePath, frontmatter: { title: 'Scene A' }, body: 'A body' }))
+    resolveFirst({ path: scenePath, frontmatter: { title: 'Scene A' }, body: 'A body' })
     await new Promise((resolve) => setTimeout(resolve, 50))
     expect(screen.getByDisplayValue('B body')).toBeTruthy()
     expect(screen.queryByDisplayValue('A body')).toBeNull()
   })
 
   it('seeds a draft message and navigates to a new session on "Chat about this scene"', async () => {
-    mockedAuthFetch.mockResolvedValue(
-      jsonResponse({ path: scenePath, frontmatter: { title: 'Opening' }, body: 'Once upon a time.' }),
-    )
+    mockedGetScene.mockResolvedValue({ path: scenePath, frontmatter: { title: 'Opening' }, body: 'Once upon a time.' })
     mockCreateSession.mockResolvedValue({ id: 'session-1' })
     render(<SceneWriteView projectId="p1" />)
 
@@ -120,7 +116,7 @@ describe('SceneWriteView', () => {
   })
 
   it('does not print the scene path twice when the scene has no subtitle', async () => {
-    mockedAuthFetch.mockResolvedValue(jsonResponse({ path: scenePath, frontmatter: {}, body: 'Once upon a time.' }))
+    mockedGetScene.mockResolvedValue({ path: scenePath, frontmatter: {}, body: 'Once upon a time.' })
     mockCreateSession.mockResolvedValue({ id: 'session-2' })
     render(<SceneWriteView projectId="p1" />)
 

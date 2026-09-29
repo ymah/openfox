@@ -106,6 +106,7 @@ function makePlugin(overrides: Partial<PluginInfo> = {}): PluginInfo {
       skillSources: 0,
       agentSources: 0,
       workflowSources: 0,
+      projectModes: 0,
       hooks: 1,
       rpcMethods: 1,
       transitions: 0,

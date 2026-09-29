@@ -179,6 +179,17 @@ export interface PluginWorkflowSource {
   load(): Promise<PluginWorkflow[]> | PluginWorkflow[]
 }
 
+/**
+ * A project function contributed by a plugin (`dev` is the core's own). The
+ * server only needs the id, to validate a project's persisted `type`; a bundled
+ * plugin declares the presentation (label, tone, default agent) from its web
+ * entry, where the core picks it up at build time.
+ */
+export interface PluginProjectMode {
+  value: string
+  label: LocalizedString
+}
+
 export interface PluginModelMetadata {
   contextWindow?: number
   vision?: boolean
@@ -297,6 +308,7 @@ export interface PluginRegistry {
   registerSkillSource(source: PluginSkillSource): void
   registerAgentSource(source: PluginAgentSource): void
   registerWorkflowSource(source: PluginWorkflowSource): void
+  registerProjectMode(mode: PluginProjectMode): void
   registerSettings(schema: PluginSettingsSchema): void
   registerUiAction(action: PluginUiAction): void
   registerUiBadge(badge: PluginUiBadge): void

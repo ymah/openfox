@@ -5,9 +5,15 @@ export type { PluginModelMetadataView } from './plugin.js'
 // Project Types
 // ============================================================================
 
-// Extend this union (and web/src/lib/project-modes.ts) to add a new project function.
-export const PROJECT_TYPES = ['dev', 'gtd', 'writing'] as const
-export type ProjectType = (typeof PROJECT_TYPES)[number]
+/**
+ * Project functions the core itself provides. Every other function is declared
+ * by the bundled plugin that owns it (GTD, writing), which is why this is not a
+ * closed union any more: a project's type is validated at runtime against the
+ * core list plus whatever the enabled plugins declare (see
+ * setPluginProjectModes in src/server/plugins/project-modes.ts).
+ */
+export const CORE_PROJECT_TYPES = ['dev'] as const
+export type ProjectType = string
 
 export interface Project {
   id: string

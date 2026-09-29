@@ -1,11 +1,11 @@
 import { useEffect, useState, useRef, useCallback } from 'react'
 import { useLocation, useSearch } from 'wouter'
-import { ScrollArea } from '../shared/ScrollArea'
-import { Button } from '../shared/Button'
-import { Input } from '../shared/Input'
-import { useT } from '../../hooks/useT'
-import { authFetch } from '../../lib/api'
-import { useSessionStore } from '../../stores/session'
+import { ScrollArea } from '@/components/shared/ScrollArea'
+import { Button } from '@/components/shared/Button'
+import { Input } from '@/components/shared/Input'
+import { useT } from '@/hooks/useT'
+import { getScene, saveScene } from './vault-client'
+import { useSessionStore } from '@/stores/session'
 
 interface SceneWriteViewProps {
   projectId: string
@@ -36,15 +36,7 @@ export function SceneWriteView({ projectId }: SceneWriteViewProps) {
     async (targetPath: string, nextFrontmatter: Record<string, unknown>, nextBody: string) => {
       setSaveState('pending')
       try {
-        const res = await authFetch(
-          `/api/projects/${projectId}/manuscript/scene?path=${encodeURIComponent(targetPath)}`,
-          {
-            method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ frontmatter: nextFrontmatter, body: nextBody }),
-          },
-        )
-        if (!res.ok) throw new Error(`HTTP ${res.status}`)
+        await saveScene(projectId, targetPath, nextFrontmatter, nextBody)
         setSaveState('saved')
       } catch (error) {
         console.error('Scene save failed:', error)
@@ -75,11 +67,7 @@ export function SceneWriteView({ projectId }: SceneWriteViewProps) {
     // Latest-wins: a slow response for scene A must not land after B was
     // opened — the editor would show A's text under B and autosave it there.
     let cancelled = false
-    authFetch(`/api/projects/${projectId}/manuscript/scene?path=${encodeURIComponent(path)}`)
-      .then(async (res) => {
-        if (!res.ok) throw new Error(`HTTP ${res.status}`)
-        return res.json()
-      })
+    getScene(projectId, path)
       .then((data) => {
         if (cancelled) return
         setFrontmatter(data.frontmatter ?? {})

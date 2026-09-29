@@ -12,7 +12,7 @@ import { OpenProjectModal } from './CreateSessionModal'
 import { DeleteProjectConfirmationModal } from './DeleteProjectConfirmationModal'
 import { formatRelativeDate } from '../lib/format-date'
 import { sortProjectsStarredFirst } from '../lib/projects'
-import { PROJECT_MODES, DEFAULT_PROJECT_TYPE } from '../lib/project-modes'
+import { PROJECT_MODES, DEFAULT_PROJECT_TYPE, modeClassName } from '../lib/project-modes'
 import type { ProjectType } from '@shared/types.js'
 import {
   SearchIcon,
@@ -354,7 +354,7 @@ export function HomePage() {
               onClick={() => setActiveMode(mode.value)}
               className={`px-4 py-1.5 text-sm font-medium rounded-md transition-colors ${
                 activeMode === mode.value
-                  ? mode.activeTabClassName
+                  ? modeClassName(mode)
                   : 'text-text-muted hover:text-text-primary hover:bg-bg-tertiary'
               }`}
               title={t(mode.description)}

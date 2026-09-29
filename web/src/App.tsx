@@ -15,6 +15,7 @@ import { useSessionStore } from './stores/session'
 import { useConfigStore } from './stores/config'
 import { useLocaleStore } from './stores/locale'
 import { useCurrentProject } from './hooks/useCurrentProject'
+import { useT } from './hooks/useT'
 import { useProviders } from './hooks/useProviders'
 import { useThemeStore } from './stores/theme'
 import { useProjectLoader } from './hooks/useProjectLoader'
@@ -36,10 +37,8 @@ import { PageTitle } from './components/layout/PageTitle'
 import { HomePage } from './components/HomePage'
 import { NewSessionHandler } from './components/NewSessionHandler'
 import { EmptyProjectView } from './components/EmptyProjectView'
-import { WritingHome } from './components/writing/WritingHome'
-import { CodexView } from './components/writing/CodexView'
-import { ManuscriptView } from './components/writing/ManuscriptView'
-import { SceneWriteView } from './components/writing/SceneWriteView'
+import { BUNDLED_PLUGIN_PAGES, projectHomeForMode, pluginIdForProjectMode } from './lib/bundled-plugin-ui'
+import { usePlugins } from './hooks/usePlugins'
 import { PlanPanel } from './components/plan/PlanPanel'
 import { ReadonlySessionView } from './components/plan/ReadonlySessionView'
 import { SplitView } from './components/split/SplitView'
@@ -94,36 +93,76 @@ function ProjectView({
     <>
       <Sidebar projectId={projectId!} isOpen={sidebarOpen} overlay={sidebarOverlay} onClose={onSidebarToggle} />
       <div className="flex-1 min-w-0 bg-primary">
-        {currentProject.type === 'writing' ? <WritingHome projectId={projectId!} /> : <EmptyProjectView />}
+        <ProjectHome projectId={projectId!} projectType={currentProject.type} />
       </div>
     </>
   )
 }
 
-function WritingSubRoute({
+/**
+ * A project page owned by a bundled plugin. The page is only rendered while its
+ * plugin is enabled, so disabling the plugin removes the whole project function
+ * instead of leaving its pages reachable without their agents.
+ */
+function PluginPageRoute({
+  pluginId,
   routePath,
   render,
   sidebarOpen,
   sidebarOverlay,
   onSidebarToggle,
 }: {
-  routePath: '/p/:projectId/codex' | '/p/:projectId/manuscript' | '/p/:projectId/write'
+  pluginId: string
+  routePath: string
   render: (projectId: string) => ReactElement
   sidebarOpen: boolean
   sidebarOverlay: boolean
   onSidebarToggle: () => void
 }) {
-  const [, params] = useRoute(routePath)
+  // routePath is a runtime string here (the page comes from a registry), so
+  // wouter cannot infer the param names — every plugin page is project-scoped.
+  const [, params] = useRoute<{ projectId: string }>(routePath)
   const projectId = params?.projectId
   const currentProject = useRouteProject(projectId)
+  const { plugins } = usePlugins()
+  const pluginEnabled = plugins.some((plugin) => plugin.id === pluginId && plugin.enabled)
 
   if (!currentProject) return <LoadingSpinner />
   return (
     <>
       <Sidebar projectId={projectId!} isOpen={sidebarOpen} overlay={sidebarOverlay} onClose={onSidebarToggle} />
-      <div className="flex-1 min-w-0 bg-primary">{render(projectId!)}</div>
+      <div className="flex-1 min-w-0 bg-primary">{pluginEnabled ? render(projectId!) : <DisabledFunctionNotice />}</div>
     </>
   )
+}
+
+/**
+ * Shown where a plugin-owned page or home would be. Deliberately explicit rather
+ * than falling back to the dev screens: a book project silently showing the dev
+ * chrome is worse than saying the function is off.
+ */
+function DisabledFunctionNotice() {
+  const t = useT()
+  return (
+    <div className="h-full flex items-center justify-center p-8 text-center">
+      <p className="max-w-md text-sm text-text-muted">
+        {t({
+          en: 'This project function is unavailable because its plugin is disabled. Enable it in Settings → Plugins.',
+          fr: 'Cette fonction de projet est indisponible car son plugin est désactivé. Activez-le dans Réglages → Plugins.',
+        })}
+      </p>
+    </div>
+  )
+}
+
+/** The project root: a plugin's custom home when its mode provides one, else the default. */
+function ProjectHome({ projectId, projectType }: { projectId: string; projectType?: string }) {
+  const { plugins } = usePlugins()
+  const home = projectHomeForMode(projectType)
+  const pluginId = pluginIdForProjectMode(projectType)
+  if (!home || !pluginId) return <EmptyProjectView />
+  const enabled = plugins.some((plugin) => plugin.id === pluginId && plugin.enabled)
+  return enabled ? home(projectId) : <DisabledFunctionNotice />
 }
 
 function ProjectSessionView({
@@ -562,33 +601,22 @@ function App() {
             <Route path="/p/:projectId/new">
               <NewSessionHandler />
             </Route>
-            <Route path="/p/:projectId/codex">
-              <WritingSubRoute
-                routePath="/p/:projectId/codex"
-                render={(projectId) => <CodexView projectId={projectId} />}
-                sidebarOpen={effectiveLeftOpen}
-                sidebarOverlay={leftOverlay}
-                onSidebarToggle={handleLeftToggle}
-              />
-            </Route>
-            <Route path="/p/:projectId/manuscript">
-              <WritingSubRoute
-                routePath="/p/:projectId/manuscript"
-                render={(projectId) => <ManuscriptView projectId={projectId} />}
-                sidebarOpen={effectiveLeftOpen}
-                sidebarOverlay={leftOverlay}
-                onSidebarToggle={handleLeftToggle}
-              />
-            </Route>
-            <Route path="/p/:projectId/write">
-              <WritingSubRoute
-                routePath="/p/:projectId/write"
-                render={(projectId) => <SceneWriteView projectId={projectId} />}
-                sidebarOpen={effectiveLeftOpen}
-                sidebarOverlay={leftOverlay}
-                onSidebarToggle={handleLeftToggle}
-              />
-            </Route>
+            {/* Pages owned by bundled plugins. Declared by each plugin's web
+                entry and compiled in at build time, so a plugin can own a real
+                route with a real editor. Order matters: these are more specific
+                than /p/:projectId below. */}
+            {BUNDLED_PLUGIN_PAGES.map((page) => (
+              <Route key={page.path} path={page.path}>
+                <PluginPageRoute
+                  pluginId={page.pluginId}
+                  routePath={page.path}
+                  render={page.render}
+                  sidebarOpen={effectiveLeftOpen}
+                  sidebarOverlay={leftOverlay}
+                  onSidebarToggle={handleLeftToggle}
+                />
+              </Route>
+            ))}
             <Route path="/p/:projectId">
               <ProjectView
                 sidebarOpen={effectiveLeftOpen}

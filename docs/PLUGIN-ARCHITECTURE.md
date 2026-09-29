@@ -83,6 +83,9 @@ PluginHost.start()
   │   │    4. bundled: src/server/plugins/bundled/<name> (from source) or
   │   │       dist/bundled-plugins/<name> (published)   (first-party, last
   │   │       so an installed plugin of the same name overrides it)
+  │   │       — these may additionally ship web/modes.ts and web/index.tsx,
+  │   │         compiled into the web bundle at build time (project functions
+  │   │         and application pages); runtime-installed plugins cannot
   │   │
   │   ├─ for each package dir:
   │   │    ├─ readPluginManifest()        ← package.json + pluginManifestSchema

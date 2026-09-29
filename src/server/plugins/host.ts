@@ -13,6 +13,7 @@ import { setPluginAgents } from '../agents/registry.js'
 import type { AgentDefinition } from '../agents/types.js'
 import type { WorkflowDefinition } from '../workflows/types.js'
 import { setPluginWorkflows, isValidWorkflowDefinition } from '../workflows/registry.js'
+import { setPluginProjectModes } from './project-modes.js'
 import { getAllSettings, setSetting } from '../db/settings.js'
 import type { ServerMessage } from '../../shared/protocol.js'
 import { createServerMessage } from '../../shared/protocol.js'
@@ -336,6 +337,7 @@ export class PluginHost {
       this.registry.getOwnedCommands().map((entry) => toCommandDefinition(entry.command, entry.pluginId)),
     )
     setPluginModelMetadataProviders(this.registry.getModelMetadataProviders())
+    setPluginProjectModes(this.registry.getProjectModes().map((mode) => mode.value))
     await Promise.all([this.refreshSkillSources(), this.refreshAgentSources(), this.refreshWorkflowSources()])
   }
 

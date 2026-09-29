@@ -34,14 +34,13 @@ afterEach(async () => {
 })
 
 describe('loadDefaultAgents', () => {
-  // The GTD agents ship in the bundled openfox-gtd plugin (see the 'bundled
-  // plugins' tests in src/server/plugins/host.test.ts). The writing agents are
-  // core defaults: the writing mode also owns REST routes and editor pages that
-  // cannot live in a plugin, so the whole function stays in the core.
+  // The GTD and writing agents ship in the bundled plugins that own those
+  // project functions — see the 'bundled plugins' tests in
+  // src/server/plugins/host.test.ts.
   it('should load all built-in agent definitions', async () => {
     const agents = await loadDefaultAgents()
 
-    expect(agents.length).toBeGreaterThanOrEqual(10)
+    expect(agents.length).toBeGreaterThanOrEqual(5)
 
     const ids = agents.map((a) => a.metadata.id)
     expect(ids).toContain('planner')
@@ -49,22 +48,15 @@ describe('loadDefaultAgents', () => {
     expect(ids).toContain('verifier')
     expect(ids).toContain('code_reviewer')
     expect(ids).toContain('explorer')
-    expect(ids).toContain('writing-secretary')
-    expect(ids).toContain('writing-planner')
-    expect(ids).toContain('writing-drafter')
-    expect(ids).toContain('writing-worldbuilder')
-    expect(ids).toContain('writing-continuity')
   })
 
-  it('tags built-in agents with a dev/writing category for UI grouping', async () => {
+  it('tags built-in agents with a dev category for UI grouping', async () => {
     const agents = await loadDefaultAgents()
     const byId = new Map(agents.map((a) => [a.metadata.id, a.metadata]))
 
     expect(byId.get('builder')?.category).toBe('dev')
     expect(byId.get('planner')?.category).toBe('dev')
     expect(byId.get('verifier')?.category).toBe('dev')
-    expect(byId.get('writing-secretary')?.category).toBe('writing')
-    expect(byId.get('writing-drafter')?.category).toBe('writing')
   })
 
   it('should parse agent metadata correctly', async () => {

@@ -1,6 +1,6 @@
 import { Link } from 'wouter'
-import { useT } from '../../hooks/useT'
-import { useCurrentProject } from '../../hooks/useCurrentProject'
+import { useT } from '@/hooks/useT'
+import { useCurrentProject } from '@/hooks/useCurrentProject'
 
 interface WritingHomeProps {
   projectId: string

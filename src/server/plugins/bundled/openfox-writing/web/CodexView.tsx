@@ -1,9 +1,9 @@
 import { useEffect, useState, useCallback } from 'react'
-import { ScrollArea } from '../shared/ScrollArea'
-import { Button } from '../shared/Button'
-import { Input } from '../shared/Input'
-import { useT } from '../../hooks/useT'
-import { authFetch } from '../../lib/api'
+import { ScrollArea } from '@/components/shared/ScrollArea'
+import { Button } from '@/components/shared/Button'
+import { Input } from '@/components/shared/Input'
+import { useT } from '@/hooks/useT'
+import { listCodex, saveCodexEntry } from './vault-client'
 import { slugify } from './utils'
 import { CODEX_TYPES, CODEX_TYPE_LABELS, type CodexEntry, type CodexType } from './types'
 
@@ -25,9 +25,7 @@ export function CodexView({ projectId }: CodexViewProps) {
   const load = useCallback(async () => {
     setLoading(true)
     try {
-      const res = await authFetch(`/api/projects/${projectId}/codex`)
-      if (!res.ok) throw new Error(`HTTP ${res.status}`)
-      const data = await res.json()
+      const data = await listCodex(projectId)
       setEntries(Array.isArray(data.entries) ? data.entries : [])
       setError(null)
     } catch (err) {
@@ -57,13 +55,14 @@ export function CodexView({ projectId }: CodexViewProps) {
     if (!draft || !selected) return
     setSaving(true)
     try {
-      const res = await authFetch(`/api/projects/${projectId}/codex/${selected.type}/${selected.slug}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ title: draft.title, tags: draft.tags, facts: draft.facts, body: draft.body }),
+      const saved = await saveCodexEntry(projectId, {
+        type: selected.type,
+        slug: selected.slug,
+        title: draft.title,
+        tags: draft.tags,
+        facts: draft.facts,
+        body: draft.body,
       })
-      if (!res.ok) throw new Error(`HTTP ${res.status}`)
-      const saved = (await res.json()) as CodexEntry
       // Keep the entry in place: replacing it with an error body used to make
       // it vanish from the list and reset the draft.
       setEntries((prev) => prev.map((e) => (e.type === selected.type && e.slug === selected.slug ? saved : e)))
@@ -96,12 +95,7 @@ export function CodexView({ projectId }: CodexViewProps) {
     const existing = entries.find((e) => e.type === type && e.slug === slug)
     if (!existing) {
       try {
-        const res = await authFetch(`/api/projects/${projectId}/codex/${type}/${slug}`, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ title, tags: [], facts: {}, body: '' }),
-        })
-        if (!res.ok) throw new Error(`HTTP ${res.status}`)
+        await saveCodexEntry(projectId, { type, slug, title, tags: [], facts: {}, body: '' })
       } catch (err) {
         console.error('Codex create failed:', err)
         setError(err instanceof Error ? err.message : String(err))

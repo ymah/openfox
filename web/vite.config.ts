@@ -44,6 +44,12 @@ const baseConfig = defineConfig({
     alias: {
       '@': path.resolve(__dirname, './src'),
       '@shared': path.resolve(__dirname, '../src/shared'),
+      // Bundled first-party plugins ship their own pages as real .tsx, compiled
+      // into this bundle like any other source. That is what lets a plugin own an
+      // application route and a rich editor: the declarative panel format has no
+      // multi-line editor node, and loading plugin JS at runtime would mean
+      // sharing React across module boundaries.
+      '@bundled': path.resolve(__dirname, '../src/server/plugins/bundled'),
     },
   },
   root: path.resolve(__dirname), // Use web/ directory as root
@@ -54,7 +60,9 @@ const baseConfig = defineConfig({
     port: 5173,
     strictPort: true,
     fs: {
-      allow: [path.resolve(__dirname), path.resolve(__dirname, '../node_modules')],
+      // ../src is needed for @shared and for the bundled plugins' own pages:
+      // without it the production build succeeds while dev mode 403s on them.
+      allow: [path.resolve(__dirname), path.resolve(__dirname, '../src'), path.resolve(__dirname, '../node_modules')],
     },
     watch: createViteWatchOptions(),
     // In dev mode, users access Vite directly (for HMR to work)

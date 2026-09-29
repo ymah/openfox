@@ -124,14 +124,30 @@ Roots are scanned in order, deduplicated by package name:
 4. **Bundled**: the first-party plugins that ship inside the OpenFox package
    (`src/server/plugins/bundled/<name>` when running from source,
    `dist/bundled-plugins/<name>` in the published package) — currently
-   `openfox-gtd`.
+   `openfox-gtd` and `openfox-writing`.
 
-Which project functions belong in a bundled plugin: one whose whole surface is
-agents, workflows and skills can be a plugin, because disabling it then removes
-the entire function. One that also owns dedicated pages cannot — a plugin has no
-way to contribute an application route, and the declarative panel format has no
-multi-line editor node — so it stays in the core, gated on the project type. That
-is why GTD is a plugin and the novel-writing mode is not.
+**A bundled plugin can own a whole project function**, including its pages. Next
+to its Node entry point it may ship:
+
+- `web/modes.ts` — the project functions it provides (label, tone, default
+  agent). Component-free on purpose, so the core can read the list of functions
+  without pulling React in.
+- `web/index.tsx` — its application pages and, optionally, a custom project home.
+  These are real React components using the host's components, hooks and theme.
+
+Both are picked up at **build time** (`import.meta.glob` in
+`web/src/lib/bundled-plugin-modes.ts` and `bundled-plugin-ui.ts`) and compiled
+into the web bundle, and the core only renders a page while its plugin is
+enabled. The server side declares the same functions with
+`registry.registerProjectMode()`, which is what lets a project's `type` be
+validated at runtime, and does its own I/O through `registerRpc` rather than
+Express routes.
+
+The limit of this design, stated plainly: **only bundled plugins can own pages.**
+A plugin installed at runtime cannot, because that would require loading its
+compiled bundle in the browser and sharing the host's React instance across a
+module boundary. Runtime-installed plugins keep the declarative panels and
+iframe panels described below.
 
 Bundled plugins are scanned **last** on purpose: because discovery deduplicates
 by package name with the first root winning, installing a plugin of the same

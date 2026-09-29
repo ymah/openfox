@@ -5,6 +5,7 @@ import { readFile } from 'node:fs/promises'
 import { fileURLToPath } from 'node:url'
 import type { Config } from '../../shared/types.js'
 import { serverT } from '../i18n.js'
+import { getProject } from '../db/projects.js'
 import { openFolder } from '../utils/openFolder.js'
 import { getGlobalConfigDir } from '../../cli/paths.js'
 import { PluginHost } from '../plugins/host.js'
@@ -215,9 +216,18 @@ export function createPluginRoutes(options: PluginRoutesOptions): Router {
       projectId?: string
     }
     try {
+      // The workdir must never be taken from the request when a project is
+      // named: a plugin doing file I/O with a client-supplied path would give
+      // any holder of a session token arbitrary disk access.
+      let workdir = body.workdir ?? process.cwd()
+      if (body.projectId) {
+        const project = getProject(body.projectId)
+        if (!project) return res.status(404).json({ error: 'Project not found' })
+        workdir = project.workdir
+      }
       const result = await host.invokeRpc(id, method, body.params ?? {}, {
         sessionId: body.sessionId ?? '',
-        workdir: body.workdir ?? process.cwd(),
+        workdir,
         ...(body.projectId ? { projectId: body.projectId } : {}),
       })
       res.json({ result })

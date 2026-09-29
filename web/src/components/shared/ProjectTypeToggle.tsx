@@ -1,5 +1,5 @@
 import { useT } from '../../hooks/useT'
-import { PROJECT_MODES } from '../../lib/project-modes'
+import { PROJECT_MODES, modeClassName } from '../../lib/project-modes'
 import type { ProjectType } from '@shared/types.js'
 
 export type { ProjectType }
@@ -29,7 +29,7 @@ export function ProjectTypeToggle({ value, onChange }: ProjectTypeToggleProps) {
             onClick={() => onChange(mode.value)}
             className={`px-3 py-1 text-xs font-medium rounded transition-colors ${
               value === mode.value
-                ? mode.activeTabClassName
+                ? modeClassName(mode)
                 : 'text-text-muted hover:text-text-primary hover:bg-bg-tertiary'
             }`}
           >

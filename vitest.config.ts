@@ -6,6 +6,7 @@ export default defineConfig({
     alias: {
       '@': path.resolve(import.meta.dirname, 'web/src'),
       '@shared': path.resolve(import.meta.dirname, 'src/shared'),
+      '@bundled': path.resolve(import.meta.dirname, 'src/server/plugins/bundled'),
     },
     // Both the root and web/ trees can end up with their own React copy
     // (e.g. on Windows dev installs); two copies break hooks in web tests.
@@ -22,6 +23,8 @@ export default defineConfig({
     },
     include: [
       'src/**/*.test.ts',
+      // Bundled plugins ship their own pages, so React tests live under src/ too.
+      'src/**/*.test.tsx',
       'web/src/**/*.test.ts',
       'web/src/**/*.test.tsx',
       'scripts/**/*.test.ts',

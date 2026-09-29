@@ -22,5 +22,5 @@
       "@shared/*": ["../src/shared/*"]
     }
   },
-  "include": ["src", "../src/shared", "vite-watch.ts"]
+  "include": ["src", "../src/shared", "../src/server/plugins/bundled", "vite-watch.ts"]
 }

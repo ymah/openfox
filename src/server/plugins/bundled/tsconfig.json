@@ -1,0 +1,19 @@
+{
+  // Bundled plugins may ship browser code (their own pages) next to their Node
+  // entry point. Anything walking up from such a file — esbuild under vitest,
+  // and Vite's transform — would otherwise land on the repo root tsconfig, which
+  // targets Node and sets no `jsx`, so JSX would compile to the classic runtime
+  // and fail with "React is not defined".
+  //
+  // Type checking for these files is done by the web project, which includes
+  // this directory (see web/tsconfig.json); this file only fixes the transform.
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "jsx": "react-jsx",
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "strict": true,
+    "skipLibCheck": true
+  }
+}

@@ -1,66 +1,82 @@
 import type { ProjectType } from '@shared/types.js'
+import { BUNDLED_PLUGIN_MODES } from './bundled-plugin-modes'
 
 /**
- * Single registry of project functions ("modes"). A project's persisted
- * `type` scopes which agents/workflows it can select (see category-groups.ts
+ * Registry of project functions ("modes"). A project's persisted `type` scopes
+ * which agents/workflows it can select (see category-groups.ts
  * `filterByProjectType`) and which UI chrome it shows (Header, SessionSidebar).
- * Adding a future function: extend `ProjectType` in shared/types.ts, give it
- * default agents/workflows tagged with a matching `category`, and add an
- * entry here.
+ *
+ * Only `dev` lives here. Every other function is declared by the bundled plugin
+ * that owns it (`projectModes` in its web entry), so disabling that plugin
+ * removes the function whole — its mode, its pages, its agents and its
+ * workflows — instead of leaving a half-working project type behind.
  */
+export type ProjectModeTone = 'primary' | 'amber' | 'rose'
+
+/**
+ * Tailwind needs to see class names verbatim in source, so a mode declares a
+ * tone and the mapping lives here rather than being built by interpolation.
+ */
+const TONE_CLASSES: Record<ProjectModeTone, string> = {
+  primary: 'bg-accent-primary/20 text-accent-primary',
+  amber: 'bg-amber-500/20 text-amber-500',
+  rose: 'bg-rose-500/20 text-rose-500',
+}
+
 export interface ProjectModeDef {
   value: ProjectType
   label: { en: string; fr: string }
   description: { en: string; fr: string }
-  // Full literal Tailwind classes (not built via string interpolation — the
-  // JIT compiler only picks up classes it can see verbatim in source).
-  activeTabClassName: string
+  tone: ProjectModeTone
   showsDevChrome: boolean
-  // Agent seeded as the project's defaultAgent at creation, and used to
-  // route a project's home screen to a mode-specific UI (see App.tsx). Modes
-  // that just reuse the ordinary session/chat screen (dev, gtd) leave this
-  // unset for the home-screen check but still seed a defaultAgent below.
+  /** Agent seeded as the project's defaultAgent at creation. */
   defaultAgent?: string
-  // Modes with a dedicated project home screen (Codex/Manuscrit for writing)
-  // instead of the ordinary session list / EmptyProjectView.
+  /** Modes with a dedicated project home instead of the ordinary session list. */
   hasCustomHome?: boolean
 }
 
-export const PROJECT_MODES: ProjectModeDef[] = [
+export const CORE_PROJECT_MODES: ProjectModeDef[] = [
   {
     value: 'dev',
     label: { en: 'Dev', fr: 'Dev' },
     description: { en: 'Classic OpenFox coding workflow.', fr: 'Flux de code OpenFox classique.' },
-    activeTabClassName: 'bg-accent-primary/20 text-accent-primary',
+    tone: 'primary',
     showsDevChrome: true,
-  },
-  {
-    value: 'gtd',
-    label: { en: 'GTD', fr: 'GTD' },
-    description: {
-      en: 'This folder becomes a GTD vault — capture, clarify, dispatch. See docs/GTD.md.',
-      fr: 'Ce dossier devient un vault GTD — capture, clarification, dispatch. Voir docs/GTD.md.',
-    },
-    activeTabClassName: 'bg-amber-500/20 text-amber-500',
-    showsDevChrome: false,
-    defaultAgent: 'gtd-secretary',
-  },
-  {
-    value: 'writing',
-    label: { en: 'Writing', fr: 'Écriture' },
-    description: {
-      en: 'Novel/book vault — Codex, manuscript, AI writing chat.',
-      fr: 'Vault roman/livre — Codex, manuscrit, chat IA d’écriture.',
-    },
-    activeTabClassName: 'bg-rose-500/20 text-rose-500',
-    showsDevChrome: false,
-    defaultAgent: 'writing-secretary',
-    hasCustomHome: true,
   },
 ]
 
+export const PROJECT_MODES: ProjectModeDef[] = [...CORE_PROJECT_MODES, ...BUNDLED_PLUGIN_MODES]
+
 export const DEFAULT_PROJECT_TYPE: ProjectType = 'dev'
 
+export function modeClassName(mode: ProjectModeDef): string {
+  return TONE_CLASSES[mode.tone]
+}
+
+/**
+ * A project whose mode is not registered — its plugin is disabled or gone. It
+ * deliberately does NOT inherit dev's chrome: falling back to dev used to show
+ * the git/workspace/terminal chrome on a book project, which is silently wrong.
+ */
+export const UNKNOWN_PROJECT_MODE: ProjectModeDef & { isUnknown: true } = {
+  value: '',
+  label: { en: 'Unavailable', fr: 'Indisponible' },
+  description: {
+    en: 'This project function is not available — its plugin is disabled.',
+    fr: 'Cette fonction de projet est indisponible — son plugin est désactivé.',
+  },
+  tone: 'primary',
+  showsDevChrome: false,
+  isUnknown: true,
+}
+
 export function getProjectMode(type: ProjectType | undefined): ProjectModeDef {
-  return PROJECT_MODES.find((m) => m.value === type) ?? PROJECT_MODES[0]!
+  // No type at all (a project predating project functions) is a dev project.
+  if (!type) return CORE_PROJECT_MODES[0]!
+  return PROJECT_MODES.find((m) => m.value === type) ?? UNKNOWN_PROJECT_MODE
+}
+
+/** True when the project's function exists but its plugin is not providing it. */
+export function isUnknownProjectMode(type: ProjectType | undefined): boolean {
+  return Boolean(type) && !PROJECT_MODES.some((m) => m.value === type)
 }

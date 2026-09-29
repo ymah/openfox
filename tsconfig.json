@@ -18,5 +18,13 @@
     "allowSyntheticDefaultImports": true
   },
   "include": ["src/**/*.ts"],
-  "exclude": ["node_modules", "dist", "e2e", "src/server/lsp/__fixtures__"]
+  "exclude": [
+    "node_modules",
+    "dist",
+    "e2e",
+    "src/server/lsp/__fixtures__",
+    // Bundled plugins' browser code: type-checked by the web project
+    // (web/tsconfig.json includes it), which has the DOM lib and JSX.
+    "src/server/plugins/bundled/*/web"
+  ]
 }
