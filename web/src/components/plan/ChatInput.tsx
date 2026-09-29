@@ -7,6 +7,7 @@ import { useWorkflows } from '../../hooks/useWorkflows'
 import { useCurrentProject } from '../../hooks/useCurrentProject'
 import { filterByProjectType } from '../../lib/category-groups'
 import { getProjectMode } from '../../lib/project-modes'
+import { ChatSettings } from './ChatSettings'
 import { commandsResource, commandResource, skillsResource, selectActiveSkills } from '../../lib/resources'
 import { authFetch } from '../../lib/api'
 import { parseSlashCommand, extractTemplateParams } from '../../lib/parse-slash-command'
@@ -898,6 +899,7 @@ export function ChatInput({
                 {!isChatMode && <DangerLevelSelector />}
               </div>
               <div className="flex items-center @md:ms-auto min-w-0" data-testid="model-selector-group">
+                {isChatMode && sessionId && <ChatSettings sessionId={sessionId} isRunning={isRunning} />}
                 {perSessionMcpEnabled && (
                   <div data-testid="mcp-selector-slot">
                     <McpSelector />

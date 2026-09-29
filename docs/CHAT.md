@@ -50,6 +50,10 @@ Available in every conversation, chat project or not:
 
 ## Per-conversation settings
 
+In the composer of a Chat project, **Persona & sampling** opens a popover with a persona (free-form,
+with presets), temperature, top-p and max tokens; a dot marks a conversation that overrides anything.
+A changed persona is applied to the running context straight away. Under the hood:
+
 `GET/PUT /api/sessions/:id/chat-settings` gives a conversation its own persona (a free-form
 system prompt, appended to the session's instructions) and sampling (temperature, top-p,
 max tokens). They override the per-model settings, which override the built-in model
