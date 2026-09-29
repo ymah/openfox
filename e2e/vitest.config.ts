@@ -1,6 +1,7 @@
 import { defineConfig } from 'vitest/config'
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { testDataDir } from '../vitest.global-setup.js'
 
 // Globs require forward slashes; on Windows dirname/resolve produce backslashes,
 // which tinyglobby treats as escape characters (include matches nothing).
@@ -31,8 +32,16 @@ export default defineConfig({
     pool: 'forks',
     maxWorkers: resolveMaxWorkers(),
 
-    // No global setup - each test file manages its own server
-    // globalSetup: './setup.ts',  // REMOVED - using in-process servers
+    // Servers are per test file and in-process, so there is no server global setup.
+    // The one global step only removes the throwaway data directory below.
+    globalSetup: [`${rootDir}/vitest.global-setup.ts`],
+
+    // Workspace tests create real git worktrees under the data directory. Point it
+    // at a throwaway folder: they used to land in the developer's real one (hundreds
+    // of orphaned worktrees accumulated there, one batch per commit via the hook).
+    env: {
+      OPENFOX_DATA_DIR: testDataDir(),
+    },
 
     // Include all test files (absolute path for running from project root)
     include: [`${__dirname}/*.test.ts`],

@@ -1,5 +1,16 @@
 # Changelog
 
+## Unreleased
+
+### Features
+
+- **OpenFox ships as a container** — a `Dockerfile`, `docker-compose.yml` and an `openfox` wrapper script; projects stay on the host, state lives in a volume, the port is published on loopback only. See `docs/DOCKER.md`. CI now builds the image on every pull request.
+
+### Bug Fixes
+
+- **The test suite no longer writes into your real data directory** — tests left git worktrees under the real OpenFox data folder, never cleaned up. `OPENFOX_DATA_DIR` now redirects it, and tests use a throwaway directory removed afterwards.
+- **Fewer false failures in the path-security e2e tests** — five hard-coded 500 ms waits replaced by the default timeout.
+
 ## 2.0.160-fox.4 - 2026-09-29
 
 ### Features

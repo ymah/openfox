@@ -32,7 +32,16 @@ export function getAuthKeyPath(mode: Mode): string {
   return join(getGlobalConfigDir(mode), 'auth.key')
 }
 
+/**
+ * Where the database and git worktrees live. `OPENFOX_DATA_DIR` overrides every
+ * platform default: tests use it so they can never write into the user's real
+ * data directory (they used to — hundreds of orphaned worktrees ended up there),
+ * and containers can use it to relocate all mutable state with one variable.
+ */
 export function getGlobalDataDir(mode: Mode): string {
+  const override = process.env['OPENFOX_DATA_DIR']?.trim()
+  if (override) return override
+
   const suffix = mode === 'development' ? '-dev' : ''
   const home = homedir()
 

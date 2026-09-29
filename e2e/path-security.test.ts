@@ -131,8 +131,10 @@ describe('Path Security', () => {
         content: 'Write to /home/test/secret.txt with content "data"',
       })
 
-      // Wait for path confirmation (short timeout since it should arrive quickly)
-      const confirmationEvent = await client.waitFor('chat.path_confirmation', undefined, 500).catch(() => null)
+      // Wait for path confirmation. No short cap: a 500ms limit made this fail
+      // whenever the machine was busy (the suite runs 12 workers in parallel), and
+      // the failure moved to a different test each time.
+      const confirmationEvent = await client.waitFor('chat.path_confirmation').catch(() => null)
 
       // Path confirmation SHOULD happen for /home/test (outside workdir)
       expect(confirmationEvent).not.toBeNull()
@@ -151,7 +153,7 @@ describe('Path Security', () => {
         content: `Run the exact command: python3 -c "print(open('/home/test/nested.txt').read())"`,
       })
 
-      const confirmationEvent = await client.waitFor('chat.path_confirmation', undefined, 500).catch(() => null)
+      const confirmationEvent = await client.waitFor('chat.path_confirmation').catch(() => null)
 
       expect(confirmationEvent).not.toBeNull()
 
@@ -217,8 +219,8 @@ describe('Path Security', () => {
         content: 'Write to /home/test/approved.txt with content "approved"',
       })
 
-      // Wait for path_confirmation event (short timeout since it should arrive quickly)
-      const confirmationEvent = await client.waitFor('chat.path_confirmation', undefined, 500).catch(() => null)
+      // Wait for the path_confirmation event (default timeout, see above)
+      const confirmationEvent = await client.waitFor('chat.path_confirmation').catch(() => null)
 
       // For debugging - log all events if no confirmation
       if (!confirmationEvent) {
@@ -253,8 +255,8 @@ describe('Path Security', () => {
         content: 'Write to /home/test/denied.txt with content "denied"',
       })
 
-      // Wait for path_confirmation event (short timeout)
-      const confirmationEvent = await client.waitFor('chat.path_confirmation', undefined, 500).catch(() => null)
+      // Wait for the path_confirmation event (default timeout)
+      const confirmationEvent = await client.waitFor('chat.path_confirmation').catch(() => null)
 
       // Path confirmation SHOULD happen
       expect(confirmationEvent).not.toBeNull()
@@ -266,7 +268,7 @@ describe('Path Security', () => {
       await answerPathConfirmation(server.url, session.id, payload.callId, false)
 
       // Wait for chat.done (may be error or complete)
-      await client.waitFor('chat.done', undefined, 500).catch(() => null)
+      await client.waitFor('chat.done').catch(() => null)
     })
   })
 

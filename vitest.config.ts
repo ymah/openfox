@@ -1,5 +1,6 @@
 import { defineConfig } from 'vitest/config'
 import path from 'path'
+import { testDataDir } from './vitest.global-setup'
 
 export default defineConfig({
   resolve: {
@@ -38,7 +39,11 @@ export default defineConfig({
     setupFiles: ['vitest-localstorage-mock', './web/src/test-setup.ts'],
     env: {
       NODE_OPTIONS: '--localstorage-file=/tmp/openfox-test-localstorage.json',
+      // Never let a test touch the real data directory (database, git worktrees).
+      // Unique per run, removed by the global setup below.
+      OPENFOX_DATA_DIR: testDataDir(),
     },
+    globalSetup: ['./vitest.global-setup.ts'],
     // environment set per-file via @vitest-environment docblock
     coverage: {
       provider: 'v8',

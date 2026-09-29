@@ -58,7 +58,6 @@ beforeEach(() => {
 })
 
 const IS_WIN32 = process.platform === 'win32'
-const IS_DARWIN = process.platform === 'darwin'
 
 interface ValidateResponse {
   exists: boolean
@@ -349,13 +348,12 @@ describe('POST /api/workspace/config/validate', () => {
       expect(body.workspaces).toEqual([])
     })
 
-    // getGlobalDataDir() reads a different env var per platform (src/cli/paths.ts):
-    // XDG_DATA_HOME on Linux, LOCALAPPDATA on Windows. macOS derives the path from
-    // the home directory with no env override, so it cannot be redirected here.
-    it.skipIf(IS_DARWIN)('detects default global dir orphans when projectName provided', async () => {
-      const dataDirEnv = IS_WIN32 ? 'LOCALAPPDATA' : 'XDG_DATA_HOME'
-      const origXdg = process.env[dataDirEnv]
-      process.env[dataDirEnv] = testDir
+    // OPENFOX_DATA_DIR overrides the platform default (src/cli/paths.ts), so this
+    // runs on every platform — it used to be skipped on macOS, where the path is
+    // derived from the home directory with no other env override.
+    it('detects default global dir orphans when projectName provided', async () => {
+      const origDataDir = process.env['OPENFOX_DATA_DIR']
+      process.env['OPENFOX_DATA_DIR'] = join(testDir, 'openfox')
       try {
         const defaultDir = join(testDir, 'openfox', 'workspaces', 'my-project')
         const ws1 = join(defaultDir, 'fix-bug')
@@ -380,8 +378,8 @@ describe('POST /api/workspace/config/validate', () => {
         expect(body.workspaces!.length).toBe(1)
         expect(body.workspaces![0]!.name).toBe('fix-bug')
       } finally {
-        if (origXdg !== undefined) process.env[dataDirEnv] = origXdg
-        else delete process.env[dataDirEnv]
+        if (origDataDir !== undefined) process.env['OPENFOX_DATA_DIR'] = origDataDir
+        else delete process.env['OPENFOX_DATA_DIR']
       }
     })
 

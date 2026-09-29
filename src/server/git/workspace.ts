@@ -1,7 +1,7 @@
 import { spawn, execSync } from 'node:child_process'
 import { mkdir, rm } from 'node:fs/promises'
 import { resolve, join, isAbsolute } from 'node:path'
-import { homedir, platform } from 'node:os'
+import { getGlobalDataDir as cliGetGlobalDataDir } from '../../cli/paths.js'
 import { logger } from '../utils/logger.js'
 import { isDirectoryEntry } from '../utils/fs.js'
 import { gitSpawnEnv } from './env.js'
@@ -40,17 +40,10 @@ export function getServerMode(): 'development' | 'production' {
 }
 
 export function getGlobalDataDir(): string {
-  const mode = getServerMode()
-  const suffix = mode === 'development' ? '-dev' : ''
-  const home = homedir()
-  switch (platform()) {
-    case 'darwin':
-      return join(home, 'Library', 'Application Support', `openfox${suffix}`)
-    case 'win32':
-      return join(process.env['LOCALAPPDATA'] ?? join(home, 'AppData', 'Local'), `openfox${suffix}`)
-    default:
-      return join(process.env['XDG_DATA_HOME'] ?? join(home, '.local', 'share'), `openfox${suffix}`)
-  }
+  // One implementation, in cli/paths.ts. This used to be a copy that knew nothing
+  // about the override, which is how the test suite ended up writing worktrees
+  // into the real data directory.
+  return cliGetGlobalDataDir(getServerMode())
 }
 
 export async function getWorkspacesDir(projectName: string, projectDir: string): Promise<string> {
