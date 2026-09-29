@@ -2,6 +2,13 @@ import { memo, useMemo, useEffect, useState, useRef } from 'react'
 import { OptionalScrollArea } from './OptionalScrollArea'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
+import remarkMath from 'remark-math'
+import rehypeKatex from 'rehype-katex'
+import 'katex/dist/katex.min.css'
+import { escapeCurrencyDollars, normalizeLatexDelimiters } from '../../lib/markdown-math'
+import { artifactFilename, isArtifactLanguage } from '../../lib/artifact'
+import { MermaidBlock } from './MermaidBlock'
+import { ArtifactPreview } from './ArtifactPreview'
 import { highlightCode, useShikiTheme } from '../../lib/syntax-highlighter'
 import { useDisplaySettings } from '../../hooks/useDisplaySettings'
 import { useCopyToClipboard } from '../../hooks/useCopyToClipboard'
@@ -60,13 +67,18 @@ const CodeBlock = memo(function CodeBlock({
   codeString,
   showSyntaxHighlighting,
   deferHighlight,
+  richReady,
 }: {
   language: string
   codeString: string
   showSyntaxHighlighting: boolean
   deferHighlight: boolean
+  /** False while the message is still streaming a fence: previews wait for the full block. */
+  richReady: boolean
 }) {
   const t = useT()
+  const [showPreview, setShowPreview] = useState(false)
+  const previewable = richReady && isArtifactLanguage(language)
   const { copied, copy } = useCopyToClipboard()
   const [html, setHtml] = useState<string | null>(null)
   const shikiTheme = useShikiTheme()
@@ -80,17 +92,41 @@ const CodeBlock = memo(function CodeBlock({
   useEffect(() => {
     if (!showSyntaxHighlighting || deferHighlight || skipHighlight) return
     latestCodeRef.current = codeString
-    highlightCode(codeString, language, shikiTheme).then((result) => {
-      if (latestCodeRef.current === codeString) {
-        setHtml(result)
-      }
-    })
+    // `svg` has no grammar of its own (it is XML), and a language the highlighter
+    // cannot load must fall back to plain text rather than reject unhandled.
+    highlightCode(codeString, language === 'svg' ? 'xml' : language, shikiTheme)
+      .then((result) => {
+        if (latestCodeRef.current === codeString) {
+          setHtml(result)
+        }
+      })
+      .catch(() => {})
   }, [codeString, language, shikiTheme, showSyntaxHighlighting, deferHighlight, skipHighlight])
 
   return (
     <div className="relative group my-1.5 rounded overflow-hidden">
       <div className="absolute bottom-0 right-0 flex items-center gap-2 px-2 py-1 text-xs text-text-muted/70 bg-bg-tertiary/60 rounded-tl rounded-tr z-10">
         <span>{language}</span>
+        {previewable && (
+          <>
+            <button
+              type="button"
+              onClick={() => setShowPreview((v) => !v)}
+              className="hover:text-text-primary px-1"
+              data-testid="artifact-toggle"
+            >
+              {showPreview ? t({ en: 'Hide preview', fr: 'Masquer l’aperçu' }) : t({ en: 'Preview', fr: 'Aperçu' })}
+            </button>
+            <button
+              type="button"
+              onClick={() => downloadArtifact(language, codeString)}
+              className="hover:text-text-primary px-1"
+              title={t({ en: 'Download', fr: 'Télécharger' })}
+            >
+              ↓
+            </button>
+          </>
+        )}
         <button
           type="button"
           onClick={(e) => {
@@ -113,11 +149,29 @@ const CodeBlock = memo(function CodeBlock({
           </pre>
         </OptionalScrollArea>
       )}
+      {previewable && showPreview && isArtifactLanguage(language) && (
+        <ArtifactPreview language={language} code={codeString} />
+      )}
     </div>
   )
 })
 
-function createMarkdownComponents(muted: boolean, showSyntaxHighlighting: boolean, deferHighlight: boolean) {
+function downloadArtifact(language: string, code: string): void {
+  if (!isArtifactLanguage(language)) return
+  const url = URL.createObjectURL(new Blob([code], { type: language === 'svg' ? 'image/svg+xml' : 'text/html' }))
+  const link = document.createElement('a')
+  link.href = url
+  link.download = artifactFilename(language)
+  link.click()
+  URL.revokeObjectURL(url)
+}
+
+function createMarkdownComponents(
+  muted: boolean,
+  showSyntaxHighlighting: boolean,
+  deferHighlight: boolean,
+  richReady: boolean,
+) {
   const headingColor = muted ? 'text-text-muted' : 'text-text-heading'
   const strongColor = muted ? 'text-text-secondary' : 'text-text-bold'
 
@@ -138,14 +192,18 @@ function createMarkdownComponents(muted: boolean, showSyntaxHighlighting: boolea
       const language = match?.[1] || 'text'
       const codeString = String(children).replace(/\n$/, '')
 
-      return (
+      const block = (
         <CodeBlock
           language={language}
           codeString={codeString}
           showSyntaxHighlighting={showSyntaxHighlighting}
           deferHighlight={deferHighlight}
+          richReady={richReady}
         />
       )
+      // A diagram is rendered only once its block is complete; until then (and if
+      // it fails to render) the source is shown as ordinary code.
+      return language === 'mermaid' && richReady ? <MermaidBlock code={codeString} fallback={block} /> : block
     },
 
     p({ children }: { children?: React.ReactNode }) {
@@ -257,9 +315,12 @@ export const Markdown = memo(function Markdown({
     [isStreaming, deferCodeHighlightWhileStreaming, content],
   )
 
+  // A fence still open while streaming: previews and diagrams wait for it to close.
+  const richReady = useMemo(() => !(isStreaming && countCodeFences(content) % 2 === 1), [isStreaming, content])
+
   const components = useMemo(
-    () => createMarkdownComponents(muted, showSyntaxHighlighting, deferCodeHighlight),
-    [muted, showSyntaxHighlighting, deferCodeHighlight],
+    () => createMarkdownComponents(muted, showSyntaxHighlighting, deferCodeHighlight, richReady),
+    [muted, showSyntaxHighlighting, deferCodeHighlight, richReady],
   )
 
   // Non-streaming messages are immutable: cache the parsed tree per content so
@@ -288,6 +349,7 @@ export const Markdown = memo(function Markdown({
 function preprocessForRender(content: string): string {
   let processed = preprocessMarkdown(content)
   processed = fixUnclosedCodeBlocks(processed)
+  processed = escapeCurrencyDollars(normalizeLatexDelimiters(processed))
   return processed.trimEnd()
 }
 
@@ -323,13 +385,17 @@ function containsMarkdownSyntax(content: string): boolean {
     /\[[^\]]*\]\([^)]*\)/.test(content) ||
     /!\[[^\]]*\]/.test(content) ||
     /[*_]/.test(content) ||
-    content.includes('&')
+    content.includes('&') ||
+    content.includes('$') ||
+    content.includes('\\')
   )
 }
 
+const KATEX_PLUGINS = [[rehypeKatex, { throwOnError: false, strict: 'ignore' }]] as never
+
 function renderMarkdown(content: string, components: ReturnType<typeof createMarkdownComponents>): React.ReactNode {
   return (
-    <ReactMarkdown remarkPlugins={[remarkGfm]} components={components}>
+    <ReactMarkdown remarkPlugins={[remarkGfm, remarkMath]} rehypePlugins={KATEX_PLUGINS} components={components}>
       {content}
     </ReactMarkdown>
   )

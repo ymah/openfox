@@ -4,6 +4,7 @@
 
 ### Features
 
+- **Rich rendering in every chat** — LaTeX math (`$x^2$`, `$$…$$`, `\(…\)`, `\[…\]`, with prices like "$5 and $10" left alone), Mermaid diagrams (loaded only when one appears, source shown if it is invalid) and a **Preview** button on `html`/`svg` blocks that runs the page in a sandboxed frame with no same-origin access and no network. Nothing renders from a code fence that is still streaming.
 - **Chat — a general-purpose assistant** — a new bundled plugin, `openfox-chat`, adds a Chat project function: conversation spaces (no git), six assistants (Assistant, Researcher, Tutor, Translator, Editor, Brainstorm), seven ready-made workflows (deep research, fact-check, summarise, draft-then-critique, translate with check, decide, learn) and a home to start or resume conversations. See `docs/CHAT.md`.
 - **Groundwork for conversational modes** — an agent can declare `basePrompt: assistant` (a general-purpose base prompt instead of the coding one) and `filterTools: true` (only its own tool definitions are sent). A project function can declare `initGit: false`. Each conversation can carry its own persona and sampling (temperature, top-p, max tokens) through `PUT /api/sessions/:id/chat-settings`, above the per-model settings.
 - **A project is created whole in one call** — `POST /api/projects` now accepts `type` and `defaultAgent` and rejects an unknown type before creating any folder. Creating a project of a disabled function used to end up, silently, as a plain dev project.
@@ -11,6 +12,7 @@
 
 ### Bug Fixes
 
+- **A code block tagged `svg` no longer raises an unhandled highlighter error** — SVG is highlighted as XML, and a language the highlighter cannot load falls back to plain text.
 - **Session stats no longer flicker or hammer the server** — for a small session whose detail load failed or came back empty, the stats window kept refetching in an endless loop. It now tries once per session and leaves the "Load full stats" button for a manual retry.
 - **Docker: chat turns no longer fail with `uv_os_get_passwd` ENOENT** — the host uid the container runs as (501 on macOS) had no `/etc/passwd` entry, so anything asking Node for the current user failed. The entrypoint now registers it.
 - **The test suite no longer writes into your real data directory** — tests left git worktrees under the real OpenFox data folder, never cleaned up. `OPENFOX_DATA_DIR` now redirects it, and tests use a throwaway directory removed afterwards.

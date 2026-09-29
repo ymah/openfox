@@ -37,6 +37,17 @@ Type `/` in a conversation to launch one.
 - **Décider** — clarify, options, weighted criteria, matrix, recommendation and risks.
 - **Apprendre un sujet** — diagnosis, learning plan, first lesson, quiz.
 
+## Rich rendering
+
+Available in every conversation, chat project or not:
+
+- **Math** — `$inline$`, `$$display$$`, `\(…\)` and `\[…\]` are rendered with KaTeX. A `$` followed by a
+  digit that does not close like a formula (`$5 and $10`) is treated as a price.
+- **Diagrams** — a `mermaid` code block becomes a diagram, loaded on first use. Invalid source is shown as code.
+- **Artifacts** — `html` and `svg` blocks get a **Preview** button and a download button. The preview runs in a
+  frame sandboxed **without** `allow-same-origin`, under a policy that forbids every network request: a
+  generated page cannot read the app's data or call its API. Inline scripts and styles work; external ones do not.
+
 ## Per-conversation settings
 
 `GET/PUT /api/sessions/:id/chat-settings` gives a conversation its own persona (a free-form
