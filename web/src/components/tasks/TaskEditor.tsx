@@ -1,3 +1,4 @@
+import { filterByProjectType } from '../../lib/category-groups'
 import { useState, useRef, useEffect, useCallback } from 'react'
 import { Modal } from '../shared/SelfContainedModal'
 import { AttachmentPreview } from '../shared/AttachmentPreview'
@@ -117,10 +118,15 @@ export function TaskEditor({ projectId, initialTask, onClose, onSaved }: TaskEdi
 
   const { providers } = useProviders()
   const { projects } = useProjects()
-  const workdir = projects.find((p) => p.id === projectId)?.workdir
-  // Agents scope to the project workdir so project-scoped agents are assignable.
+  const project = projects.find((p) => p.id === projectId)
+  const workdir = project?.workdir
+  // Agents scope to the project workdir so project-scoped agents are assignable,
+  // and to the project's function so a dev project is not offered chat assistants.
   const { agents: allAgents } = useAgents(workdir)
-  const agents = allAgents.filter((a) => !a.subagent)
+  const agents = filterByProjectType(
+    allAgents.filter((a) => !a.subagent),
+    project?.type,
+  )
   const { data: commandsData } = useResource(commandsResource, workdir)
   const { data: workflowsData } = useResource(workflowsResource, workdir)
   const { data: skillsData } = useResource(skillsResource, workdir)

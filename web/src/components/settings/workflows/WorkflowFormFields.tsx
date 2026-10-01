@@ -9,11 +9,15 @@ interface WorkflowFormFieldsProps {
   formDescription: string
   formMaxIterations: number
   formColor: string
+  /** Project function the workflow belongs to; '' = none (classic dev workflow). */
+  formCategory: string
+  categoryOptions: { value: string; label: string }[]
   isReadOnly: boolean
   onNameChange: (name: string) => void
   onDescriptionChange: (v: string) => void
   onMaxIterationsChange: (v: number) => void
   onColorChange: (v: string) => void
+  onCategoryChange: (v: string) => void
 }
 
 export function WorkflowFormFields({
@@ -27,6 +31,9 @@ export function WorkflowFormFields({
   onDescriptionChange,
   onMaxIterationsChange,
   onColorChange,
+  formCategory,
+  categoryOptions,
+  onCategoryChange,
 }: WorkflowFormFieldsProps) {
   const t = useT()
   return (
@@ -64,6 +71,22 @@ export function WorkflowFormFields({
           readOnly={isReadOnly}
           className={`${inputClass} font-mono ${isReadOnly ? 'opacity-50' : ''}`}
         />
+      </div>
+      <div>
+        <label className={labelClass}>{t({ en: 'Project function', fr: 'Fonction du projet' })}</label>
+        <select
+          value={formCategory}
+          onChange={(e) => !isReadOnly && onCategoryChange(e.target.value)}
+          disabled={isReadOnly}
+          data-testid="workflow-category"
+          className={`${inputClass} ${isReadOnly ? 'opacity-50' : ''}`}
+        >
+          {categoryOptions.map((option) => (
+            <option key={option.value} value={option.value}>
+              {option.label}
+            </option>
+          ))}
+        </select>
       </div>
       <div>
         <label className={labelClass}>{t({ en: 'Color', fr: 'Couleur' })}</label>

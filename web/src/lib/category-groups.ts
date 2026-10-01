@@ -63,3 +63,20 @@ export function filterByProjectType<T extends { category?: string }>(
     return !category || category === projectType
   })
 }
+
+/**
+ * The agents a workflow's steps may pick: those of the workflow's own project
+ * function (a chat workflow gets the chat assistants, a dev workflow the dev agents,
+ * never the other way round) plus uncategorised ones. An empty category means a
+ * classic dev workflow. Agents a step already uses are kept so an existing workflow
+ * keeps resolving, whatever its history.
+ */
+export function agentsForWorkflow<T extends { id: string; category?: string }>(
+  agents: T[],
+  workflowCategory: string | undefined,
+  alreadyUsedIds: Iterable<string | undefined> = [],
+): T[] {
+  const used = new Set(alreadyUsedIds)
+  const scoped = new Set(filterByProjectType(agents, workflowCategory || 'dev'))
+  return agents.filter((agent) => scoped.has(agent) || used.has(agent.id))
+}

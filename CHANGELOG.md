@@ -17,6 +17,9 @@
 
 ### Bug Fixes
 
+- **Chat and dev no longer mix** — the workflow editor's step pickers now offer only the agents of the workflow's own project function (a chat workflow gets the chat assistants, a dev workflow the dev agents), with a new "Project function" field; the task editor's agent picker is scoped to the project the same way.
+- **Saving a workflow no longer drops its category** — editing a chat, GTD or writing workflow removed its category, which made it appear in every other kind of project.
+- **A plugin's tools are no longer shown to agents that cannot call them** — enabling the chat plugin added its memory tools to every dev session's tool list (and shifted its cache and drift state). They are now offered only to agents that list them.
 - **A code block tagged `svg` no longer raises an unhandled highlighter error** — SVG is highlighted as XML, and a language the highlighter cannot load falls back to plain text.
 - **Session stats no longer flicker or hammer the server** — for a small session whose detail load failed or came back empty, the stats window kept refetching in an endless loop. It now tries once per session and leaves the "Load full stats" button for a manual retry.
 - **Docker: chat turns no longer fail with `uv_os_get_passwd` ENOENT** — the host uid the container runs as (501 on macOS) had no `/etc/passwd` entry, so anything asking Node for the current user failed. The entrypoint now registers it.

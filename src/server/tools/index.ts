@@ -425,6 +425,7 @@ export function getToolRegistryForAgent(agentDef: AgentDefinition, sessionId?: s
   // Top-level agents: return ALL tool definitions for vLLM cache consistency
   // but enforce the agent's allowedTools for execution permission
   const allTools = getAllToolsMap()
+  const pluginToolNames = new Set(pluginToolsOverride.map((t) => t.name))
   const tools: Tool[] = []
 
   // Get session-level MCP disabled servers to filter out
@@ -433,6 +434,13 @@ export function getToolRegistryForAgent(agentDef: AgentDefinition, sessionId?: s
   for (const [name, tool] of allTools.entries()) {
     // Exclude return_value from top-level agents
     if (name === 'return_value') {
+      continue
+    }
+    // A plugin's tool is callable only by agents that list it, so offering its
+    // definition to every other agent only adds noise to their prompt — and made
+    // enabling a plugin (the chat memory tools, say) change the tool set, and so
+    // the cache and drift state, of unrelated dev sessions.
+    if (pluginToolNames.has(name) && !agentDef.metadata.allowedTools.some((t) => t.split(':')[0] === name)) {
       continue
     }
     // Filter out MCP tools disabled for this session

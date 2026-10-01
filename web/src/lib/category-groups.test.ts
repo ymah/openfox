@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { groupByCategory, hasMultipleCategories, filterByProjectType } from './category-groups'
+import { groupByCategory, hasMultipleCategories, filterByProjectType, agentsForWorkflow } from './category-groups'
 
 interface Item {
   id: string
@@ -114,5 +114,34 @@ describe('groupByCategory default order', () => {
     // fell through to the alphabetical "unknown" bucket and sorted after
     // 'zzz-custom'. It is now derived from PROJECT_TYPES.
     expect(categories).toEqual(['dev', 'gtd', 'writing', 'zzz-custom', null])
+  })
+})
+
+describe('agentsForWorkflow', () => {
+  const agents = [
+    { id: 'planner', category: 'dev' },
+    { id: 'custom' },
+    { id: 'chat-assistant', category: 'chat' },
+    { id: 'gtd-secretary', category: 'gtd' },
+  ]
+  const ids = (list: { id: string }[]) => list.map((a) => a.id)
+
+  it('offers a dev workflow only dev and uncategorised agents', () => {
+    expect(ids(agentsForWorkflow(agents, undefined))).toEqual(['planner', 'custom'])
+    expect(ids(agentsForWorkflow(agents, ''))).toEqual(['planner', 'custom'])
+    expect(ids(agentsForWorkflow(agents, 'dev'))).toEqual(['planner', 'custom'])
+  })
+
+  it('offers a chat workflow the chat assistants, not the dev agents', () => {
+    expect(ids(agentsForWorkflow(agents, 'chat'))).toEqual(['custom', 'chat-assistant'])
+    expect(ids(agentsForWorkflow(agents, 'gtd'))).toEqual(['custom', 'gtd-secretary'])
+  })
+
+  it('keeps an agent a step already uses, so an existing workflow still resolves', () => {
+    expect(ids(agentsForWorkflow(agents, 'chat', ['planner', undefined]))).toEqual([
+      'planner',
+      'custom',
+      'chat-assistant',
+    ])
   })
 })

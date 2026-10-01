@@ -161,7 +161,7 @@ vi.mock('../agents/registry.js', () => ({
 
 import { AskUserInterrupt } from './ask.js'
 import { PathAccessDeniedError } from './path-security.js'
-import { createToolRegistry, getToolRegistryForAgent, createRegistryFromTools } from './index.js'
+import { createToolRegistry, getToolRegistryForAgent, createRegistryFromTools, setPluginTools } from './index.js'
 import type { AgentDefinition } from '../agents/types.js'
 
 const builderDef: AgentDefinition = {
@@ -264,6 +264,33 @@ describe('tool registries', () => {
     expect(names).not.toContain('run_command')
     expect(names).not.toContain('write_file')
     expect(names).not.toContain('return_value')
+  })
+
+  it('offers a plugin tool only to the agents that list it, so a dev session never sees chat tools', () => {
+    const noop = async () => ({ success: true, output: '', durationMs: 0, truncated: false })
+    setPluginTools([
+      {
+        name: 'memory_search',
+        definition: {
+          type: 'function',
+          function: { name: 'memory_search', description: 'd', parameters: { type: 'object', properties: {} } },
+        },
+        execute: noop,
+      },
+    ] as never)
+    try {
+      const dev = getToolRegistryForAgent(builderDef).tools.map((t) => t.name)
+      expect(dev).not.toContain('memory_search')
+      expect(dev).toContain('run_command') // the rest of the full set is unchanged
+
+      const chat = getToolRegistryForAgent({
+        metadata: { ...builderDef.metadata, id: 'chat-x', allowedTools: ['memory_search', 'web_search'] },
+        prompt: 'p',
+      }).tools.map((t) => t.name)
+      expect(chat).toContain('memory_search')
+    } finally {
+      setPluginTools([])
+    }
   })
 
   it('filterTools with no allowed tools offers only the always-allowed ones', () => {

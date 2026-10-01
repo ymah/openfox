@@ -1,3 +1,5 @@
+import { useProjectModes } from '../../hooks/useProjectModes'
+import { agentsForWorkflow } from '../../lib/category-groups'
 import { ScrollArea } from '../shared/ScrollArea'
 import { useEffect, useState, useCallback, useMemo } from 'react'
 import { Modal } from '../shared/SelfContainedModal'
@@ -93,6 +95,7 @@ export function WorkflowsModal({ isOpen, onClose, initialEditId, projectDir }: W
   const [formDescription, setFormDescription] = useState('')
   const [formVersion, setFormVersion] = useState('1.0.0')
   const [formColor, setFormColor] = useState('#3b82f6')
+  const [formCategory, setFormCategory] = useState('')
   const [formEntryStep, setFormEntryStep] = useState('')
   const [formMaxIterations, setFormMaxIterations] = useState(50)
 
@@ -103,7 +106,30 @@ export function WorkflowsModal({ isOpen, onClose, initialEditId, projectDir }: W
   const [formError, setFormError] = useState('')
   const [_saving, setSaving] = useState(false)
   const { data } = useResource(agentsResource, projectDir)
-  const agentTypes = useMemo(() => (data ? [...data.defaults, ...data.userItems, ...data.projectItems] : []), [data])
+  const allAgentTypes = useMemo(() => (data ? [...data.defaults, ...data.userItems, ...data.projectItems] : []), [data])
+  const projectModes = useProjectModes()
+  const categoryOptions = useMemo(
+    () => [
+      { value: '', label: t({ en: 'Dev (default)', fr: 'Dev (par défaut)' }) },
+      ...projectModes
+        .filter((mode) => mode.value !== 'dev')
+        .map((mode) => ({ value: mode.value, label: t(mode.label) })),
+    ],
+    [projectModes, t],
+  )
+  // A workflow runs agents of its own project function; see agentsForWorkflow.
+  const agentTypes = useMemo(
+    () =>
+      agentsForWorkflow(
+        allAgentTypes,
+        formCategory,
+        formSteps.flatMap((step) => [
+          'agentId' in step ? step.agentId : undefined,
+          'subAgentType' in step ? step.subAgentType : undefined,
+        ]),
+      ),
+    [allAgentTypes, formCategory, formSteps],
+  )
 
   const [_confirmDeleteId] = useState<string | null>(null)
 
@@ -150,6 +176,7 @@ export function WorkflowsModal({ isOpen, onClose, initialEditId, projectDir }: W
         description: string
         version: string
         color?: string
+        category?: string
         parameters?: WorkflowParameter[]
       }
       entryStep: string
@@ -164,6 +191,7 @@ export function WorkflowsModal({ isOpen, onClose, initialEditId, projectDir }: W
     setFormDescription(workflow.metadata.description)
     setFormVersion(workflow.metadata.version)
     setFormColor(workflow.metadata.color ?? '#3b82f6')
+    setFormCategory(workflow.metadata.category ?? '')
     setFormEntryStep(workflow.entryStep)
     setFormMaxIterations(workflow.settings.maxIterations)
     setFormSteps(workflow.steps)
@@ -225,6 +253,9 @@ export function WorkflowsModal({ isOpen, onClose, initialEditId, projectDir }: W
         description: formDescription,
         version: formVersion || '1.0.0',
         color: formColor,
+        // Saving used to drop the category, which made a project-function workflow
+        // (chat, GTD, writing) show up in every other kind of project.
+        ...(formCategory ? { category: formCategory } : {}),
         ...(formParameters.length > 0 ? { parameters: formParameters } : {}),
       },
       entryStep: entry,
@@ -298,6 +329,7 @@ export function WorkflowsModal({ isOpen, onClose, initialEditId, projectDir }: W
     setFormDescription('')
     setFormVersion('1.0.0')
     setFormColor('#3b82f6')
+    setFormCategory('')
     setFormEntryStep('')
     setFormMaxIterations(50)
     setFormSteps(structuredClone(DEFAULT_STEPS))
@@ -561,6 +593,9 @@ export function WorkflowsModal({ isOpen, onClose, initialEditId, projectDir }: W
           formDescription={formDescription}
           formMaxIterations={formMaxIterations}
           formColor={formColor}
+          formCategory={formCategory}
+          categoryOptions={categoryOptions}
+          onCategoryChange={setFormCategory}
           isReadOnly={isReadOnly}
           onNameChange={handleNameChange}
           onDescriptionChange={setFormDescription}

@@ -65,6 +65,8 @@ export interface WorkflowFull {
     description: string
     version: string
     color?: string
+    /** Project function the workflow belongs to ('chat', 'gtd', …); absent = classic dev workflow. */
+    category?: string
     parameters?: WorkflowParameter[]
   }
   entryStep: string
