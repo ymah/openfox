@@ -1,3 +1,5 @@
+import { filterByProjectType } from '../../lib/category-groups'
+import { useCurrentProject } from '../../hooks/useCurrentProject'
 import { memo, useState, useRef, useCallback, useEffect, useLayoutEffect, type ReactNode } from 'react'
 import type { OverlayScrollbarsComponentRef } from 'overlayscrollbars-react'
 import { ScrollArea } from '../shared/ScrollArea'
@@ -167,7 +169,9 @@ export const MessageList = memo(function MessageList({
   const { showThinking, showVerboseToolOutput, showStats, showAgentDefinitions, showWorkflowBars } =
     useDisplaySettings()
 
-  const { workflows } = useWorkflows(useSessionWorkdir())
+  const { workflows: allWorkflows } = useWorkflows(useSessionWorkdir())
+  // The start buttons offer this project's own workflows: a chat workflow has no place in a dev session.
+  const workflows = filterByProjectType(allWorkflows, useCurrentProject()?.type)
 
   const hasNewCriteria = criteria.some((c) => c.status === 'pending')
   const isDone = sessionPhase === 'done'

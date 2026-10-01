@@ -17,6 +17,7 @@
 
 ### Bug Fixes
 
+- **No more chat or GTD workflow buttons in a dev session** — the buttons offered once acceptance criteria are written listed every workflow, whatever the project. They now list only the project's own.
 - **Chat and dev no longer mix** — the workflow editor's step pickers now offer only the agents of the workflow's own project function (a chat workflow gets the chat assistants, a dev workflow the dev agents), with a new "Project function" field; the task editor's agent picker is scoped to the project the same way.
 - **Saving a workflow no longer drops its category** — editing a chat, GTD or writing workflow removed its category, which made it appear in every other kind of project.
 - **A plugin's tools are no longer shown to agents that cannot call them** — enabling the chat plugin added its memory tools to every dev session's tool list (and shifted its cache and drift state). They are now offered only to agents that list them.
