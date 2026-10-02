@@ -121,6 +121,16 @@ describe('Sidebar', () => {
     expect(html).toContain('5 messages')
   })
 
+  it('says "1 message", not "1 messages"', () => {
+    sessionStoreStateRef.current = {
+      ...sessionStoreState,
+      sessions: sessionStoreState.sessions.map((s) => ({ ...s, messageCount: 1 })),
+    }
+    const html = renderToStaticMarkup(<Sidebar projectId="project-1" />)
+    expect(html).toMatch(/1 message(?!s)/)
+    expect(html).not.toContain('1 messages')
+  })
+
   it('renders as a fixed overlay with a backdrop when overlay mode is on', () => {
     const html = renderToStaticMarkup(<Sidebar projectId="project-1" isOpen overlay onClose={() => {}} />)
 

@@ -17,6 +17,11 @@
 
 ### Bug Fixes
 
+- **No more permanent "Update OpenFox" banner on a fork** — the check compared `2.0.160-fox.4` with the upstream package, so it could only say "different", and the button would have replaced the fork with upstream. Fork builds are never offered an update, and `OPENFOX_DISABLE_AUTO_UPDATE=true` turns the banner off for any deployment updated another way.
+- **Escape closes the agent menu**, like the persona popover.
+- **A project's own pages are reachable from the sidebar** — Manuscript and Codex for a book, Memory for a chat space were linked only from the project home, so a session had no way back to them. Plugins declare them with `nav`.
+- **Small wording fixes** — "1 message" instead of "1 messages" (sidebar and home), and "New conversation" instead of "New Session" in a chat project.
+- **An edited or replayed message now shows its reply** — the new version was loaded while still running and stayed incomplete until a page reload; it is now reloaded once it has finished.
 - **A French-style price no longer breaks the maths** — "Prix : 5 $ et $10" rendered as "5 et \10" because the lone `$` opened a formula with the next one. Dollar signs now pair by Pandoc's rule (a formula opens before a non-space and closes after a non-space), so prices stay text and real formulas still render.
 - **Regenerating a version adds to the same set** — regenerating from a version made a child of it, so you never saw all the versions together ("2/2" every time). The same reply's versions are now siblings and navigate as one `‹ n/m ›`.
 - **A new version shows up as it runs** — after a second regeneration the new version displayed only your message until the page was reloaded, because it started before the page had loaded it. It is now loaded afresh.

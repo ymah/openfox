@@ -6,12 +6,17 @@ import type { Message } from '@shared/types.js'
 const navigate = vi.fn()
 const authFetch = vi.fn()
 const loadSession = vi.fn()
+const followNewVersion = vi.fn()
 let projectType: string | undefined = 'chat'
 let storeMessages: Message[] = []
 let running = false
 
 vi.mock('wouter', () => ({ useLocation: () => ['/', navigate] }))
 vi.mock('../../hooks/useT', () => ({ useT: () => (s: { en: string }) => s.en }))
+vi.mock('../../lib/branches', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../lib/branches')>()),
+  followNewVersion: (...args: unknown[]) => followNewVersion(...args),
+}))
 vi.mock('../../lib/api', () => ({ authFetch: (...a: unknown[]) => authFetch(...a) }))
 vi.mock('../../hooks/useCurrentProject', () => ({
   useCurrentProject: () => ({ id: 'p1', name: 'P', type: projectType }),
@@ -34,6 +39,7 @@ const reply = (variants: Record<string, string[]>) => ({
 beforeEach(() => {
   navigate.mockReset()
   loadSession.mockReset()
+  followNewVersion.mockReset()
   authFetch.mockReset()
   projectType = 'chat'
   running = false
@@ -100,6 +106,7 @@ describe('ChatMessageActions', () => {
     await waitFor(() => expect(navigate).toHaveBeenCalledWith('/p/p1/s/new'))
     // A version starts running as it is created: it must be loaded afresh, not trusted from a partial cache.
     expect(loadSession).toHaveBeenCalledWith('new', true)
+    expect(followNewVersion).toHaveBeenCalledWith('new', loadSession)
     expect(authFetch).toHaveBeenCalledWith(
       '/api/sessions/s1/versions',
       expect.objectContaining({ method: 'POST', body: JSON.stringify({ messageId: 'a1' }) }),

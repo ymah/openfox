@@ -1,4 +1,5 @@
 import type { ReactElement } from 'react'
+import type { Translation } from '@shared/i18n/index.js'
 import { pluginIdForProjectMode } from './bundled-plugin-modes'
 
 /**
@@ -25,10 +26,18 @@ export interface BundledPluginPage {
   render: (projectId: string) => ReactElement
 }
 
+export interface BundledPluginNavItem {
+  /** wouter path pattern of a page this plugin owns, e.g. '/p/:projectId/codex'. */
+  path: string
+  label: Translation
+}
+
 export interface BundledPluginUi {
   /** Must match the plugin's package name, so the host can check it is enabled. */
   pluginId: string
   pages?: BundledPluginPage[]
+  /** Links shown in the project sidebar, so the plugin's pages are reachable from anywhere in the project. */
+  nav?: BundledPluginNavItem[]
   /** Replaces the default project home for projects of this plugin's mode. */
   projectHome?: (projectId: string) => ReactElement
 }
@@ -51,6 +60,14 @@ export function projectHomeForMode(type: string | undefined): ((projectId: strin
   const pluginId = pluginIdForProjectMode(type)
   if (!pluginId) return undefined
   return BUNDLED_PLUGIN_UI.find((ui) => ui.pluginId === pluginId)?.projectHome
+}
+
+/** The sidebar links of the plugin that owns a project's mode, with the project id filled in. */
+export function navItemsForMode(type: string | undefined, projectId: string): { href: string; label: Translation }[] {
+  const pluginId = pluginIdForProjectMode(type)
+  if (!pluginId) return []
+  const ui = BUNDLED_PLUGIN_UI.find((entry) => entry.pluginId === pluginId)
+  return (ui?.nav ?? []).map((item) => ({ href: item.path.replace(':projectId', projectId), label: item.label }))
 }
 
 export { pluginIdForProjectMode }

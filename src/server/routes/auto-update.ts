@@ -4,6 +4,7 @@ import { spawn } from 'node:child_process'
 import { VERSION } from '../../constants.js'
 import { logger } from '../utils/logger.js'
 import { serverT } from '../i18n.js'
+import { isUpdateAvailable } from './update-check.js'
 
 export interface AutoUpdateRoutesOptions {
   requireAuth?: (req: Request) => Promise<boolean>
@@ -192,14 +193,14 @@ export function createAutoUpdateRoutes(options: AutoUpdateRoutesOptions = {}): R
 
       const currentVersion = isDev ? current.replace(/-dev$/, '') : current
       const latestVersion = latest.replace(/^v/, '')
-      const isUpdateAvailable = currentVersion !== latestVersion
+      const updateAvailable = isUpdateAvailable(currentVersion, latestVersion)
 
       // Cache the result (use latestVersion without 'v' prefix for consistency)
       const now = Date.now()
-      versionCache.data = { current, latest: latestVersion, isUpdateAvailable, isService }
+      versionCache.data = { current, latest: latestVersion, isUpdateAvailable: updateAvailable, isService }
       versionCache.timestamp = now
 
-      res.json({ current, latest: latestVersion, isUpdateAvailable, isService })
+      res.json({ current, latest: latestVersion, isUpdateAvailable: updateAvailable, isService })
     } catch (err) {
       logger.error('[auto-update] Error in version check', { error: err instanceof Error ? err.message : String(err) })
       const currentVersion = isDev ? current.replace(/-dev$/, '') : current

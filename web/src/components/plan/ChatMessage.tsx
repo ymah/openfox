@@ -21,7 +21,7 @@ import { useContextMenu } from '../../hooks/useContextMenu'
 import { useMessageContextMenu } from '../../hooks/useMessageContextMenu'
 import { useCurrentProject } from '../../hooks/useCurrentProject'
 import { getProjectMode } from '../../lib/project-modes'
-import { branchFromMessage } from '../../lib/branches'
+import { branchFromMessage, followNewVersion } from '../../lib/branches'
 
 interface ChatMessageProps {
   message: Message
@@ -92,6 +92,13 @@ function UserMessage({ message, messageId, sessionId }: UserMessageProps) {
     }
   }
 
+  /** Open a freshly created version: load it, follow it to the end, then show it. */
+  const openVersion = (version: { id: string; projectId: string }) => {
+    void loadSession(version.id, true)
+    void followNewVersion(version.id, loadSession)
+    navigate(`/p/${version.projectId}/s/${version.id}`)
+  }
+
   const handleReplay = async () => {
     if (!sessionId || !messageId || pending) return
     setPending(true)
@@ -102,8 +109,7 @@ function UserMessage({ message, messageId, sessionId }: UserMessageProps) {
       if ('error' in result) {
         setError(result.error)
       } else {
-        void loadSession(result.session.id, true)
-        navigate(`/p/${result.session.projectId}/s/${result.session.id}`)
+        openVersion(result.session)
       }
       return
     }
@@ -131,8 +137,7 @@ function UserMessage({ message, messageId, sessionId }: UserMessageProps) {
         setError(result.error)
       } else {
         setEditing(false)
-        void loadSession(result.session.id, true)
-        navigate(`/p/${result.session.projectId}/s/${result.session.id}`)
+        openVersion(result.session)
       }
       return
     }

@@ -36,6 +36,8 @@ import { ResizeHandle } from '../shared/ResizeHandle'
 import { useSidebarStore } from '../../stores/sidebar'
 import { PluginBadges } from '../plugins/PluginBadges'
 import { PluginZone } from '../plugins/PluginZone'
+import { PluginNavLinks } from './PluginNavLinks'
+import { getProjectMode } from '../../lib/project-modes'
 
 interface SidebarProps {
   projectId: string
@@ -303,7 +305,9 @@ export function Sidebar({ projectId, isOpen = true, overlay = false, onClose }: 
                   className="flex-1 block text-center rounded font-medium transition-colors bg-accent-primary/25 text-text-primary hover:bg-accent-primary/40 px-3 py-1.5 text-sm"
                   data-testid="sidebar-new-session-button"
                 >
-                  {t({ en: '+ New Session', fr: '+ Nouvelle session' })}
+                  {getProjectMode(currentProject?.type).chatChrome
+                    ? t({ en: '+ New conversation', fr: '+ Nouvelle conversation' })
+                    : t({ en: '+ New Session', fr: '+ Nouvelle session' })}
                 </Link>
                 <input
                   ref={importFileInputRef}
@@ -343,6 +347,7 @@ export function Sidebar({ projectId, isOpen = true, overlay = false, onClose }: 
                 {/* Overlay close button */}
                 {onClose && overlay && <CloseButton onClick={onClose} variant="sidebar" size="md" />}
               </div>
+              <PluginNavLinks projectId={projectId} />
             </PluginZone>
 
             {/* Transfer errors (import/export) */}
@@ -656,7 +661,13 @@ function renderSessionList(
             )}
             {/* Message count in muted style */}
             <span className="text-text-muted text-xs flex-shrink-0">
-              {t({ en: '{{count}} messages', fr: '{{count}} messages' }, { count: session.messageCount })}
+              {t(
+                {
+                  en: { one: '{{count}} message', other: '{{count}} messages' },
+                  fr: { one: '{{count}} message', other: '{{count}} messages' },
+                },
+                { count: session.messageCount },
+              )}
             </span>
             <PluginBadges
               slot="session.row.badges"

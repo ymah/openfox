@@ -481,7 +481,13 @@ export function HomePage() {
                     )}
                     <span className="text-xs text-text-muted shrink-0">{formatRelativeDate(session.updatedAt)}</span>
                     <span className="text-xs text-text-muted shrink-0">
-                      {t({ en: '{{count}} msgs', fr: '{{count}} msg' }, { count: session.messageCount })}
+                      {t(
+                        {
+                          en: { one: '{{count}} msg', other: '{{count}} msgs' },
+                          fr: { one: '{{count}} msg', other: '{{count}} msg' },
+                        },
+                        { count: session.messageCount },
+                      )}
                     </span>
                   </>
                 )

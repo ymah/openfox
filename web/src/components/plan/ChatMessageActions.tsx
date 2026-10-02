@@ -5,7 +5,13 @@ import { useT } from '../../hooks/useT'
 import { useSessionStore } from '../../stores/session'
 import { useCurrentProject } from '../../hooks/useCurrentProject'
 import { getProjectMode } from '../../lib/project-modes'
-import { branchFromMessage, fetchBranchVariants, turnInfoForMessage, variantPosition } from '../../lib/branches'
+import {
+  branchFromMessage,
+  fetchBranchVariants,
+  followNewVersion,
+  turnInfoForMessage,
+  variantPosition,
+} from '../../lib/branches'
 
 // Typographic arrows: neither is translatable text.
 const PREVIOUS_GLYPH = '‹'
@@ -78,6 +84,7 @@ function ChatMessageActionsInner({
       // some of its events while on another session; load it afresh rather than trust a
       // partial cached pane.
       void loadSession(result.session.id, true)
+      void followNewVersion(result.session.id, loadSession)
       navigate(`/p/${result.session.projectId}/s/${result.session.id}`)
     }
   }

@@ -18,6 +18,10 @@ const ui: BundledPluginUi = {
     { path: '/p/:projectId/manuscript', render: (projectId) => <ManuscriptView projectId={projectId} /> },
     { path: '/p/:projectId/write', render: (projectId) => <SceneWriteView projectId={projectId} /> },
   ],
+  nav: [
+    { path: '/p/:projectId/manuscript', label: { en: 'Manuscript', fr: 'Manuscrit' } },
+    { path: '/p/:projectId/codex', label: { en: 'Codex', fr: 'Codex' } },
+  ],
   projectHome: (projectId) => <WritingHome projectId={projectId} />,
 }
 

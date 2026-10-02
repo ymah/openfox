@@ -1,5 +1,8 @@
-import { describe, expect, it } from 'vitest'
-import { BRANCH_START_KEY, turnInfoForMessage, variantPosition } from './branches'
+import { afterEach, describe, expect, it, vi } from 'vitest'
+import { BRANCH_START_KEY, followNewVersion, turnInfoForMessage, variantPosition } from './branches'
+
+const authFetch = vi.hoisted(() => vi.fn())
+vi.mock('./api', () => ({ authFetch: (...args: unknown[]) => authFetch(...args) }))
 import type { Message } from '@shared/types.js'
 
 const msg = (id: string, role: Message['role'], extra: Partial<Message> = {}): Message =>
@@ -49,5 +52,49 @@ describe('variantPosition', () => {
     expect(variantPosition({ k: ['s1'] }, 'k', 's1')).toBeNull()
     expect(variantPosition(variants, 'other', 's1')).toBeNull()
     expect(variantPosition(variants, BRANCH_START_KEY, 'zzz')).toBeNull()
+  })
+})
+
+describe('followNewVersion', () => {
+  afterEach(() => {
+    vi.useRealTimers()
+    authFetch.mockReset()
+  })
+
+  const reply = (isRunning: boolean, count: number) => ({
+    ok: true,
+    json: () => Promise.resolve({ session: { isRunning }, messages: new Array(count).fill({}) }),
+  })
+
+  it('reloads once, after the version has finished', async () => {
+    vi.useFakeTimers()
+    authFetch
+      .mockResolvedValueOnce(reply(false, 1)) // queued, not started
+      .mockResolvedValueOnce(reply(true, 2)) // running
+      .mockResolvedValueOnce(reply(false, 3)) // done
+    const reload = vi.fn()
+    const done = followNewVersion('v2', reload, { intervalMs: 10 })
+    await vi.advanceTimersByTimeAsync(100)
+    await done
+    expect(reload).toHaveBeenCalledTimes(1)
+    expect(reload).toHaveBeenCalledWith('v2', true)
+    expect(authFetch).toHaveBeenCalledTimes(3)
+  })
+
+  it('gives up quietly when the session cannot be read or never finishes', async () => {
+    vi.useFakeTimers()
+    authFetch.mockResolvedValue({ ok: false })
+    const reload = vi.fn()
+    const done = followNewVersion('v2', reload, { intervalMs: 10 })
+    await vi.advanceTimersByTimeAsync(50)
+    await done
+    expect(reload).not.toHaveBeenCalled()
+
+    authFetch.mockReset()
+    authFetch.mockResolvedValue(reply(true, 2))
+    const stuck = followNewVersion('v2', reload, { intervalMs: 10, maxWaitMs: 40 })
+    await vi.advanceTimersByTimeAsync(200)
+    await stuck
+    expect(reload).not.toHaveBeenCalled()
   })
 })

@@ -10,6 +10,7 @@ import { MemoryView } from './MemoryView'
 const ui: BundledPluginUi = {
   pluginId: 'openfox-chat',
   pages: [{ path: '/p/:projectId/memory', render: (projectId) => <MemoryView projectId={projectId} /> }],
+  nav: [{ path: '/p/:projectId/memory', label: { en: 'Memory', fr: 'Mémoire' } }],
   projectHome: (projectId) => <ChatHome projectId={projectId} />,
 }
 

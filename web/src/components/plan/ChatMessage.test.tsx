@@ -31,8 +31,10 @@ vi.mock('../../hooks/useCurrentProject', () => ({
 }))
 
 const mockBranchFromMessage = vi.fn()
+const mockFollowNewVersion = vi.fn()
 vi.mock('../../lib/branches', () => ({
   branchFromMessage: (...args: unknown[]) => mockBranchFromMessage(...args),
+  followNewVersion: (...args: unknown[]) => mockFollowNewVersion(...args),
 }))
 
 vi.mock('../../stores/session.js', () => ({
@@ -178,6 +180,7 @@ describe('ChatMessage replay and edit controls', () => {
       await waitFor(() => expect(navigateMock).toHaveBeenCalledWith('/p/p1/s/v2'))
       expect(mockBranchFromMessage).toHaveBeenCalledWith('s1', 'm1', { content: 'Better prompt', attachments: [] })
       expect(mockLoadSession).toHaveBeenCalledWith('v2', true)
+      expect(mockFollowNewVersion).toHaveBeenCalledWith('v2', mockLoadSession) // reloaded again once it has finished
       expect(mockReplayMessage).not.toHaveBeenCalled() // the history is not truncated
     })
 

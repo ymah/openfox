@@ -81,3 +81,32 @@ export async function branchFromMessage(
     return { error: err instanceof Error ? err.message : String(err) }
   }
 }
+
+/**
+ * A new version starts running as it is created, so the client sees part of its
+ * events while still on another session and loads a partial pane. Once the version
+ * has finished, load it afresh so what is on screen matches what the server holds
+ * (the same as a page reload). Polls lightly and gives up after `maxWaitMs`.
+ */
+export async function followNewVersion(
+  sessionId: string,
+  reload: (sessionId: string, force: boolean) => unknown,
+  { intervalMs = 600, maxWaitMs = 120_000 }: { intervalMs?: number; maxWaitMs?: number } = {},
+): Promise<void> {
+  const deadline = Date.now() + maxWaitMs
+  while (Date.now() < deadline) {
+    await new Promise((resolve) => setTimeout(resolve, intervalMs))
+    try {
+      const res = await authFetch(`/api/sessions/${sessionId}`)
+      if (!res.ok) return
+      const data = (await res.json()) as { session?: { isRunning?: boolean }; messages?: unknown[] }
+      // Not running AND something has been said back (user + reminder + reply): the turn is over.
+      if (data.session?.isRunning === false && (data.messages?.length ?? 0) >= 3) {
+        reload(sessionId, true)
+        return
+      }
+    } catch {
+      return
+    }
+  }
+}

@@ -6,6 +6,7 @@ import { useT } from '../../hooks/useT'
 import { AgentsModal } from '../settings/AgentsModal'
 import { useKeybindings } from '../../hooks/useKeybindings'
 import { useClickOutside } from '../../hooks/useClickOutside'
+import { useEscapeKey } from '../../hooks/useEscapeKey'
 import { formatKeybinding } from '../../lib/keybindings'
 import { useSessionScope, useScopedPaneState } from '../../stores/session/session-scope'
 import { useEffortGatedAgentSwitch } from '../../hooks/useEffortGateContext'
@@ -39,6 +40,7 @@ export function AgentSelector() {
 
   // Close dropdown when clicking outside
   useClickOutside(dropdownRef, () => setIsOpen(false))
+  useEscapeKey(() => setIsOpen(false), isOpen)
 
   const keybindings = useKeybindings()
 

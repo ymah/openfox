@@ -3,6 +3,7 @@ import { authFetch } from '../../lib/api'
 import { useT } from '../../hooks/useT'
 import { useIsTouchDevice } from '../../hooks/useIsTouchDevice'
 import { useClickOutside } from '../../hooks/useClickOutside'
+import { useEscapeKey } from '../../hooks/useEscapeKey'
 import { useApplyDynamicContext } from '../../stores/session/session-scope'
 import { DropdownPanel } from '../shared/DropdownPanel'
 import {
@@ -37,14 +38,7 @@ export function ChatSettings({ sessionId, isRunning }: { sessionId: string; isRu
   const close = useCallback(() => setOpen(false), [])
   // Like the other popovers: a click elsewhere or Escape dismisses it.
   useClickOutside(containerRef, close, open && !isModal)
-  useEffect(() => {
-    if (!open) return
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setOpen(false)
-    }
-    document.addEventListener('keydown', onKey)
-    return () => document.removeEventListener('keydown', onKey)
-  }, [open])
+  useEscapeKey(close, open)
 
   const load = useCallback(async () => {
     try {

@@ -135,6 +135,8 @@ to its Node entry point it may ship:
 - `web/index.tsx` — its application pages and, optionally, a custom project home.
   These are real React components using the host's components, hooks and theme.
 
+A page entry may also declare `nav` — `{ path, label }` links the host shows in the project sidebar while the plugin is enabled, so its pages are reachable from anywhere in the project.
+
 Both are picked up at **build time** (`import.meta.glob` in
 `web/src/lib/bundled-plugin-modes.ts` and `bundled-plugin-ui.ts`) and compiled
 into the web bundle, and the core only renders a page while its plugin is
