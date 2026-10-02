@@ -7,7 +7,14 @@ const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
 
 export default {
-  content: [path.join(__dirname, 'index.html'), path.join(__dirname, 'src', '**', '*.{js,ts,jsx,tsx}')],
+  content: [
+    path.join(__dirname, 'index.html'),
+    path.join(__dirname, 'src', '**', '*.{js,ts,jsx,tsx}'),
+    // The bundled plugins' pages are compiled into this app but live outside web/:
+    // without this, a utility class used only there (spacing, layout…) is never
+    // generated and the page renders unstyled.
+    path.join(__dirname, '..', 'src', 'server', 'plugins', 'bundled', '*', 'web', '**', '*.{ts,tsx}'),
+  ],
   darkMode: 'class',
   theme: {
     extend: {

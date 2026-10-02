@@ -40,6 +40,8 @@ export function SessionSidebar({ workdir }: SessionSidebarProps) {
   const { branch } = useGitStatus()
   const project = useCurrentProject()
   const showsDevChrome = getProjectMode(project?.type).showsDevChrome
+  // Acceptance criteria belong to a contract-driven coding run, not to a conversation.
+  const isChatMode = getProjectMode(project?.type).chatChrome === true
   const version = useConfig().config?.version ?? null
   const { currentSession: session, sessionId } = useScopedContext()
   const sessionStats = useScopedPaneState(
@@ -111,16 +113,22 @@ export function SessionSidebar({ workdir }: SessionSidebarProps) {
       {/* Metadata sections */}
       <ScrollArea className="flex flex-col flex-1 px-4 -mx-4 pb-4">
         <div>
-          <button
-            onClick={() => setActiveMetadataKey('criteria')}
-            className="w-full text-left cursor-pointer hover:[&_h3]:text-accent-primary transition-colors"
-          >
-            <MetadataSectionHeader
-              entries={session?.metadataEntries?.['criteria'] ?? []}
-              title={t({ en: 'Acceptance Criteria', fr: 'Critères d’acceptation' })}
-            />
-          </button>
-          {session && <CriteriaEditor entries={session?.metadataEntries?.['criteria'] ?? []} sessionId={session.id} />}
+          {!isChatMode && (
+            <>
+              <button
+                onClick={() => setActiveMetadataKey('criteria')}
+                className="w-full text-left cursor-pointer hover:[&_h3]:text-accent-primary transition-colors"
+              >
+                <MetadataSectionHeader
+                  entries={session?.metadataEntries?.['criteria'] ?? []}
+                  title={t({ en: 'Acceptance Criteria', fr: 'Critères d’acceptation' })}
+                />
+              </button>
+              {session && (
+                <CriteriaEditor entries={session?.metadataEntries?.['criteria'] ?? []} sessionId={session.id} />
+              )}
+            </>
+          )}
           {session &&
             (() => {
               const knownOrder = ['review_findings', 'todos']

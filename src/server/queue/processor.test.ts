@@ -267,7 +267,8 @@ describe('QueueProcessor', () => {
       const callback = mockSessionManager.subscribe.mock.calls[0][0]
       callback({ type: 'queue_added', sessionId: 'sess-1', queueId: 'q-1', mode: 'asap', content: 'hello' })
 
-      await new Promise((resolve) => setTimeout(resolve, 50))
+      // Wait for the turn to start rather than for a fixed delay: 50 ms was not enough under load.
+      await vi.waitFor(() => expect(runChatTurnMock).toHaveBeenCalled())
 
       const params = runChatTurnMock.mock.calls[0]![0]!
       expect(typeof params.getSessionLLMClient).toBe('function')
@@ -317,7 +318,7 @@ describe('QueueProcessor', () => {
 
       const callback = mockSessionManager.subscribe.mock.calls[0][0]
       callback({ type: 'queue_added', sessionId: 'sess-1', queueId: 'q-1', mode: 'asap', content: 'hello' })
-      await new Promise((resolve) => setTimeout(resolve, 50))
+      await vi.waitFor(() => expect(runChatTurnMock).toHaveBeenCalled())
 
       // The session effort flows into the client factory...
       expect(getLLMClientForProviderMock).toHaveBeenCalledWith('provider-2', 'deepseek-v4-flash', 'none')

@@ -1,3 +1,5 @@
+import { getProjectMode } from '../../lib/project-modes'
+import { useCurrentProject } from '../../hooks/useCurrentProject'
 import { ScrollArea } from '../shared/ScrollArea'
 import { useState, useRef, useEffect, useCallback, forwardRef, useImperativeHandle } from 'react'
 import { LogViewer } from './LogViewer'
@@ -204,6 +206,10 @@ export function SidebarSummaryHeader({ visible }: SidebarSummaryHeaderProps) {
   const contextPopoverRef = useRef<PopoverHandle>(null)
   const metadataPopoverRef = useRef<PopoverHandle>(null)
   const workspacePopoverRef = useRef<PopoverHandle>(null)
+  const projectType = useCurrentProject()?.type
+  const showsDevChrome = getProjectMode(projectType).showsDevChrome
+  // Acceptance criteria are for a coding run, not a conversation.
+  const isChatMode = getProjectMode(projectType).chatChrome === true
   const showEditorLink = useSetting(SETTINGS_KEYS.DISPLAY_SHOW_OPEN_IN_EDITOR).value === 'true'
   if (!visible || !session) return null
 
@@ -245,95 +251,103 @@ export function SidebarSummaryHeader({ visible }: SidebarSummaryHeaderProps) {
   return (
     <div className="flex-shrink-0 px-4 py-1.5 border-b border-border bg-secondary">
       <div className="grid grid-cols-2 @sm:flex @sm:items-center @sm:justify-between gap-x-2 gap-y-1 text-sm">
-        {/* ---- Workspace / Branch ---- */}
-        <div className="flex items-center gap-1 min-w-0 @sm:shrink-0">
-          <FolderIcon className="w-3.5 h-3.5 text-text-muted flex-shrink-0" />
-          <span className="truncate text-text-secondary max-w-[120px]">{workspaceName}</span>
-          <span className="text-text-muted">/</span>
-          <BranchIcon className="w-3.5 h-3.5 text-text-muted flex-shrink-0" />
-          <span className="truncate text-text-secondary max-w-[120px]">{branch ?? '-'}</span>
-          {diffFiles.length > 0 ? (
-            <span className="text-text-muted shrink-0 font-mono">{`+${totalAdditions} -${totalDeletions}`}</span>
-          ) : (
-            <span className="shrink-0" />
-          )}
-          <Popover ref={workspacePopoverRef} trigger={<ChevronDownIcon className="w-3 h-3" />}>
-            <WorkspaceBranchSection
-              workspaceName={workspaceName}
-              branch={branch}
-              workdir={workdir}
-              showEditorLink={showEditorLink}
-              sessionId={session.id}
-              projectId={session.projectId}
-              onEditWorkspace={() => {
-                workspacePopoverRef.current?.close()
-                setShowWorkspaceModal(true)
-              }}
-              onEditBranch={() => {
-                workspacePopoverRef.current?.close()
-                setShowBranchModal(true)
-              }}
-            />
-          </Popover>
-        </div>
-
-        {/* ---- Divider ---- */}
-        <div className="hidden @sm:block w-px bg-border self-stretch mx-1" />
-
-        {/* ---- Metadata Status ---- */}
-        <div className="flex-1 flex items-center @sm:justify-center justify-self-end gap-1 min-w-0">
-          <MetadataStatusSummary entries={criteriaEntries} />
-          {otherCount > 0 && (
-            <span
-              className="text-text-muted text-xs bg-bg-tertiary px-1 py-0.5 rounded leading-none"
-              title={otherLabels.join(', ')}
-            >
-              +{otherCount}
-            </span>
-          )}
-          <Popover ref={metadataPopoverRef} trigger={<ChevronDownIcon className="w-3 h-3" />}>
-            <div className="space-y-3">
-              <div>
-                <button
-                  onClick={() => {
-                    metadataPopoverRef.current?.close()
-                    setActiveMetadataKey('criteria')
+        {showsDevChrome && (
+          <>
+            {/* ---- Workspace / Branch ---- */}
+            <div className="flex items-center gap-1 min-w-0 @sm:shrink-0">
+              <FolderIcon className="w-3.5 h-3.5 text-text-muted flex-shrink-0" />
+              <span className="truncate text-text-secondary max-w-[120px]">{workspaceName}</span>
+              <span className="text-text-muted">/</span>
+              <BranchIcon className="w-3.5 h-3.5 text-text-muted flex-shrink-0" />
+              <span className="truncate text-text-secondary max-w-[120px]">{branch ?? '-'}</span>
+              {diffFiles.length > 0 ? (
+                <span className="text-text-muted shrink-0 font-mono">{`+${totalAdditions} -${totalDeletions}`}</span>
+              ) : (
+                <span className="shrink-0" />
+              )}
+              <Popover ref={workspacePopoverRef} trigger={<ChevronDownIcon className="w-3 h-3" />}>
+                <WorkspaceBranchSection
+                  workspaceName={workspaceName}
+                  branch={branch}
+                  workdir={workdir}
+                  showEditorLink={showEditorLink}
+                  sessionId={session.id}
+                  projectId={session.projectId}
+                  onEditWorkspace={() => {
+                    workspacePopoverRef.current?.close()
+                    setShowWorkspaceModal(true)
                   }}
-                  className="w-full text-left cursor-pointer hover:[&_h3]:text-accent-primary transition-colors"
+                  onEditBranch={() => {
+                    workspacePopoverRef.current?.close()
+                    setShowBranchModal(true)
+                  }}
+                />
+              </Popover>
+            </div>
+
+            {/* ---- Divider ---- */}
+            <div className="hidden @sm:block w-px bg-border self-stretch mx-1" />
+          </>
+        )}
+
+        {!isChatMode && (
+          <>
+            {/* ---- Metadata Status ---- */}
+            <div className="flex-1 flex items-center @sm:justify-center justify-self-end gap-1 min-w-0">
+              <MetadataStatusSummary entries={criteriaEntries} />
+              {otherCount > 0 && (
+                <span
+                  className="text-text-muted text-xs bg-bg-tertiary px-1 py-0.5 rounded leading-none"
+                  title={otherLabels.join(', ')}
                 >
-                  <MetadataSectionHeader
-                    entries={criteriaEntries}
-                    title={t({ en: 'Acceptance Criteria', fr: 'Critères d’acceptation' })}
-                  />
-                </button>
-                <CriteriaEditor entries={criteriaEntries} sessionId={session.id} />
-              </div>
-              {[...extraKeys, ...customKeys].map((key) => {
-                const entries = allEntries[key]!
-                return (
-                  <div key={key}>
+                  +{otherCount}
+                </span>
+              )}
+              <Popover ref={metadataPopoverRef} trigger={<ChevronDownIcon className="w-3 h-3" />}>
+                <div className="space-y-3">
+                  <div>
                     <button
                       onClick={() => {
                         metadataPopoverRef.current?.close()
-                        setActiveMetadataKey(key)
+                        setActiveMetadataKey('criteria')
                       }}
                       className="w-full text-left cursor-pointer hover:[&_h3]:text-accent-primary transition-colors"
                     >
-                      <MetadataSectionHeader entries={entries} title={formatMetadataKeyLabel(key)} />
+                      <MetadataSectionHeader
+                        entries={criteriaEntries}
+                        title={t({ en: 'Acceptance Criteria', fr: 'Critères d’acceptation' })}
+                      />
                     </button>
-                    <MetadataEntries entries={entries} />
+                    <CriteriaEditor entries={criteriaEntries} sessionId={session.id} />
                   </div>
-                )
-              })}
+                  {[...extraKeys, ...customKeys].map((key) => {
+                    const entries = allEntries[key]!
+                    return (
+                      <div key={key}>
+                        <button
+                          onClick={() => {
+                            metadataPopoverRef.current?.close()
+                            setActiveMetadataKey(key)
+                          }}
+                          className="w-full text-left cursor-pointer hover:[&_h3]:text-accent-primary transition-colors"
+                        >
+                          <MetadataSectionHeader entries={entries} title={formatMetadataKeyLabel(key)} />
+                        </button>
+                        <MetadataEntries entries={entries} />
+                      </div>
+                    )
+                  })}
+                </div>
+              </Popover>
             </div>
-          </Popover>
-        </div>
 
-        {/* ---- Divider ---- */}
-        <div className="hidden @sm:block w-px bg-border self-stretch mx-1" />
+            {/* ---- Divider ---- */}
+            <div className="hidden @sm:block w-px bg-border self-stretch mx-1" />
 
-        {/* Mobile row separator — full width */}
-        <div className="col-span-2 border-t border-border @sm:hidden -mx-4" />
+            {/* Mobile row separator — full width */}
+            <div className="col-span-2 border-t border-border @sm:hidden -mx-4" />
+          </>
+        )}
 
         {/* ---- Context ---- */}
         <div className="flex items-center gap-1.5 min-w-0 shrink-0">
@@ -377,56 +391,60 @@ export function SidebarSummaryHeader({ visible }: SidebarSummaryHeaderProps) {
           )}
         </div>
 
-        {/* ---- Divider ---- */}
-        <div className="hidden @sm:block w-px bg-border self-stretch mx-1" />
+        {showsDevChrome && (
+          <>
+            {/* ---- Divider ---- */}
+            <div className="hidden @sm:block w-px bg-border self-stretch mx-1" />
 
-        {/* ---- Dev Server ---- */}
-        <div className="flex items-center gap-1.5 min-w-0 shrink-0 justify-self-end">
-          <span
-            className={`inline-block w-2 h-2 rounded-full flex-shrink-0 ${
-              state === 'running'
-                ? 'bg-accent-success'
-                : state === 'warning'
-                  ? 'bg-accent-warning'
-                  : state === 'error'
-                    ? 'bg-accent-error'
-                    : 'bg-text-muted'
-            }`}
-          />
-          {hasConfig ? (
-            isAlive ? (
-              <button
-                onClick={handleOpen}
-                className="flex items-center justify-center p-1 rounded text-sm font-medium bg-accent-primary/25 text-text-primary hover:bg-accent-primary/40 transition-colors leading-none"
-                title={t({ en: 'Open dev server', fr: 'Ouvrir le serveur de dev' })}
-              >
-                <OpenExternalIcon className="w-3.5 h-3.5" />
-              </button>
-            ) : (
-              <button
-                onClick={handleStart}
-                className="flex items-center justify-center p-1 rounded text-sm font-medium bg-accent-primary/25 text-text-primary hover:bg-accent-primary/40 transition-colors leading-none"
-                title={t({ en: 'Start dev server', fr: 'Démarrer le serveur de dev' })}
-              >
-                <PlayIcon className="w-3.5 h-3.5" />
-              </button>
-            )
-          ) : (
-            <span className="text-text-muted text-xs">{t({ en: 'No config', fr: 'Aucune config' })}</span>
-          )}
+            {/* ---- Dev Server ---- */}
+            <div className="flex items-center gap-1.5 min-w-0 shrink-0 justify-self-end">
+              <span
+                className={`inline-block w-2 h-2 rounded-full flex-shrink-0 ${
+                  state === 'running'
+                    ? 'bg-accent-success'
+                    : state === 'warning'
+                      ? 'bg-accent-warning'
+                      : state === 'error'
+                        ? 'bg-accent-error'
+                        : 'bg-text-muted'
+                }`}
+              />
+              {hasConfig ? (
+                isAlive ? (
+                  <button
+                    onClick={handleOpen}
+                    className="flex items-center justify-center p-1 rounded text-sm font-medium bg-accent-primary/25 text-text-primary hover:bg-accent-primary/40 transition-colors leading-none"
+                    title={t({ en: 'Open dev server', fr: 'Ouvrir le serveur de dev' })}
+                  >
+                    <OpenExternalIcon className="w-3.5 h-3.5" />
+                  </button>
+                ) : (
+                  <button
+                    onClick={handleStart}
+                    className="flex items-center justify-center p-1 rounded text-sm font-medium bg-accent-primary/25 text-text-primary hover:bg-accent-primary/40 transition-colors leading-none"
+                    title={t({ en: 'Start dev server', fr: 'Démarrer le serveur de dev' })}
+                  >
+                    <PlayIcon className="w-3.5 h-3.5" />
+                  </button>
+                )
+              ) : (
+                <span className="text-text-muted text-xs">{t({ en: 'No config', fr: 'Aucune config' })}</span>
+              )}
 
-          <Popover ref={devServerPopoverRef} trigger={<ChevronDownIcon className="w-3 h-3" />}>
-            <DevServerFooter
-              workdir={workdir}
-              compact
-              onExpand={() => setShowLogModal(true)}
-              onConfigure={() => {
-                devServerPopoverRef.current?.close()
-                setShowDevServerConfig(true)
-              }}
-            />
-          </Popover>
-        </div>
+              <Popover ref={devServerPopoverRef} trigger={<ChevronDownIcon className="w-3 h-3" />}>
+                <DevServerFooter
+                  workdir={workdir}
+                  compact
+                  onExpand={() => setShowLogModal(true)}
+                  onConfigure={() => {
+                    devServerPopoverRef.current?.close()
+                    setShowDevServerConfig(true)
+                  }}
+                />
+              </Popover>
+            </div>
+          </>
+        )}
       </div>
 
       {showLogModal && (

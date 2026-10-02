@@ -1,7 +1,8 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { authFetch } from '../../lib/api'
 import { useT } from '../../hooks/useT'
 import { useIsTouchDevice } from '../../hooks/useIsTouchDevice'
+import { useClickOutside } from '../../hooks/useClickOutside'
 import { useApplyDynamicContext } from '../../stores/session/session-scope'
 import { DropdownPanel } from '../shared/DropdownPanel'
 import {
@@ -32,6 +33,18 @@ export function ChatSettings({ sessionId, isRunning }: { sessionId: string; isRu
   const [form, setForm] = useState<ChatSettingsForm>(EMPTY_CHAT_SETTINGS_FORM)
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
+  const containerRef = useRef<HTMLDivElement>(null)
+  const close = useCallback(() => setOpen(false), [])
+  // Like the other popovers: a click elsewhere or Escape dismisses it.
+  useClickOutside(containerRef, close, open && !isModal)
+  useEffect(() => {
+    if (!open) return
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setOpen(false)
+    }
+    document.addEventListener('keydown', onKey)
+    return () => document.removeEventListener('keydown', onKey)
+  }, [open])
 
   const load = useCallback(async () => {
     try {
@@ -97,7 +110,7 @@ export function ChatSettings({ sessionId, isRunning }: { sessionId: string; isRu
   const active = hasOverrides(saved)
 
   return (
-    <div className="relative">
+    <div className="relative" ref={containerRef}>
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}

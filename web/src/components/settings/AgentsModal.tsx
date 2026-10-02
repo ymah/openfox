@@ -1,3 +1,5 @@
+import { groupBuiltInsByFunction } from '../../lib/category-groups'
+import { PROJECT_MODES } from '../../lib/project-modes'
 import { useEffect, useState } from 'react'
 import { Modal } from '../shared/SelfContainedModal'
 import { createAgent, updateAgent, deleteAgent, type AgentFull } from '../../lib/agents-actions'
@@ -267,6 +269,10 @@ export function AgentsModal({ isOpen, onClose, initialEditId, projectDir }: Agen
 
   const defaultSubAgents = defaults.filter((a) => a.subagent)
   const defaultTopLevelAgents = defaults.filter((a) => !a.subagent)
+  const functionLabel = (category: string) => {
+    const mode = PROJECT_MODES.find((m) => m.value === category)
+    return mode ? t(mode.label) : category
+  }
   const userSubAgents = userItems.filter((a) => a.subagent)
   const userTopLevelAgents = userItems.filter((a) => !a.subagent)
   const projectSubAgents = projectItems.filter((a) => a.subagent)
@@ -364,10 +370,32 @@ export function AgentsModal({ isOpen, onClose, initialEditId, projectDir }: Agen
             hasItems={defaults.length > 0 || userItems.length > 0 || projectItems.length > 0}
           >
             <div className="space-y-4">
-              {defaults.length > 0 && (
+              {groupBuiltInsByFunction(defaultTopLevelAgents.length > 0 ? defaultTopLevelAgents : []).map((group) => (
+                <AgentGroup
+                  key={group.category}
+                  title={
+                    group.category === 'dev'
+                      ? t({ en: 'Built-in', fr: 'Intégrés' })
+                      : t(
+                          { en: 'Built-in — {{function}}', fr: 'Intégrés — {{function}}' },
+                          { function: functionLabel(group.category) },
+                        )
+                  }
+                  agents={group.items}
+                  // Sub-agents belong to the classic dev set.
+                  subagents={group.category === 'dev' ? defaultSubAgents : []}
+                  isBuiltIn={true}
+                  alwaysAllowedNames={alwaysAllowedNames}
+                  modelOverrides={modelOverrides}
+                  onView={handleView}
+                  onEdit={handleEditBuiltInModel}
+                  onDuplicate={handleDuplicate}
+                />
+              ))}
+              {defaultTopLevelAgents.length === 0 && defaultSubAgents.length > 0 && (
                 <AgentGroup
                   title={t({ en: 'Built-in', fr: 'Intégrés' })}
-                  agents={defaultTopLevelAgents}
+                  agents={[]}
                   subagents={defaultSubAgents}
                   isBuiltIn={true}
                   alwaysAllowedNames={alwaysAllowedNames}

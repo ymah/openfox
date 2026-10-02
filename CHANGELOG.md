@@ -17,6 +17,12 @@
 
 ### Bug Fixes
 
+- **The interface no longer floods the server with settings writes** — on first load, before settings had arrived, the theme code read the empty fallback as "false", wrote it to the server, then wrote the real "true" back, and so on forever (about 1,500 requests a second, measured in a browser). It now only reacts to an explicit value and never writes back what it just read.
+- **A session whose agent is gone no longer runs as another agent** — a Chat project whose plugin was disabled ran its turns as the dev Planner (different prompt, and able to run shell commands) while still showing "Assistant". The turn is now refused with a message saying why.
+- **Pages shipped by bundled plugins were missing their CSS utilities** — Tailwind did not scan them, so a class used only in the Chat or Writing pages (spacing, layout) was never generated.
+- **Chat sessions look like chat** — the composer says "Message the assistant…" instead of "What would you like to build?", the acceptance-criteria panel is gone, and the mobile header no longer shows the git workspace, branch and dev server (also hidden for GTD and Writing).
+- **Settings lists group built-ins by project function** — the Workflows and Agents managers no longer show chat or GTD items as plain built-ins.
+- **The persona popover closes on Escape and on a click outside**, and the assistant cards on the chat home align at the top.
 - **No more chat or GTD workflow buttons in a dev session** — the buttons offered once acceptance criteria are written listed every workflow, whatever the project. They now list only the project's own.
 - **Chat and dev no longer mix** — the workflow editor's step pickers now offer only the agents of the workflow's own project function (a chat workflow gets the chat assistants, a dev workflow the dev agents), with a new "Project function" field; the task editor's agent picker is scoped to the project the same way.
 - **Saving a workflow no longer drops its category** — editing a chat, GTD or writing workflow removed its category, which made it appear in every other kind of project.

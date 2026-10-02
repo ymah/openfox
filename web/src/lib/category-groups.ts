@@ -80,3 +80,18 @@ export function agentsForWorkflow<T extends { id: string; category?: string }>(
   const scoped = new Set(filterByProjectType(agents, workflowCategory || 'dev'))
   return agents.filter((agent) => scoped.has(agent) || used.has(agent.id))
 }
+
+/**
+ * Built-in agents/workflows grouped by the project function that owns them, dev
+ * first. Uncategorised ones are the classic dev set. Settings lists use this so a
+ * chat assistant or a GTD workflow is never shown as just another built-in.
+ */
+export function groupBuiltInsByFunction<T extends { category?: string }>(
+  items: T[],
+): { category: string; items: T[] }[] {
+  const withCategory = items.map((item) => ({ item, category: item.category?.trim() || 'dev' }))
+  return groupByCategory(withCategory.map((entry) => ({ category: entry.category, entry }))).map((group) => ({
+    category: group.category ?? 'dev',
+    items: group.items.map((wrapped) => wrapped.entry.item),
+  }))
+}

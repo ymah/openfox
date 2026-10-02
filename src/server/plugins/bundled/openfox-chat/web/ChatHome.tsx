@@ -101,7 +101,7 @@ export function ChatHome({ projectId }: ChatHomeProps) {
                   onClick={() => void startChat(agent.id)}
                   disabled={starting !== null}
                   data-testid={`chat-agent-${agent.id}`}
-                  className="text-start rounded border border-border bg-bg-secondary hover:bg-bg-tertiary transition-colors p-3 disabled:opacity-50"
+                  className="flex flex-col items-stretch justify-start text-start rounded border border-border bg-bg-secondary hover:bg-bg-tertiary transition-colors p-3 disabled:opacity-50"
                 >
                   <span className="flex items-center gap-2 font-medium text-text-primary">
                     <span

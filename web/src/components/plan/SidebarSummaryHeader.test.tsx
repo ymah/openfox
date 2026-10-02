@@ -46,6 +46,11 @@ vi.mock('../shared/icons', () => ({
   PlayIcon: () => '[PlayIcon]',
 }))
 
+const project: { type: string | undefined } = { type: undefined }
+vi.mock('../../hooks/useCurrentProject', () => ({
+  useCurrentProject: () => (project.type ? { id: 'p1', type: project.type } : undefined),
+}))
+
 vi.mock('./CriteriaEditor', () => ({ CriteriaEditor: () => null }))
 vi.mock('./DiffViewer', () => ({ DiffViewer: () => '[DiffViewer]' }))
 vi.mock('./DevServerFooter', () => ({ DevServerFooter: () => '[DevServerFooter]' }))
@@ -68,6 +73,7 @@ function mockMetadataEntries(overrides?: Record<string, unknown>) {
 
 beforeEach(() => {
   vi.clearAllMocks()
+  project.type = undefined
 
   mockSessionStore.mockReturnValue({
     currentSession: {
@@ -174,6 +180,29 @@ describe('SidebarSummaryHeader', () => {
     const html = renderToStaticMarkup(<SidebarSummaryHeader visible={true} />)
     expect(html).toContain('my-workspace')
     expect(html).toContain('main')
+  })
+
+  it('a chat project shows neither the git workspace nor the dev server, nor acceptance criteria', () => {
+    project.type = 'chat'
+    const html = renderToStaticMarkup(<SidebarSummaryHeader visible={true} />)
+    expect(html).not.toContain('my-workspace')
+    expect(html).not.toContain('No config')
+    expect(html).not.toContain('[MSH:')
+    expect(html).not.toContain('[FolderIcon]')
+  })
+
+  it('a GTD project keeps its criteria but drops the git workspace and dev server', () => {
+    project.type = 'gtd'
+    const html = renderToStaticMarkup(<SidebarSummaryHeader visible={true} />)
+    expect(html).not.toContain('my-workspace')
+    expect(html).not.toContain('No config')
+  })
+
+  it('a dev project still shows all of it', () => {
+    project.type = 'dev'
+    const html = renderToStaticMarkup(<SidebarSummaryHeader visible={true} />)
+    expect(html).toContain('my-workspace')
+    expect(html).toContain('No config')
   })
 
   it('shows diff change summary', () => {

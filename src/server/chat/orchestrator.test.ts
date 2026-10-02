@@ -1964,29 +1964,38 @@ describe('buildRetryPatterns', () => {
 })
 
 describe('runAgentTurn agent resolution', () => {
-  it('fails with a clear error when neither the requested nor any default agent resolves', async () => {
+  const run = async (agentId: string) => {
+    return runAgentTurn(
+      {
+        sessionManager: createSessionManager({}) as never,
+        sessionId: 'session-1',
+        llmClient: { getModel: () => 'qwen3-32b' } as never,
+        onMessage: vi.fn(),
+      },
+      new TurnMetrics(),
+      agentId,
+      vi.fn(),
+    )
+  }
+
+  it('refuses to run under another agent when the requested one is gone, and says why', async () => {
+    // A Chat project whose plugin is disabled: the session asks for 'chat-assistant',
+    // which no longer exists, while the dev agents do. It must not quietly run as
+    // the Planner (different prompt, and it can run shell commands).
+    await expect(run('chat-assistant')).rejects.toThrow(/"chat-assistant" is not available.*plugin/)
+  })
+
+  it('fails with a clear error when no agent was requested and no default resolves', async () => {
     const registry = await import('../agents/registry.js')
     const loadAll = vi.mocked(registry.loadAllAgentsDefault)
     const previous = loadAll.getMockImplementation()
-    // No agents at all: the requested id, the project default and the global
-    // default all miss. This used to end in a `!` non-null assertion and blow up
-    // further down with an unreadable error.
+    // No agents at all: the project default and the global default both miss. This
+    // used to end in a `!` non-null assertion and blow up further down with an
+    // unreadable error.
     loadAll.mockResolvedValue([])
 
     try {
-      await expect(
-        runAgentTurn(
-          {
-            sessionManager: createSessionManager({}) as never,
-            sessionId: 'session-1',
-            llmClient: { getModel: () => 'qwen3-32b' } as never,
-            onMessage: vi.fn(),
-          },
-          new TurnMetrics(),
-          'no-such-agent',
-          vi.fn(),
-        ),
-      ).rejects.toThrow(/No usable agent found/)
+      await expect(run('')).rejects.toThrow(/No usable agent found/)
     } finally {
       if (previous) loadAll.mockImplementation(previous)
     }

@@ -818,7 +818,11 @@ export function ChatInput({
                 onKeyUp={handleKeyUp}
                 onFocus={() => setIsFocused(true)}
                 onBlur={() => setIsFocused(false)}
-                placeholder={t({ en: 'What would you like to build?', fr: 'Que souhaitez-vous construire ?' })}
+                placeholder={
+                  isChatMode
+                    ? t({ en: 'Message the assistant…', fr: 'Écrivez à l’assistant…' })
+                    : t({ en: 'What would you like to build?', fr: 'Que souhaitez-vous construire ?' })
+                }
                 data-testid="chat-input-textarea"
                 className="w-full bg-transparent text-sm placeholder:text-text-muted resize-none overflow-y-auto focus:outline-none"
                 style={{

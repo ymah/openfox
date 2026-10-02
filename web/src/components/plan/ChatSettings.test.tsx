@@ -65,6 +65,27 @@ describe('ChatSettings', () => {
     expect(applyDynamicContext).not.toHaveBeenCalled()
   })
 
+  it('closes on Escape and on a click outside, like the other popovers', async () => {
+    authFetch.mockResolvedValue(ok({}))
+    render(
+      <div>
+        <span data-testid="elsewhere">elsewhere</span>
+        <ChatSettings sessionId="s1" isRunning={false} />
+      </div>,
+    )
+    await waitFor(() => expect(authFetch).toHaveBeenCalledTimes(1))
+    fireEvent.click(screen.getByTestId('chat-settings-button'))
+    expect(screen.getByTestId('chat-settings-panel')).toBeTruthy()
+    fireEvent.keyDown(document, { key: 'Escape' })
+    expect(screen.queryByTestId('chat-settings-panel')).toBeNull()
+
+    fireEvent.click(screen.getByTestId('chat-settings-button'))
+    fireEvent.mouseDown(screen.getByTestId('chat-settings-panel'))
+    expect(screen.getByTestId('chat-settings-panel')).toBeTruthy() // inside: stays open
+    fireEvent.mouseDown(screen.getByTestId('elsewhere'))
+    expect(screen.queryByTestId('chat-settings-panel')).toBeNull()
+  })
+
   it('refuses an out-of-range value without calling the server', async () => {
     authFetch.mockResolvedValueOnce(ok({}))
     render(<ChatSettings sessionId="s1" isRunning={false} />)

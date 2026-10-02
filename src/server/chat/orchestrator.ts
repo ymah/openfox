@@ -389,13 +389,22 @@ export async function runAgentTurn(
   } catch {
     // Project-scoped default is best-effort
   }
-  // Last resorts, in order: the project's configured default, the global
-  // default, then any non-sub-agent that exists. The chain used to end in a `!`,
-  // which lied whenever the global default did not resolve either — a project
-  // pinned to an agent that no longer exists (a deleted custom agent, or a
-  // disabled plugin's agent) then crashed later with an unreadable error.
+  // The agent the session asked for is the only one that may run it. Falling back
+  // to another agent was silently wrong: a Chat project whose plugin was disabled
+  // ran its turn as the dev Planner — different prompt, different tools (it can run
+  // shell commands) — while the session still said "Assistant". Better to stop and
+  // say why. Only a session that names no agent at all falls back to a default.
+  const requested = agentId ? findAgentById(agentId, allAgents) : undefined
+  if (agentId && !requested) {
+    throw new Error(
+      `The agent "${agentId}" is not available — it was deleted, or the plugin that provides it is disabled. ` +
+        'Pick another agent, or re-enable the plugin in Settings → Plugins.',
+    )
+  }
+  // Last resorts for a session with no agent: the project's configured default, the
+  // global default, then any non-sub-agent that exists.
   const agentDef =
-    findAgentById(agentId, allAgents) ??
+    requested ??
     findAgentById(resolveDefaultAgentId(fallbackProjectId), allAgents) ??
     findAgentById(resolveDefaultAgentId(), allAgents) ??
     allAgents.find((agent) => !agent.metadata.subagent)

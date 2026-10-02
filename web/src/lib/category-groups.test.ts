@@ -1,5 +1,11 @@
 import { describe, it, expect } from 'vitest'
-import { groupByCategory, hasMultipleCategories, filterByProjectType, agentsForWorkflow } from './category-groups'
+import {
+  groupByCategory,
+  hasMultipleCategories,
+  filterByProjectType,
+  agentsForWorkflow,
+  groupBuiltInsByFunction,
+} from './category-groups'
 
 interface Item {
   id: string
@@ -143,5 +149,28 @@ describe('agentsForWorkflow', () => {
       'custom',
       'chat-assistant',
     ])
+  })
+})
+
+describe('groupBuiltInsByFunction', () => {
+  it('puts the classic dev set first, then each project function, keeping item order inside a group', () => {
+    const items = [
+      { id: 'chat-a', category: 'chat' },
+      { id: 'default' },
+      { id: 'gtd-a', category: 'gtd' },
+      { id: 'chat-b', category: 'chat' },
+      { id: 'planner', category: 'dev' },
+    ]
+    const groups = groupBuiltInsByFunction(items)
+    expect(groups.map((g) => g.category)).toEqual(['dev', 'chat', 'gtd'])
+    expect(groups.map((g) => g.items.map((i) => i.id))).toEqual([
+      ['default', 'planner'],
+      ['chat-a', 'chat-b'],
+      ['gtd-a'],
+    ])
+  })
+
+  it('is empty for nothing', () => {
+    expect(groupBuiltInsByFunction([])).toEqual([])
   })
 })

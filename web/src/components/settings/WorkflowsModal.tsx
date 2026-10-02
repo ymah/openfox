@@ -1,5 +1,6 @@
 import { useProjectModes } from '../../hooks/useProjectModes'
-import { agentsForWorkflow } from '../../lib/category-groups'
+import { agentsForWorkflow, groupBuiltInsByFunction } from '../../lib/category-groups'
+import { PROJECT_MODES } from '../../lib/project-modes'
 import { ScrollArea } from '../shared/ScrollArea'
 import { useEffect, useState, useCallback, useMemo } from 'react'
 import { Modal } from '../shared/SelfContainedModal'
@@ -108,6 +109,10 @@ export function WorkflowsModal({ isOpen, onClose, initialEditId, projectDir }: W
   const { data } = useResource(agentsResource, projectDir)
   const allAgentTypes = useMemo(() => (data ? [...data.defaults, ...data.userItems, ...data.projectItems] : []), [data])
   const projectModes = useProjectModes()
+  const functionLabel = (category: string) => {
+    const mode = PROJECT_MODES.find((m) => m.value === category)
+    return mode ? t(mode.label) : category
+  }
   const categoryOptions = useMemo(
     () => [
       { value: '', label: t({ en: 'Dev (default)', fr: 'Dev (par défaut)' }) },
@@ -1033,17 +1038,27 @@ export function WorkflowsModal({ isOpen, onClose, initialEditId, projectDir }: W
         hasItems={defaults.length > 0 || userItems.length > 0 || projectItems.length > 0}
       >
         <div className="space-y-4">
-          <WorkflowListSection
-            title={t({ en: 'Built-in', fr: 'Intégrés' })}
-            items={defaults}
-            renderActions={(wf) => (
-              <>
-                <EditButton onClick={() => handleDuplicate(wf.id)}>
-                  <EyeIcon />
-                </EditButton>
-              </>
-            )}
-          />
+          {groupBuiltInsByFunction(defaults).map((group) => (
+            <WorkflowListSection
+              key={group.category}
+              title={
+                group.category === 'dev'
+                  ? t({ en: 'Built-in', fr: 'Intégrés' })
+                  : t(
+                      { en: 'Built-in — {{function}}', fr: 'Intégrés — {{function}}' },
+                      { function: functionLabel(group.category) },
+                    )
+              }
+              items={group.items}
+              renderActions={(wf) => (
+                <>
+                  <EditButton onClick={() => handleDuplicate(wf.id)}>
+                    <EyeIcon />
+                  </EditButton>
+                </>
+              )}
+            />
+          ))}
           <WorkflowListSection
             title={t({ en: 'Custom', fr: 'Personnalisés' })}
             items={userItems}

@@ -1,3 +1,4 @@
+import { parseServerBoolean } from './lib/server-boolean'
 import { ScrollArea } from './components/shared/ScrollArea'
 import { useEffect, useMemo, useRef, useState, type ReactElement } from 'react'
 import {
@@ -315,7 +316,7 @@ function App() {
     // synchronous localStorage theme already applies; running this early would
     // treat the '' fallbacks as real values (e.g. PUT followSystemTheme=false).
     if (!configFetched) return
-    const { applyPreset, applyTokens, setFollowSystemTheme, initSystemThemeListener } = useThemeStore.getState()
+    const { applyPreset, applyTokens, initSystemThemeListener } = useThemeStore.getState()
     const serverTheme = themeSetting
     const serverPresets = userPresetsSetting
     const serverFollowSystem = followSystemSetting
@@ -345,11 +346,14 @@ function App() {
       applyPreset('system')
     }
 
-    if (serverFollowSystem !== undefined) {
-      const currentFollowSystem = useThemeStore.getState().followSystemTheme
-      if (currentFollowSystem !== (serverFollowSystem === 'true')) {
-        setFollowSystemTheme(serverFollowSystem === 'true')
-      }
+    // Only an explicit server value counts: the '' fallback of a setting that has not
+    // loaded yet is not "false" (reading it as one wrote false back to the server,
+    // whose real "true" then arrived and was written back again — an endless
+    // ping-pong of PUTs). And reconciling local state with the server must not write
+    // to the server: it is the source here.
+    const followFromServer = parseServerBoolean(serverFollowSystem)
+    if (followFromServer !== undefined && useThemeStore.getState().followSystemTheme !== followFromServer) {
+      useThemeStore.setState({ followSystemTheme: followFromServer })
     }
 
     const cleanup = initSystemThemeListener()
