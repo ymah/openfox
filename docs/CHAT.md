@@ -73,9 +73,8 @@ facts with `memory_save` (and tell you when they do), and drop them with `memory
 Under the last reply of a turn, **Regenerate** keeps the reply you have and produces another one; `‹ 2/3 ›`
 switches between them. Editing one of your messages (or replaying it) works the same way, so nothing is
 overwritten. A version is a session forked just before your message: it carries the same history, persona and
-sampling, is hidden from the conversation list, and is reached through its original. The controls appear where
-versions diverge, in both the original and the version; a version of a version is reached by stepping back
-to the session it came from. Other project types keep the classic behaviour (edit/replay truncates history).
+sampling, is hidden from the conversation list, and is reached through its original. Regenerating the same reply again, from any version, adds another version to the same
+`‹ n/m ›`; regenerating a later reply inside a version starts a new set of its own. Other project types keep the classic behaviour (edit/replay truncates history).
 
 ## Rich rendering
 

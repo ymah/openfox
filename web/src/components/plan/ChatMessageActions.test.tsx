@@ -5,6 +5,7 @@ import type { Message } from '@shared/types.js'
 
 const navigate = vi.fn()
 const authFetch = vi.fn()
+const loadSession = vi.fn()
 let projectType: string | undefined = 'chat'
 let storeMessages: Message[] = []
 let running = false
@@ -17,7 +18,7 @@ vi.mock('../../hooks/useCurrentProject', () => ({
 }))
 vi.mock('../../stores/session', () => ({
   useSessionStore: (selector: (s: unknown) => unknown) =>
-    selector({ messages: storeMessages, currentSession: { isRunning: running } }),
+    selector({ messages: storeMessages, currentSession: { isRunning: running }, loadSession }),
 }))
 
 import { ChatMessageActions } from './ChatMessageActions'
@@ -32,6 +33,7 @@ const reply = (variants: Record<string, string[]>) => ({
 
 beforeEach(() => {
   navigate.mockReset()
+  loadSession.mockReset()
   authFetch.mockReset()
   projectType = 'chat'
   running = false
@@ -96,6 +98,8 @@ describe('ChatMessageActions', () => {
     render(<ChatMessageActions message={storeMessages[1]!} sessionId="s1" />)
     fireEvent.click(screen.getByTestId('chat-regenerate'))
     await waitFor(() => expect(navigate).toHaveBeenCalledWith('/p/p1/s/new'))
+    // A version starts running as it is created: it must be loaded afresh, not trusted from a partial cache.
+    expect(loadSession).toHaveBeenCalledWith('new', true)
     expect(authFetch).toHaveBeenCalledWith(
       '/api/sessions/s1/versions',
       expect.objectContaining({ method: 'POST', body: JSON.stringify({ messageId: 'a1' }) }),

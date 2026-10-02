@@ -45,17 +45,32 @@ function escapeSegment(text: string): string {
     dollars.push(i)
   }
 
-  for (let k = 0; k < dollars.length; k++) {
-    const open = dollars[k]!
-    if (!/\d/.test(out[open + 1] ?? '')) continue // not a price-like `$<digit>`
-    const close = dollars[k + 1]
-    const closesLikeMath = close !== undefined && !/\s/.test(out[close - 1] ?? ' ')
-    if (closesLikeMath) {
-      k++ // a genuine $…$ pair such as $2x+1$: keep both
-      continue
-    }
-    out[open] = '\\$'
+  // Pandoc's rule, which the markdown parser does not apply: a `$` opens a formula
+  // only when what follows is not a space, and closes one only when what precedes
+  // it is not a space and what follows is not a digit. A `$` that does neither is a
+  // currency sign ("5 $", "$10") and is escaped, as is an opener nothing closes.
+  const isSpace = (c: string | undefined) => c === undefined || /\s/.test(c)
+  const canOpen = (i: number) => !isSpace(out[i + 1])
+  const canClose = (i: number) => !isSpace(out[i - 1]) && !/\d/.test(out[i + 1] ?? '')
+  const escape = (i: number) => {
+    out[i] = '\\$'
   }
+
+  let open: number | null = null
+  for (const d of dollars) {
+    if (open === null) {
+      if (canOpen(d)) open = d
+      else escape(d)
+    } else if (canClose(d)) {
+      open = null // a genuine $…$ pair
+    } else if (canOpen(d)) {
+      escape(open) // the earlier opener was a price: this one may start the real formula
+      open = d
+    } else {
+      escape(d)
+    }
+  }
+  if (open !== null) escape(open)
   return out.join('')
 }
 

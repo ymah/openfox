@@ -43,6 +43,7 @@ function ChatMessageActionsInner({
   })
   const messageCount = useSessionStore((state) => state.messages?.length ?? 0)
   const isRunning = useSessionStore((state) => state.currentSession?.isRunning ?? false)
+  const loadSession = useSessionStore((state) => state.loadSession)
   const [variants, setVariants] = useState<Record<string, string[]>>({})
   const [pending, setPending] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -72,7 +73,13 @@ function ChatMessageActionsInner({
     const result = await branchFromMessage(sessionId, message.id)
     setPending(false)
     if ('error' in result) setError(result.error)
-    else navigate(`/p/${result.session.projectId}/s/${result.session.id}`)
+    else {
+      // The new version starts running as it is created, so the client has already seen
+      // some of its events while on another session; load it afresh rather than trust a
+      // partial cached pane.
+      void loadSession(result.session.id, true)
+      navigate(`/p/${result.session.projectId}/s/${result.session.id}`)
+    }
   }
 
   return (

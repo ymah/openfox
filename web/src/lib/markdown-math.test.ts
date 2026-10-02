@@ -12,6 +12,19 @@ describe('escapeCurrencyDollars', () => {
     expect(escapeCurrencyDollars('Only $9.99')).toBe('Only \\$9.99')
   })
 
+  it('treats a trailing currency sign ("5 $", French style) as a price too', () => {
+    expect(escapeCurrencyDollars("Prix : 5 $ et $10 aujourd'hui.")).toBe("Prix : 5 \\$ et \\$10 aujourd'hui.")
+    expect(escapeCurrencyDollars('Coûte 20$ puis 30 $.')).toBe('Coûte 20\\$ puis 30 \\$.')
+  })
+
+  it('still finds the real formula after a price', () => {
+    expect(escapeCurrencyDollars('It costs $5, and $x^2$ is math.')).toBe('It costs \\$5, and $x^2$ is math.')
+  })
+
+  it('escapes an opener that nothing closes', () => {
+    expect(escapeCurrencyDollars('only $x here')).toBe('only \\$x here')
+  })
+
   it('keeps genuine inline math, including ones that start with a digit', () => {
     expect(escapeCurrencyDollars('Let $x^2$ and $a_i$ be given')).toBe('Let $x^2$ and $a_i$ be given')
     expect(escapeCurrencyDollars('Solve $2x+1=5$ now')).toBe('Solve $2x+1=5$ now')

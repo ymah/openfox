@@ -147,6 +147,28 @@ describe('Session branches REST API', () => {
     expect(variants.variants.__start__).toEqual([session.id, a, b])
   })
 
+  it('regenerating from a version makes a sibling, so every version of the reply is in one family', async () => {
+    const session = await createSession(server.url, { projectId, title: 'Chat' })
+    await sendMessage(server.url, session.id, 'Hi')
+    const original = await untilReplied(session.id)
+    const a = (
+      (await (
+        await post(`/api/sessions/${session.id}/versions`, { messageId: lastAssistant(original).id })
+      ).json()) as any
+    ).session.id as string
+    const fromA = await untilReplied(a)
+    // regenerate while looking at version a, not the original
+    const b = (
+      (await (await post(`/api/sessions/${a}/versions`, { messageId: lastAssistant(fromA).id })).json()) as any
+    ).session.id as string
+    await untilReplied(b)
+
+    for (const member of [session.id, a, b]) {
+      const variants: any = await (await api(`/api/sessions/${member}/versions`)).json()
+      expect(variants.variants.__start__).toEqual([session.id, a, b])
+    }
+  })
+
   it('carries the conversation’s persona and sampling to the branch', async () => {
     const session = await createSession(server.url, { projectId, title: 'Chat' })
     await api(`/api/sessions/${session.id}/chat-settings`, {

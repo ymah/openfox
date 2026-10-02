@@ -99,8 +99,12 @@ function UserMessage({ message, messageId, sessionId }: UserMessageProps) {
     if (chatMode) {
       const result = await branchFromMessage(sessionId, messageId)
       setPending(false)
-      if ('error' in result) setError(result.error)
-      else navigate(`/p/${result.session.projectId}/s/${result.session.id}`)
+      if ('error' in result) {
+        setError(result.error)
+      } else {
+        void loadSession(result.session.id, true)
+        navigate(`/p/${result.session.projectId}/s/${result.session.id}`)
+      }
       return
     }
     const ok = await replayMessage(sessionId, messageId)
@@ -127,6 +131,7 @@ function UserMessage({ message, messageId, sessionId }: UserMessageProps) {
         setError(result.error)
       } else {
         setEditing(false)
+        void loadSession(result.session.id, true)
         navigate(`/p/${result.session.projectId}/s/${result.session.id}`)
       }
       return

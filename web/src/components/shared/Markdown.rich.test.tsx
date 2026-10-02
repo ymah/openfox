@@ -34,6 +34,12 @@ describe('Markdown — math', () => {
     expect(html).toContain('$10')
   })
 
+  it('keeps a French-style price ("5 $ et $10") as text, with no stray backslash', () => {
+    const html = renderToString(<Markdown content={"Prix : 5 $ et $10 aujourd'hui."} />)
+    expect(html).not.toContain('katex')
+    expect(html).toContain('5 $ et $10')
+  })
+
   it('does not treat dollars inside code as math', () => {
     const html = renderToString(<Markdown content={'Run `echo $HOME` then:\n\n```bash\nx=$1; y=$2\n```'} />)
     expect(html).not.toContain('class="katex"')

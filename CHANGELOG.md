@@ -17,6 +17,9 @@
 
 ### Bug Fixes
 
+- **A French-style price no longer breaks the maths** — "Prix : 5 $ et $10" rendered as "5 et \10" because the lone `$` opened a formula with the next one. Dollar signs now pair by Pandoc's rule (a formula opens before a non-space and closes after a non-space), so prices stay text and real formulas still render.
+- **Regenerating a version adds to the same set** — regenerating from a version made a child of it, so you never saw all the versions together ("2/2" every time). The same reply's versions are now siblings and navigate as one `‹ n/m ›`.
+- **A new version shows up as it runs** — after a second regeneration the new version displayed only your message until the page was reloaded, because it started before the page had loaded it. It is now loaded afresh.
 - **The interface no longer floods the server with settings writes** — on first load, before settings had arrived, the theme code read the empty fallback as "false", wrote it to the server, then wrote the real "true" back, and so on forever (about 1,500 requests a second, measured in a browser). It now only reacts to an explicit value and never writes back what it just read.
 - **A session whose agent is gone no longer runs as another agent** — a Chat project whose plugin was disabled ran its turns as the dev Planner (different prompt, and able to run shell commands) while still showing "Assistant". The turn is now refused with a message saying why.
 - **Pages shipped by bundled plugins were missing their CSS utilities** — Tailwind did not scan them, so a class used only in the Chat or Writing pages (spacing, layout) was never generated.

@@ -2,7 +2,7 @@ import { Router, type Request, type Response } from 'express'
 import type { SessionManager } from '../session/manager.js'
 import type { Session } from '../../shared/types.js'
 import { getCurrentWindowMessages } from '../events/index.js'
-import { computeVariants, recordBranch } from '../db/session-branches.js'
+import { computeVariants, getBranch, recordBranch } from '../db/session-branches.js'
 import { getSessionChatSettings, setSessionChatSettings } from '../db/session-chat-settings.js'
 import { serverT } from '../i18n.js'
 
@@ -87,7 +87,12 @@ export function registerSessionBranchRoutes(router: Router, deps: BranchDeps): v
       const settings = getSessionChatSettings(id)
       if (Object.keys(settings).length > 0) setSessionChatSettings(branch.id, settings)
 
-      recordBranch(branch.id, id, previous?.id ?? null)
+      // Regenerating the same turn of a version makes a sibling of it, not a child:
+      // every version of that reply then belongs to one family and shows up together
+      // in "< 2/3 >". A later turn of a version starts a family of its own.
+      const own = getBranch(id)
+      const sameTurn = own !== null && own.prevMessageId === (previous?.id ?? null)
+      recordBranch(branch.id, sameTurn ? own.parentSessionId : id, previous?.id ?? null)
       sessionManager.queueMessage(
         branch.id,
         'asap',

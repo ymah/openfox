@@ -20,8 +20,19 @@ vi.mock('../../lib/api.js', () => ({
   forkSessionErrorMessage: mockForkSessionErrorMessage,
 }))
 
+const navigateMock = vi.fn()
 vi.mock('wouter', () => ({
-  useLocation: () => ['/', vi.fn()],
+  useLocation: () => ['/', navigateMock],
+}))
+
+const project: { type: string | undefined } = { type: undefined }
+vi.mock('../../hooks/useCurrentProject', () => ({
+  useCurrentProject: () => (project.type ? { id: 'p1', type: project.type } : undefined),
+}))
+
+const mockBranchFromMessage = vi.fn()
+vi.mock('../../lib/branches', () => ({
+  branchFromMessage: (...args: unknown[]) => mockBranchFromMessage(...args),
 }))
 
 vi.mock('../../stores/session.js', () => ({
@@ -146,5 +157,46 @@ describe('ChatMessage replay and edit controls', () => {
     await waitFor(() =>
       expect(mockReplayMessage).toHaveBeenCalledWith('s1', 'm1', 'Edited prompt', [att('a2', 'image.png')]),
     )
+  })
+
+  describe('in a chat project, edit and replay keep the original as a version', () => {
+    beforeEach(() => {
+      project.type = 'chat'
+      navigateMock.mockReset()
+      mockBranchFromMessage.mockReset()
+      mockBranchFromMessage.mockResolvedValue({ session: { id: 'v2', projectId: 'p1' } })
+    })
+    afterEach(() => {
+      project.type = undefined
+    })
+
+    it('editing and sending branches with the new text, loads the new version and opens it', async () => {
+      render(<ChatMessage message={userMessage()} messageId="m1" sessionId="s1" />)
+      fireEvent.click(screen.getByTitle('Edit & resend'))
+      fireEvent.change(screen.getByRole('textbox'), { target: { value: 'Better prompt' } })
+      fireEvent.click(screen.getByRole('button', { name: 'Send' }))
+      await waitFor(() => expect(navigateMock).toHaveBeenCalledWith('/p/p1/s/v2'))
+      expect(mockBranchFromMessage).toHaveBeenCalledWith('s1', 'm1', { content: 'Better prompt', attachments: [] })
+      expect(mockLoadSession).toHaveBeenCalledWith('v2', true)
+      expect(mockReplayMessage).not.toHaveBeenCalled() // the history is not truncated
+    })
+
+    it('shows the server error and stays put when branching fails', async () => {
+      mockBranchFromMessage.mockResolvedValue({ error: 'Session is already running' })
+      render(<ChatMessage message={userMessage()} messageId="m1" sessionId="s1" />)
+      fireEvent.click(screen.getByTitle('Edit & resend'))
+      fireEvent.change(screen.getByRole('textbox'), { target: { value: 'Better prompt' } })
+      fireEvent.click(screen.getByRole('button', { name: 'Send' }))
+      expect(await screen.findByText('Session is already running')).toBeTruthy()
+      expect(navigateMock).not.toHaveBeenCalled()
+    })
+
+    it('replaying a prompt branches too', async () => {
+      render(<ChatMessage message={userMessage()} messageId="m1" sessionId="s1" />)
+      fireEvent.click(screen.getByTitle('Replay'))
+      await waitFor(() => expect(navigateMock).toHaveBeenCalledWith('/p/p1/s/v2'))
+      expect(mockBranchFromMessage).toHaveBeenCalledWith('s1', 'm1')
+      expect(mockReplayMessage).not.toHaveBeenCalled()
+    })
   })
 })
