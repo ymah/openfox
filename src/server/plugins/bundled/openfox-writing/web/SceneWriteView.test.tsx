@@ -103,6 +103,29 @@ describe('SceneWriteView', () => {
     expect(screen.queryByDisplayValue('A body')).toBeNull()
   })
 
+  it('never starts a save while the previous one is still in flight', async () => {
+    mockedGetScene.mockResolvedValue({ path: scenePath, frontmatter: {}, body: '' })
+    let releaseFirst: () => void = () => {}
+    mockedSaveScene.mockReset()
+    mockedSaveScene
+      .mockImplementationOnce(() => new Promise((resolve) => (releaseFirst = () => resolve({ path: scenePath }))))
+      .mockResolvedValue({ path: scenePath } as never)
+    render(<SceneWriteView projectId="p1" />)
+    await waitFor(() => expect(mockedGetScene).toHaveBeenCalledTimes(1))
+
+    const textarea = screen.getByPlaceholderText('Write the scene…')
+    await userEvent.type(textarea, 'One.')
+    await waitFor(() => expect(mockedSaveScene).toHaveBeenCalledTimes(1), { timeout: 3000 })
+    await userEvent.type(textarea, ' Two.')
+    // The debounce for the second edit elapses while the first save is still pending.
+    await new Promise((r) => setTimeout(r, 1500))
+    expect(mockedSaveScene).toHaveBeenCalledTimes(1)
+
+    releaseFirst()
+    await waitFor(() => expect(mockedSaveScene).toHaveBeenCalledTimes(2))
+    expect(mockedSaveScene.mock.calls[1]?.[3]).toBe('One. Two.')
+  })
+
   it('seeds a draft message and navigates to a new session on "Chat about this scene"', async () => {
     mockedGetScene.mockResolvedValue({ path: scenePath, frontmatter: { title: 'Opening' }, body: 'Once upon a time.' })
     mockCreateSession.mockResolvedValue({ id: 'session-1' })

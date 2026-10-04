@@ -340,6 +340,14 @@ export async function createServerHandle(config: Config): Promise<ServerHandle> 
 
   app.use('/api', authMiddleware)
   app.use(express.json({ limit: '75mb' }))
+  // A malformed or oversized JSON body is the client's mistake: answer 400/413
+  // instead of Express's default 500 page.
+  app.use((err: unknown, _req: express.Request, res: express.Response, next: express.NextFunction) => {
+    const e = err as { type?: string; status?: number }
+    if (e?.type === 'entity.parse.failed') return res.status(400).json({ error: 'Invalid JSON body' })
+    if (e?.type === 'entity.too.large') return res.status(413).json({ error: 'Request body too large' })
+    next(err)
+  })
 
   // Streamable HTTP MCP endpoint. Mounted before the SPA catch-all so /mcp is
   // never swallowed; tool deps are resolved lazily per request and filled in
@@ -1613,7 +1621,13 @@ export async function createServerHandle(config: Config): Promise<ServerHandle> 
       return res.status(404).json({ error: 'Session not found' })
     }
 
-    const { content, attachments, messageKind } = req.body
+    const { content, attachments, messageKind } = req.body ?? {}
+    if (content !== undefined && typeof content !== 'string') {
+      return res.status(400).json({ error: 'content must be a string' })
+    }
+    if (attachments !== undefined && !Array.isArray(attachments)) {
+      return res.status(400).json({ error: 'attachments must be an array if provided' })
+    }
     const hasContent = content?.trim()
     const hasAttachments = Array.isArray(attachments) && attachments.length > 0
     if (!hasContent && !hasAttachments) {
@@ -2464,6 +2478,15 @@ export async function createServerHandle(config: Config): Promise<ServerHandle> 
   })
 
   // Onboarding: create provider
+  const isHttpUrl = (value: unknown): boolean => {
+    if (typeof value !== 'string') return false
+    try {
+      const { protocol } = new URL(value)
+      return protocol === 'http:' || protocol === 'https:'
+    } catch {
+      return false
+    }
+  }
   app.post('/api/providers', async (req, res) => {
     const {
       name,
@@ -2497,6 +2520,9 @@ export async function createServerHandle(config: Config): Promise<ServerHandle> 
 
     if (!name || !url || !backend) {
       return res.status(400).json({ error: 'name, url, and backend are required' })
+    }
+    if (!isHttpUrl(url)) {
+      return res.status(400).json({ error: 'url must be an http(s) URL' })
     }
 
     try {
@@ -2843,6 +2869,9 @@ export async function createServerHandle(config: Config): Promise<ServerHandle> 
       transportAdapter?: string | null
       logo?: string | null
       icon?: string | null
+    }
+    if (url !== undefined && !isHttpUrl(url)) {
+      return res.status(400).json({ error: 'url must be an http(s) URL' })
     }
     try {
       const { loadGlobalConfig, saveGlobalConfig, updateProvider } = await import('../cli/config.js')
@@ -3606,7 +3635,7 @@ export async function createServerHandle(config: Config): Promise<ServerHandle> 
     // SPA fallback for non-API routes (must be last)
     app.get('/*path', (req, res) => {
       if (req.path.startsWith('/api/')) {
-        return
+        return res.status(404).json({ error: 'Not found' })
       }
       readFile(join(webDir, 'index.html'), 'utf-8')
         .then((indexHtml) => viteServer!.transformIndexHtml(req.originalUrl, indexHtml))
@@ -3682,8 +3711,10 @@ export async function createServerHandle(config: Config): Promise<ServerHandle> 
 
     // SPA fallback - serve index.html for any unmatched path
     app.get('/*path', (req, res) => {
+      if (req.path.startsWith('/api/')) {
+        return res.status(404).json({ error: 'Not found' })
+      }
       if (
-        req.path.startsWith('/api/') ||
         req.path.startsWith('/assets/') ||
         req.path.startsWith('/sounds/') ||
         req.path.startsWith('/manifest.webmanifest') ||
@@ -3691,7 +3722,7 @@ export async function createServerHandle(config: Config): Promise<ServerHandle> 
         req.path.startsWith('/sw.js') ||
         req.path === '/fox.svg'
       ) {
-        return
+        return res.status(404).send('Not found')
       }
       readFile(join(distWebDir, 'index.html'), 'utf-8')
         .then((content) => res.send(content))

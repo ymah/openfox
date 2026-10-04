@@ -32,16 +32,23 @@ export function SceneWriteView({ projectId }: SceneWriteViewProps) {
   const pendingSave = useRef<{ path: string; frontmatter: Record<string, unknown>; body: string } | null>(null)
   const loaded = useRef(false)
 
+  // Saves run one after the other: two in flight could reach the server out of
+  // order and leave the older text on disk.
+  const saveChain = useRef<Promise<void>>(Promise.resolve())
   const save = useCallback(
-    async (targetPath: string, nextFrontmatter: Record<string, unknown>, nextBody: string) => {
+    (targetPath: string, nextFrontmatter: Record<string, unknown>, nextBody: string): Promise<void> => {
       setSaveState('pending')
-      try {
-        await saveScene(projectId, targetPath, nextFrontmatter, nextBody)
-        setSaveState('saved')
-      } catch (error) {
-        console.error('Scene save failed:', error)
-        setSaveState('error')
+      const run = async () => {
+        try {
+          await saveScene(projectId, targetPath, nextFrontmatter, nextBody)
+          setSaveState('saved')
+        } catch (error) {
+          console.error('Scene save failed:', error)
+          setSaveState('error')
+        }
       }
+      saveChain.current = saveChain.current.then(run)
+      return saveChain.current
     },
     [projectId],
   )

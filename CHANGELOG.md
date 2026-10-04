@@ -17,6 +17,9 @@
 
 ### Bug Fixes
 
+- **Unknown `/api/*` routes and missing assets no longer hang** — they answer 404 (JSON for the API) instead of leaving the request open forever.
+- **Malformed requests** — a malformed JSON body answers 400 (413 when too large) instead of 500; a message with a non-string `content` or non-array `attachments` answers 400; a provider URL that is not `http(s)` is refused when adding or editing a provider.
+- **Scene editor saves in order** — autosaves in the Writing scene editor run one after the other, so a slow earlier save can no longer land after a later one and bring back older text.
 - **Stopping a turn that waits for a path confirmation** — the pending confirmation is now announced as cancelled (REST stop and MCP), so it no longer stays listed or blocks the next turn.
 - **Unknown project or page** — an unknown or deleted project, or an unknown URL, shows a "not found" page with a link home instead of an endless spinner or a blank page.
 - **Status text overflow** — a long status line no longer overlaps the composer.
