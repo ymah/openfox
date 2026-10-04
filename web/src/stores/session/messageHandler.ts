@@ -430,7 +430,12 @@ export function handleServerMessage(
       set((state) => {
         const panes = { ...state.panes }
         delete panes[deletedId]
+        // The session on screen was deleted elsewhere: drop the mirrored copy too, so
+        // the page does not keep showing (and accepting messages for) a session that
+        // no longer exists. The route then reloads it and lands back on its project.
+        const wasShown = state.currentSession?.id === deletedId
         return {
+          ...(wasShown ? { currentSession: null } : {}),
           panes,
           sessions: state.sessions.filter((s) => s.id !== deletedId),
           openSessionIds: state.openSessionIds.filter((id) => id !== deletedId),

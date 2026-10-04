@@ -17,6 +17,8 @@
 
 ### Bug Fixes
 
+- **Request storm in long chat conversations** — each reply asked for the list of versions on every new message (about 1,500 requests for a 40-message exchange); simultaneous requests are now shared.
+- **Session deleted in another tab** — the tab still showing it now returns to the project instead of keeping a conversation that no longer exists.
 - **Unknown `/api/*` routes and missing assets no longer hang** — they answer 404 (JSON for the API) instead of leaving the request open forever.
 - **Malformed requests** — a malformed JSON body answers 400 (413 when too large) instead of 500; a message with a non-string `content` or non-array `attachments` answers 400; a provider URL that is not `http(s)` is refused when adding or editing a provider.
 - **Scene editor saves in order** — autosaves in the Writing scene editor run one after the other, so a slow earlier save can no longer land after a later one and bring back older text.

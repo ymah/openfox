@@ -53,11 +53,25 @@ export function variantPosition(
   return index === -1 ? null : { index, total: ids.length, ids }
 }
 
-export async function fetchBranchVariants(sessionId: string): Promise<Record<string, string[]>> {
+async function requestBranchVariants(sessionId: string): Promise<Record<string, string[]>> {
   const res = await authFetch(`/api/sessions/${sessionId}/versions`)
   if (!res.ok) return {}
   const data = (await res.json()) as { variants?: Record<string, string[]> }
   return data.variants ?? {}
+}
+
+const variantsInFlight = new Map<string, Promise<Record<string, string[]>>>()
+
+/**
+ * Every last reply of a turn asks for the same list when the conversation changes;
+ * callers arriving while a request is out share it instead of each sending their own.
+ */
+export function fetchBranchVariants(sessionId: string): Promise<Record<string, string[]>> {
+  const pending = variantsInFlight.get(sessionId)
+  if (pending) return pending
+  const request = requestBranchVariants(sessionId).finally(() => variantsInFlight.delete(sessionId))
+  variantsInFlight.set(sessionId, request)
+  return request
 }
 
 export type BranchResult = { session: { id: string; projectId: string } } | { error: string }

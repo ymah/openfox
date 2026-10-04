@@ -1,5 +1,11 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { BRANCH_START_KEY, followNewVersion, turnInfoForMessage, variantPosition } from './branches'
+import {
+  BRANCH_START_KEY,
+  fetchBranchVariants,
+  followNewVersion,
+  turnInfoForMessage,
+  variantPosition,
+} from './branches'
 
 const authFetch = vi.hoisted(() => vi.fn())
 vi.mock('./api', () => ({ authFetch: (...args: unknown[]) => authFetch(...args) }))
@@ -96,5 +102,24 @@ describe('followNewVersion', () => {
     await vi.advanceTimersByTimeAsync(200)
     await stuck
     expect(reload).not.toHaveBeenCalled()
+  })
+})
+
+describe('fetchBranchVariants', () => {
+  afterEach(() => authFetch.mockReset())
+
+  it('shares one request between callers asking for the same session at once', async () => {
+    authFetch.mockResolvedValue({ ok: true, json: async () => ({ variants: { k: ['a', 'b'] } }) })
+    const results = await Promise.all([fetchBranchVariants('s1'), fetchBranchVariants('s1'), fetchBranchVariants('s1')])
+    expect(authFetch).toHaveBeenCalledTimes(1)
+    expect(results.every((r) => r['k']?.length === 2)).toBe(true)
+  })
+
+  it('asks again once the previous request has settled, and per session', async () => {
+    authFetch.mockResolvedValue({ ok: true, json: async () => ({ variants: {} }) })
+    await fetchBranchVariants('s1')
+    await fetchBranchVariants('s1')
+    await Promise.all([fetchBranchVariants('s1'), fetchBranchVariants('s2')])
+    expect(authFetch).toHaveBeenCalledTimes(4)
   })
 })

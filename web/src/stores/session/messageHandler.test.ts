@@ -977,6 +977,51 @@ describe('session.deleted handler', () => {
     // project-b session preserved
     expect(state.sessions.find((s: any) => s.id === 'b1')).toBeDefined()
   })
+
+  it('drops the mirrored session when the one on screen is deleted elsewhere', async () => {
+    const useSessionStore = await loadSessionStore()
+    fetchMock.mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: () => Promise.resolve({ sessions: [], hasMore: false }),
+    } as never)
+    useSessionStore.setState({
+      currentSession: { id: 'gone', projectId: 'project-a' },
+      sessions: [{ id: 'gone', projectId: 'project-a' }],
+    } as never)
+
+    useSessionStore.getState().handleServerMessage({
+      type: 'session.deleted',
+      sessionId: 'gone',
+      payload: { sessionId: 'gone' },
+    } as any)
+
+    expect(useSessionStore.getState().currentSession).toBeNull()
+  })
+
+  it('keeps the mirrored session when another one is deleted', async () => {
+    const useSessionStore = await loadSessionStore()
+    fetchMock.mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: () => Promise.resolve({ sessions: [], hasMore: false }),
+    } as never)
+    useSessionStore.setState({
+      currentSession: { id: 'shown', projectId: 'project-a' },
+      sessions: [
+        { id: 'shown', projectId: 'project-a' },
+        { id: 'other', projectId: 'project-a' },
+      ],
+    } as never)
+
+    useSessionStore.getState().handleServerMessage({
+      type: 'session.deleted',
+      sessionId: 'other',
+      payload: { sessionId: 'other' },
+    } as any)
+
+    expect(useSessionStore.getState().currentSession?.id).toBe('shown')
+  })
 })
 
 describe('session.deletedAll handler', () => {
