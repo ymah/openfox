@@ -11,6 +11,10 @@ import {
 import { useSetting } from './hooks/useSetting'
 import { useVisualViewport } from './hooks/useVisualViewport'
 import { Route, Switch, useRoute, useLocation } from 'wouter'
+import { NotFoundView } from './components/NotFoundView'
+import { isProjectMissing } from './lib/route-project'
+import { useResource } from './hooks/useResource'
+import { projectResource } from './lib/resources'
 import { useWebSocket } from './hooks/useWebSocket'
 import { useSessionStore } from './stores/session'
 import { useConfigStore } from './stores/config'
@@ -63,6 +67,12 @@ function LoadingSpinner() {
   )
 }
 
+/** True once the route's project failed to load, so the page can say so instead of spinning forever. */
+function useRouteProjectMissing(projectId: string | undefined): boolean {
+  const { data, error } = useResource(projectResource, projectId ?? '')
+  return isProjectMissing(projectId, data, error)
+}
+
 /** Resolves and loads the project named by the current route's `:projectId`, null while pending. */
 function useRouteProject(projectId: string | undefined) {
   const connectionStatus = useSessionStore((state) => state.connectionStatus)
@@ -85,9 +95,10 @@ function ProjectView({
   const [, params] = useRoute('/p/:projectId')
   const projectId = params?.projectId
   const currentProject = useRouteProject(projectId)
+  const projectMissing = useRouteProjectMissing(projectId)
 
   if (!currentProject) {
-    return <LoadingSpinner />
+    return projectMissing ? <NotFoundView kind="project" /> : <LoadingSpinner />
   }
 
   return (
@@ -125,10 +136,11 @@ function PluginPageRoute({
   const [, params] = useRoute<{ projectId: string }>(routePath)
   const projectId = params?.projectId
   const currentProject = useRouteProject(projectId)
+  const projectMissing = useRouteProjectMissing(projectId)
   const { plugins } = usePlugins()
   const pluginEnabled = plugins.some((plugin) => plugin.id === pluginId && plugin.enabled)
 
-  if (!currentProject) return <LoadingSpinner />
+  if (!currentProject) return projectMissing ? <NotFoundView kind="project" /> : <LoadingSpinner />
   return (
     <>
       <Sidebar projectId={projectId!} isOpen={sidebarOpen} overlay={sidebarOverlay} onClose={onSidebarToggle} />
@@ -210,8 +222,9 @@ function ProjectSessionView({
     }
   }, [error, projectId, clearError, navigate])
 
+  const projectMissing = useRouteProjectMissing(projectId)
   if (!currentProject || currentProject.id !== projectId) {
-    return <LoadingSpinner />
+    return projectMissing ? <NotFoundView kind="project" /> : <LoadingSpinner />
   }
 
   return (
@@ -630,6 +643,9 @@ function App() {
             </Route>
             <Route path="/">
               <HomePage />
+            </Route>
+            <Route>
+              <NotFoundView kind="page" />
             </Route>
           </Switch>
         </div>

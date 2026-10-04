@@ -14,6 +14,8 @@ import { useUpdateStore } from '../../../stores/update'
 import { AutoUpdateModal } from '../../AutoUpdateModal'
 import { ChangelogModal } from '../../ChangelogModal'
 import { useAgents } from '../../../hooks/useAgents'
+import { groupBuiltInsByFunction } from '../../../lib/category-groups'
+import { useFunctionLabel } from '../../../hooks/useFunctionLabel'
 
 export function AdvancedTab({ onClose }: { onClose: () => void }) {
   const t = useT()
@@ -27,7 +29,7 @@ export function AdvancedTab({ onClose }: { onClose: () => void }) {
   const retryPatternsSetting = useSetting(SETTINGS_KEYS.RETRY_PATTERNS).value
   const proxyUrlSetting = useSetting(SETTINGS_KEYS.PROXY_URL).value
   const vscodeRemotePrefixSetting = useSetting(SETTINGS_KEYS.VSCODE_REMOTE_PREFIX).value
-  const defaultAgentSetting = useSetting(SETTINGS_KEYS.DEFAULT_AGENT).value
+  const { value: defaultAgentSetting, loading: defaultAgentLoading } = useSetting(SETTINGS_KEYS.DEFAULT_AGENT)
   const showChangelogSetting = useSetting(SETTINGS_KEYS.DISPLAY_SHOW_CHANGELOG_ON_UPDATE, 'true').value
 
   const [localToggles, setLocalToggles] = useState({
@@ -57,6 +59,7 @@ export function AdvancedTab({ onClose }: { onClose: () => void }) {
   const [manuallyChecked, setManuallyChecked] = useState(false)
   const { agents } = useAgents()
   const topLevelAgents = agents.filter((a) => !a.subagent)
+  const functionLabel = useFunctionLabel()
 
   useEffect(() => {
     setLocalToggles({
@@ -89,12 +92,15 @@ export function AdvancedTab({ onClose }: { onClose: () => void }) {
     setVscodeRemotePrefix(vscodeRemotePrefixSetting)
   }, [vscodeRemotePrefixSetting])
 
+  // "Loaded" means the setting has been fetched, not that it holds a value: on a fresh
+  // install nothing is saved yet (the system default applies), and waiting for a value
+  // left the selector on "Loading…" for good.
   useEffect(() => {
-    if (defaultAgentSetting !== '') {
+    if (!defaultAgentLoading) {
       setDefaultAgent(defaultAgentSetting)
       setDefaultAgentLoaded(true)
     }
-  }, [defaultAgentSetting])
+  }, [defaultAgentSetting, defaultAgentLoading])
 
   const handleRetryPatternsChange = useCallback((value: RetryPatternsValue) => {
     setRetryPatterns(value)
@@ -256,10 +262,16 @@ export function AdvancedTab({ onClose }: { onClose: () => void }) {
           {defaultAgentLoaded && (
             <option value="">{t({ en: 'System default (planner)', fr: 'Défaut système (planner)' })}</option>
           )}
-          {topLevelAgents.map((agent) => (
-            <option key={agent.id} value={agent.id}>
-              {agent.name}
-            </option>
+          {/* Grouped by project function: a chat or GTD agent as the global default would
+              start every new dev session in an agent that cannot touch the code. */}
+          {groupBuiltInsByFunction(topLevelAgents).map((group) => (
+            <optgroup key={group.category} label={functionLabel(group.category)}>
+              {group.items.map((agent) => (
+                <option key={agent.id} value={agent.id}>
+                  {agent.name}
+                </option>
+              ))}
+            </optgroup>
           ))}
         </select>
         {topLevelAgents.length === 0 && defaultAgentLoaded && (

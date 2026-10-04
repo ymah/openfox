@@ -26,6 +26,8 @@ export const useLocaleStore = create<LocaleState>((set) => ({
   applyLocale: (setting) => {
     const locale = resolveLocale(setting)
     setLocale(locale)
+    // Screen readers, hyphenation and spell-check follow <html lang>, not the app's own state.
+    if (typeof document !== 'undefined') document.documentElement.lang = locale
     set({ locale })
   },
 }))

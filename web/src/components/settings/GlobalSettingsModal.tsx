@@ -11,7 +11,7 @@ import { KeybindingsTab } from './tabs/KeybindingsTab'
 import { ToolsTab } from './tabs/ToolsTab'
 import { PluginsTab } from './tabs/PluginsTab'
 import { useUpdateStore } from '../../stores/update'
-import { wsClient } from '../../lib/ws'
+import { checkDynamicContext } from '../../lib/context-sync'
 import { PluginZone } from '../plugins/PluginZone'
 import { PluginSettingsTabContent } from './PluginSettingsTabContent'
 import { usePlugins } from '../../hooks/usePlugins'
@@ -67,11 +67,7 @@ export function GlobalSettingsModal({ isOpen, onClose, initialTab }: GlobalSetti
   ]
 
   const handleClose = () => {
-    try {
-      wsClient.send('context.checkDynamic', {})
-    } catch {
-      // WS might not be connected
-    }
+    checkDynamicContext()
     onClose()
   }
 

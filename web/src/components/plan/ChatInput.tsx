@@ -714,7 +714,7 @@ export function ChatInput({
 
   return (
     <div className="relative">
-      <div className="absolute -top-8 left-2 @md:left-4 z-10">
+      <div className="absolute -top-8 left-2 @md:left-4 z-10 max-w-[55%] @md:max-w-[60%]">
         <RunningIndicator />
       </div>
       <div

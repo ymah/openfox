@@ -1,5 +1,5 @@
 import { groupBuiltInsByFunction } from '../../lib/category-groups'
-import { PROJECT_MODES } from '../../lib/project-modes'
+import { useFunctionLabel } from '../../hooks/useFunctionLabel'
 import { useEffect, useState } from 'react'
 import { Modal } from '../shared/SelfContainedModal'
 import { createAgent, updateAgent, deleteAgent, type AgentFull } from '../../lib/agents-actions'
@@ -269,10 +269,7 @@ export function AgentsModal({ isOpen, onClose, initialEditId, projectDir }: Agen
 
   const defaultSubAgents = defaults.filter((a) => a.subagent)
   const defaultTopLevelAgents = defaults.filter((a) => !a.subagent)
-  const functionLabel = (category: string) => {
-    const mode = PROJECT_MODES.find((m) => m.value === category)
-    return mode ? t(mode.label) : category
-  }
+  const functionLabel = useFunctionLabel()
   const userSubAgents = userItems.filter((a) => a.subagent)
   const userTopLevelAgents = userItems.filter((a) => !a.subagent)
   const projectSubAgents = projectItems.filter((a) => a.subagent)

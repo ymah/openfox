@@ -122,6 +122,26 @@ export async function createServerHandle(config: Config): Promise<ServerHandle> 
   // Initialize event store
   initEventStore(db)
 
+  /**
+   * Confirmations cancelled by Stop are recorded as answered (denied) and announced
+   * to the clients. Without both, the card stays on screen with live Allow/Deny
+   * buttons, comes back after a reload (the pending list is folded from events) and
+   * keeps the session flagged as waiting.
+   */
+  function announceCancelledConfirmations(sessionId: string, callIds: string[]): void {
+    for (const callId of callIds) {
+      getEventStore().append(sessionId, {
+        type: 'path.confirmation_responded',
+        data: { callId, approved: false, alwaysAllow: false },
+      })
+      wssExports.broadcastForSession(sessionId, {
+        type: 'session.confirmation_resolved',
+        sessionId,
+        payload: { sessionId, callId },
+      })
+    }
+  }
+
   // Index conversations that predate full-text search, in the background: it
   // yields between sessions, and search simply returns what is indexed so far.
   void backfillMessageSearch(db)
@@ -1711,7 +1731,8 @@ export async function createServerHandle(config: Config): Promise<ServerHandle> 
     }
 
     const { stopSessionExecution } = await import('./session/chat-handler.js')
-    const { cancelQuestionsForSession, cancelPathConfirmationsForSession } = await import('./tools/index.js')
+    const { cancelQuestionsForSession, cancelPathConfirmationsForSession, getPendingConfirmationCallIds } =
+      await import('./tools/index.js')
 
     // Drain queued messages BEFORE stopping execution, so the QueueProcessor
     // doesn't pick them up when running_changed fires from setRunning(false)
@@ -1723,7 +1744,11 @@ export async function createServerHandle(config: Config): Promise<ServerHandle> 
     abortSession(sessionId)
 
     cancelQuestionsForSession(sessionId, 'Session stopped by user')
+    // Tell every client the pending confirmations are gone, or their cards stay on
+    // screen — with live Allow/Deny buttons — under a tool that already failed.
+    const cancelledConfirmations = getPendingConfirmationCallIds(sessionId)
     cancelPathConfirmationsForSession(sessionId, 'Session stopped by user')
+    announceCancelledConfirmations(sessionId, cancelledConfirmations)
 
     const eventStore = (await import('./events/index.js')).getEventStore()
     eventStore.append(sessionId, { type: 'running.changed', data: { isRunning: false } })
@@ -3845,12 +3870,15 @@ export async function createServerHandle(config: Config): Promise<ServerHandle> 
     stopSession: (sessionId) => {
       void (async () => {
         const { stopSessionExecution } = await import('./session/chat-handler.js')
-        const { cancelQuestionsForSession, cancelPathConfirmationsForSession } = await import('./tools/index.js')
+        const { cancelQuestionsForSession, cancelPathConfirmationsForSession, getPendingConfirmationCallIds } =
+          await import('./tools/index.js')
         sessionManager.clearMessageQueue(sessionId)
         stopSessionExecution(sessionId, sessionManager)
         abortSession(sessionId)
         cancelQuestionsForSession(sessionId, 'Session stopped by user')
+        const cancelledConfirmations = getPendingConfirmationCallIds(sessionId)
         cancelPathConfirmationsForSession(sessionId, 'Session stopped by user')
+        announceCancelledConfirmations(sessionId, cancelledConfirmations)
         getEventStore().append(sessionId, { type: 'running.changed', data: { isRunning: false } })
       })().catch((error) => {
         logger.error(`MCP stopSession failed for ${sessionId}`, {

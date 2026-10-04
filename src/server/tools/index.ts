@@ -474,6 +474,7 @@ export {
   PathAccessDeniedError,
   requestPathAccess,
   cancelPathConfirmationsForSession,
+  getPendingConfirmationCallIds,
   autoApprovePendingConfirmationsForSession,
   providePathConfirmation,
   getConfirmationSessionId,

@@ -14,7 +14,7 @@ import {
   type WorkspaceConfigResponse,
 } from '../../lib/resources'
 import { mcpStatusColor, mcpStatusDot } from '../../lib/mcp-utils'
-import { wsClient } from '../../lib/ws'
+import { checkDynamicContext } from '../../lib/context-sync'
 import { authFetch } from '../../lib/api'
 import { formatRootDir, getRootDirBlockReason, suggestRootDirChild } from '@shared/workspace.js'
 import { dedupById } from '../../lib/modal-utils'
@@ -57,11 +57,7 @@ export function ProjectSettingsModal({ isOpen, onClose, project }: ProjectSettin
   }))
 
   const handleClose = () => {
-    try {
-      wsClient.send('context.checkDynamic', {})
-    } catch {
-      // WS might not be connected
-    }
+    checkDynamicContext()
     onClose()
   }
 

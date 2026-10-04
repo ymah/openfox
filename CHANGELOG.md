@@ -17,6 +17,10 @@
 
 ### Bug Fixes
 
+- **Stopping a turn that waits for a path confirmation** — the pending confirmation is now announced as cancelled (REST stop and MCP), so it no longer stays listed or blocks the next turn.
+- **Unknown project or page** — an unknown or deleted project, or an unknown URL, shows a "not found" page with a link home instead of an endless spinner or a blank page.
+- **Status text overflow** — a long status line no longer overlaps the composer.
+- **Default Agent selector** (Advanced) shows the saved value while loading and groups agents by function; the dynamic-context check is shared by both settings dialogs; `<html lang>` follows the interface language.
 - **No more permanent "Update OpenFox" banner on a fork** — the check compared `2.0.160-fox.4` with the upstream package, so it could only say "different", and the button would have replaced the fork with upstream. Fork builds are never offered an update, and `OPENFOX_DISABLE_AUTO_UPDATE=true` turns the banner off for any deployment updated another way.
 - **Escape closes the agent menu**, like the persona popover.
 - **A project's own pages are reachable from the sidebar** — Manuscript and Codex for a book, Memory for a chat space were linked only from the project home, so a session had no way back to them. Plugins declare them with `nav`.

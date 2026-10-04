@@ -1584,6 +1584,15 @@ export function cancelPathConfirmation(callId: string, reason: string): boolean 
   return true
 }
 
+/** Call ids of the path confirmations a session is currently waiting on. */
+export function getPendingConfirmationCallIds(sessionId: string): string[] {
+  const ids: string[] = []
+  for (const [callId, pending] of pendingConfirmations.entries()) {
+    if (pending.sessionId === sessionId) ids.push(callId)
+  }
+  return ids
+}
+
 export function cancelPathConfirmationsForSession(sessionId: string, reason: string): number {
   let cancelledCount = 0
 

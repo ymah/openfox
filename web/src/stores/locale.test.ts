@@ -11,6 +11,15 @@ beforeEach(() => {
   vi.restoreAllMocks()
 })
 
+describe('document language', () => {
+  it('follows the applied locale, so assistive tech and spell-check use it', () => {
+    useLocaleStore.getState().applyLocale('fr')
+    expect(document.documentElement.lang).toBe('fr')
+    useLocaleStore.getState().applyLocale('en')
+    expect(document.documentElement.lang).toBe('en')
+  })
+})
+
 describe('resolveLocale', () => {
   it('passes explicit locales through', () => {
     expect(resolveLocale('en')).toBe('en')

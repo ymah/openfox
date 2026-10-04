@@ -63,11 +63,11 @@ export function RunningIndicator() {
 
   return (
     <div
-      className="flex items-center gap-3 text-xs text-text-muted py-2"
+      className="flex items-center gap-3 text-xs text-text-muted py-2 min-w-0"
       data-testid="session-status-indicator"
       data-state={state}
     >
-      <div className="flex items-center gap-1.5">
+      <div className="flex items-center gap-1.5 min-w-0">
         {showBounce && (
           <span className="flex gap-0.5">
             <span
@@ -84,7 +84,7 @@ export function RunningIndicator() {
             />
           </span>
         )}
-        <span className="text-text-secondary">
+        <span className="text-text-secondary truncate" title={contextStatus ?? undefined}>
           {aborting && state === 'running'
             ? `${label} ${t({ en: '(abort in progress)', fr: '(interruption en cours)' })}`
             : !aborting && state === 'running' && contextStatus
@@ -93,13 +93,13 @@ export function RunningIndicator() {
         </span>
       </div>
       {!aborting && state === 'running' && (
-        <span className="text-text-muted hidden sm:inline">
+        <span className="text-text-muted hidden sm:inline shrink-0 whitespace-nowrap">
           {t({ en: 'esc to interrupt', fr: 'échap pour stopper' })}
         </span>
       )}
       {timerActive && lastPromptAtText && (
         <span
-          className="text-text-muted hidden sm:inline"
+          className="text-text-muted hidden sm:inline shrink-0 whitespace-nowrap"
           aria-label={t({ en: 'time since last prompt', fr: 'temps depuis la dernière invite' })}
         >
           {lastPromptAtText}

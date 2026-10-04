@@ -25,7 +25,13 @@ vi.mock('../../../lib/resources', async (importOriginal) => ({
 }))
 
 vi.mock('../../../hooks/useAgents', () => ({
-  useAgents: () => ({ agents: [], refresh: vi.fn() }),
+  useAgents: () => ({
+    agents: [
+      { id: 'builder', name: 'Builder', description: '', subagent: false, allowedTools: [] },
+      { id: 'chat-assistant', name: 'Assistant', description: '', subagent: false, allowedTools: [], category: 'chat' },
+    ],
+    refresh: vi.fn(),
+  }),
 }))
 
 describe('AdvancedTab', () => {
@@ -46,6 +52,37 @@ describe('AdvancedTab', () => {
     expect(cavemanToggle).toBeTruthy()
     await userEvent.setup().click(cavemanToggle!)
     expect(mockSetSetting).toHaveBeenCalledWith('llm.cavemanThinking', 'true')
+  })
+
+  it('shows the system default, not "Loading…", when no default agent has been saved', () => {
+    const { container } = render(<AdvancedTab onClose={vi.fn()} />)
+    const select = Array.from(container.querySelectorAll('select')).find((el) =>
+      el.textContent?.includes('System default'),
+    )
+    expect(select).toBeTruthy()
+    expect(select!.textContent).not.toContain('Loading')
+    expect((select as HTMLSelectElement).value).toBe('')
+  })
+
+  it('shows the saved default agent as selected', () => {
+    mockSettings['agent.defaultAgent'] = 'builder'
+    const { container } = render(<AdvancedTab onClose={vi.fn()} />)
+    const select = Array.from(container.querySelectorAll('select')).find((el) =>
+      el.textContent?.includes('System default'),
+    )
+    expect((select as HTMLSelectElement).value).toBe('builder')
+  })
+
+  it('groups the default-agent choices by project function', () => {
+    const { container } = render(<AdvancedTab onClose={vi.fn()} />)
+    const groups = Array.from(container.querySelectorAll('optgroup')).map((g) => [
+      g.getAttribute('label'),
+      Array.from(g.querySelectorAll('option')).map((o) => o.textContent),
+    ])
+    expect(groups).toEqual([
+      ['Dev', ['Builder']],
+      ['Chat', ['Assistant']],
+    ])
   })
 
   it('renders the auto-continue-on-boot toggle and persists it', async () => {

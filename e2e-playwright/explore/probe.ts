@@ -2,7 +2,7 @@ import { chromium, type Page } from '@playwright/test'
 
 const BASE = process.env['EXPLORE_URL'] ?? 'http://127.0.0.1:10770'
 const SHOTS = '/tmp/explore-shots'
-const findings: string[] = []
+export const findings: string[] = []
 
 export function attachWatchers(page: Page, label: string) {
   page.on('console', (m) => {
