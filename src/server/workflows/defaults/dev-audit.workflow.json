@@ -1,0 +1,79 @@
+{
+  "metadata": {
+    "id": "dev-audit",
+    "name": "Audit (architecture & security)",
+    "description": "Read-only audit of existing code: an architecture review, then a security review, then a prioritized report. Changes nothing.",
+    "version": "1.0.0",
+    "color": "#0ea5e9",
+    "category": "dev",
+    "parameters": [
+      {
+        "id": "scope",
+        "label": "Scope (folder or area)",
+        "description": "What to audit. Leave empty to audit the whole project.",
+        "position": 1,
+        "required": false
+      }
+    ]
+  },
+  "entryStep": "architecture",
+  "settings": {
+    "maxIterations": 6
+  },
+  "steps": [
+    {
+      "id": "architecture",
+      "name": "Architecture review",
+      "type": "sub_agent",
+      "phase": "plan",
+      "subAgentType": "architect",
+      "subGroup": "architecture",
+      "prompt": "Audit the architecture of existing code; nothing is being built. Scope: {{scope}} (if this still reads literally `{{scope}}`, no scope was given: audit the whole project).\n\nMap the structure, then report boundaries and coupling, where responsibilities are unclear, fragile or hard-to-change areas, and the debt worth paying down first. Cite real files. Call return_value with your review.",
+      "transitions": [
+        {
+          "when": {
+            "type": "always"
+          },
+          "goto": "security"
+        }
+      ]
+    },
+    {
+      "id": "security",
+      "name": "Security audit",
+      "type": "sub_agent",
+      "phase": "verification",
+      "subAgentType": "security_reviewer",
+      "subGroup": "security",
+      "prompt": "Audit existing code for exploitable security flaws; this is not a diff review. Scope: {{scope}} (if this still reads literally `{{scope}}`, no scope was given: audit the whole project). Start from the entry points (network handlers, command and file operations, authentication, anything that parses untrusted input) and follow the data.\n\nApply the triage: only report what has attacker-controlled input, a reachable dangerous point and a known blast radius. Record each finding with session_metadata on review_findings (status: open), then call return_value with your findings, or `No security findings.`",
+      "transitions": [
+        {
+          "when": {
+            "type": "always"
+          },
+          "goto": "report"
+        }
+      ]
+    },
+    {
+      "id": "report",
+      "name": "Report",
+      "type": "agent",
+      "phase": "plan",
+      "agentId": "planner",
+      "subGroup": "report",
+      "prompt": "## Security audit\n{{stepOutput.content}}\n\nThe architecture review is earlier in this conversation. Write the audit report for the user: the most important points first, grouped under Security and Architecture, each with the file it concerns and what to do about it. Be honest about what was not examined. This is a read-only audit: do not modify any file. Call step_done() when you have written the report.",
+      "transitions": [
+        {
+          "when": {
+            "type": "always"
+          },
+          "goto": "$done"
+        }
+      ]
+    }
+  ],
+  "startCondition": {
+    "type": "always"
+  }
+}

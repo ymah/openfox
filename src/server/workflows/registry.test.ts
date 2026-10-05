@@ -197,7 +197,7 @@ describe('loadDefaultWorkflows', () => {
     expect(location!.name).toBe('Where to work')
     expect(location!.phase).toBe('build')
     expect(location!.transitions).toEqual([
-      { when: { type: 'step_result', result: 'Work in current workspace' }, goto: 'build' },
+      { when: { type: 'step_result', result: 'Work in current workspace' }, goto: 'architecture' },
       { when: { type: 'step_result', result: 'Start a new workspace' }, goto: 'setup_workspace' },
     ])
 
@@ -209,7 +209,7 @@ describe('loadDefaultWorkflows', () => {
       expect(setupStep.name).toBe('Setting up workspace')
       expect(setupStep.agentId).toBe('builder')
       expect(setupStep.phase).toBe('build')
-      expect(setupStep.transitions).toEqual([{ when: { type: 'always' }, goto: 'build' }])
+      expect(setupStep.transitions).toEqual([{ when: { type: 'always' }, goto: 'architecture' }])
       expect(setupStep.prompt).toContain('Do not use an existing workspace')
     }
 

@@ -27,6 +27,12 @@ const LABELS: Record<string, { en: string; fr: string }> = {
   code_reviewer: { en: 'Code Review', fr: 'Revue de code' },
   test_generator: { en: 'Test Generation', fr: 'Génération de tests' },
   debugger: { en: 'Debug', fr: 'Débogage' },
+  architect: { en: 'Architecture Review', fr: 'Revue d’architecture' },
+  security_reviewer: { en: 'Security Review', fr: 'Revue de sécurité' },
+  test_runner: { en: 'Test Run', fr: 'Exécution des tests' },
+  refactorer: { en: 'Refactoring', fr: 'Refactorisation' },
+  performance_engineer: { en: 'Performance', fr: 'Performance' },
+  docs_writer: { en: 'Documentation', fr: 'Documentation' },
 }
 
 function headerStyle(hex: string) {

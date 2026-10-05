@@ -23,6 +23,46 @@ export function startFakeLlm(port: number): Server {
         model: 'fake-model',
         choices: [{ index: 0, delta: { content }, finish_reason: finish }],
       })
+      if (mode === 'agent') {
+        // A cooperative model: finish the step the way the workflow expects, by calling the right tool.
+        let tools: string[] = []
+        try {
+          tools = ((JSON.parse(body) as { tools?: { function?: { name?: string } }[] }).tools ?? []).map(
+            (t) => t.function?.name ?? '',
+          )
+        } catch {}
+        const toolName = tools.includes('return_value')
+          ? 'return_value'
+          : tools.includes('step_done')
+            ? 'step_done'
+            : null
+        res.setHeader('content-type', 'text/event-stream')
+        res.statusCode = 200
+        if (toolName) {
+          const args = toolName === 'return_value' ? '{"content":"No findings (fake model).","result":"success"}' : '{}'
+          sse({
+            id: 'x',
+            object: 'chat.completion.chunk',
+            created: 0,
+            model: 'fake-model',
+            choices: [
+              {
+                index: 0,
+                delta: {
+                  tool_calls: [{ index: 0, id: 'c1', type: 'function', function: { name: toolName, arguments: args } }],
+                },
+                finish_reason: null,
+              },
+            ],
+          })
+          sse(chunk('', 'tool_calls'))
+        } else {
+          sse(chunk('Done (fake model).'))
+          sse(chunk('', 'stop'))
+        }
+        res.write('data: [DONE]\n\n')
+        return res.end()
+      }
       if (mode === 'http500') {
         res.statusCode = 500
         return res.end('{"error":{"message":"boom"}}')

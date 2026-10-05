@@ -18,7 +18,7 @@ export const callSubAgentTool: Tool = {
     function: {
       name: 'call_sub_agent',
       description:
-        'Call a sub-agent to perform a specialized task. Available sub-agents: verifier (verify criteria), code_reviewer (review code quality), explorer (explore codebase). The sub-agent will execute with isolated context and return a text result.',
+        'Call a sub-agent to perform a specialized task. Available sub-agents: verifier (verify criteria), code_reviewer (review code quality), explorer (explore codebase), architect (design review), security_reviewer (security audit of a diff), test_runner (run tests, return only the failures), debugger (root-cause a failure), refactorer (restructure, same behavior), performance_engineer (measure and find hot spots), docs_writer (update documentation). The sub-agent will execute with isolated context and return a text result.',
       parameters: {
         type: 'object',
         properties: {

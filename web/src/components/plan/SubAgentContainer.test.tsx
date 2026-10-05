@@ -166,4 +166,25 @@ describe('SubAgentContainer', () => {
 
     expect(screen.queryByTestId('subagent-compaction-divider')).toBeNull()
   })
+
+  it.each([
+    ['architect', 'Architecture Review'],
+    ['security_reviewer', 'Security Review'],
+    ['test_runner', 'Test Run'],
+    ['debugger', 'Debug'],
+    ['refactorer', 'Refactoring'],
+    ['performance_engineer', 'Performance'],
+    ['docs_writer', 'Documentation'],
+  ])('labels the %s sub-agent when the agent list does not know it', (subAgentType, label) => {
+    setSubAgentContext(undefined)
+    render(
+      <SubAgentContainer
+        messages={messages.map((m) => ({ ...m, subAgentType }))}
+        subAgentType={subAgentType}
+        subAgentId="code-reviewer-run-1"
+        isStreaming={false}
+      />,
+    )
+    expect(screen.getByText(label)).toBeInTheDocument()
+  })
 })

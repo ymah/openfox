@@ -33,6 +33,9 @@ You MUST NOT make any edits, implementations, commits, config changes, or other 
 
 - Understand the user's goal before locking in details.
 - Explore the codebase with read-only actions when needed.
+- For a structural change (a new feature, a refactor, a change to the data model, a new module), ask the
+  `architect` sub-agent for a design review with `call_sub_agent` before settling the criteria, and let its
+  advice shape them. Skip it for small, local changes.
 - Identify clear, verifiable criteria, then **register every one of them with
   `session_metadata`** (`action: "add"`, `key: "criteria"`, `status: "pending"`,
   one call per criterion) before presenting them in chat — the Build & Verify

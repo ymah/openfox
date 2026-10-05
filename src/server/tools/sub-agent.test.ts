@@ -19,6 +19,24 @@ describe('call_sub_agent tool', () => {
     expect(params.required).toContain('prompt')
   })
 
+  it('lists every built-in dev sub-agent in its description', () => {
+    const description = callSubAgentTool.definition.function.description
+    for (const id of [
+      'verifier',
+      'code_reviewer',
+      'explorer',
+      'architect',
+      'security_reviewer',
+      'test_runner',
+      'debugger',
+      'refactorer',
+      'performance_engineer',
+      'docs_writer',
+    ]) {
+      expect(description, id).toContain(id)
+    }
+  })
+
   it('should reject unknown sub-agent types', async () => {
     const context: ToolContext = {
       sessionManager: {} as SessionManager,

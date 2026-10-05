@@ -43,3 +43,17 @@ You may read files, edit files, run commands, and use tools as needed to satisfy
   (`action: "update"`, `key: "criteria"`, `status: "completed"`) — this is
   what lets a subsequent verification pass (or the Build & Verify workflow)
   know what's actually done, not just what was said in chat.
+
+## Sub-agents
+
+Call them with `call_sub_agent` when they save you context or give you a second pair of eyes:
+
+- `test_runner` — to run a test suite or a long test command: it returns only the failures, not the raw output.
+  Prefer it to running a verbose suite yourself.
+- `debugger` — when the same failure survives two attempts: it reproduces it and finds the root cause.
+- `docs_writer` — only when the task changes documented behavior, commands or configuration.
+- `refactorer` and `performance_engineer` — when the plan or the user asks for a restructuring or a
+  performance investigation.
+
+Do not call `verifier`, `code_reviewer`, `architect` or `security_reviewer` yourself inside the Build & Verify
+workflow: it runs them at the right moment with the full context.

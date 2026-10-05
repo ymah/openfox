@@ -2,14 +2,14 @@
   "metadata": {
     "id": "default",
     "name": "Build & Verify",
-    "description": "Standard build-verify loop. Builder implements criteria, verifier checks them.",
-    "version": "1.3.2",
+    "description": "Standard build-verify loop. An architect reviews the design first, the builder implements the criteria, the verifier checks them, then code and security reviews run before finalizing.",
+    "version": "1.4.0",
     "color": "#3b82f6",
     "category": "dev"
   },
   "entryStep": "work_location",
   "settings": {
-    "maxIterations": 12
+    "maxIterations": 14
   },
   "steps": [
     {
@@ -24,7 +24,7 @@
             "type": "step_result",
             "result": "Work in current workspace"
           },
-          "goto": "build"
+          "goto": "architecture"
         },
         {
           "when": {
@@ -48,6 +48,23 @@
           "when": {
             "type": "always"
           },
+          "goto": "architecture"
+        }
+      ]
+    },
+    {
+      "id": "architecture",
+      "name": "Architecture review",
+      "type": "sub_agent",
+      "phase": "build",
+      "subAgentType": "architect",
+      "subGroup": "architecture",
+      "prompt": "## Criteria\n{{criteriaList}}\n\nReview the design of this change before it is implemented. Read the code it will touch and who depends on it, then report the recommended approach, the boundaries, the impact on existing code and the risks. Call return_value with your review; if there is nothing worth raising, return `No architectural concerns.`",
+      "transitions": [
+        {
+          "when": {
+            "type": "always"
+          },
           "goto": "build"
         }
       ]
@@ -59,7 +76,7 @@
       "phase": "build",
       "agentId": "builder",
       "subGroup": "build",
-      "prompt": "Implement the task and make sure you fulfil the {{criteriaCount}} criteria. Mark each criterion as complete using session_metadata with action update and status completed.\n\nNote: **Do not** call the `code_reviewer` or `verifier` sub-agents yourself via `call_sub_agent` — both run automatically later in this workflow (verify → code review) with the full diff in context; doing it here duplicates work.",
+      "prompt": "Implement the task and make sure you fulfil the {{criteriaCount}} criteria. If the architecture review above raised concerns, follow its recommended approach and deviate only for a stated reason. Mark each criterion as complete using session_metadata with action update and status completed.\n\nNote: **Do not** call the `code_reviewer` or `verifier` sub-agents yourself via `call_sub_agent` — both run automatically later in this workflow (verify → code review) with the full diff in context; doing it here duplicates work.",
       "nudgePrompt": "Continue working on the acceptance criteria. {{reason}}.\n\n{{verifierFindings}}\nFix the issues above, then mark each failed criterion as **completed** using session_metadata with action update and status completed. Do not use \"verified\" — that status is set by the verifier, not by you.\n\nReminder: don't self-invoke `code_reviewer`/`verifier` — the workflow runs them later.",
       "transitions": [
         {
@@ -71,7 +88,12 @@
           },
           "goto": "verify"
         },
-        { "when": { "type": "always" }, "goto": "build" }
+        {
+          "when": {
+            "type": "always"
+          },
+          "goto": "build"
+        }
       ]
     },
     {
@@ -84,10 +106,21 @@
       "prompt": "## Criteria\n{{criteriaList}}\n\n## Modified Files\n{{modifiedFiles}}\n\nVerify each criterion marked [NEEDS VERIFICATION]. Read the code, run tests if applicable, then use session_metadata to update each criterion's status to passed or failed.",
       "transitions": [
         {
-          "when": { "type": "metadata_all_match", "key": "criteria", "field": "status", "value": "passed" },
+          "when": {
+            "type": "metadata_all_match",
+            "key": "criteria",
+            "field": "status",
+            "value": "passed"
+          },
           "goto": "code_review"
         },
-        { "when": { "type": "always" }, "goto": "build", "subGroup": "verify" }
+        {
+          "when": {
+            "type": "always"
+          },
+          "goto": "build",
+          "subGroup": "verify"
+        }
       ]
     },
     {
@@ -98,7 +131,31 @@
       "subAgentType": "code_reviewer",
       "subGroup": "code review",
       "prompt": "## Modified Files\n{{modifiedFiles}}\n\nReview the **git diff** of the modified files rather than reading the full files. Focus on:\n1. **UX interaction** — does this feel good to use? Any rough edges, confusing behavior, or unnecessary friction?\n2. **Project bloat** — does this follow project conventions? Is it maintainable? Does it add unnecessary complexity?\n\nUse session_metadata to create review_findings entries for any issues you find (status: open). If re-reviewing existing findings, update their status to resolved or dismissed as appropriate. Then call return_value with your findings.",
-      "transitions": [{ "when": { "type": "always" }, "goto": "finalize" }]
+      "transitions": [
+        {
+          "when": {
+            "type": "always"
+          },
+          "goto": "security_review"
+        }
+      ]
+    },
+    {
+      "id": "security_review",
+      "name": "Security Review",
+      "type": "sub_agent",
+      "phase": "verification",
+      "subAgentType": "security_reviewer",
+      "subGroup": "security",
+      "prompt": "## Modified Files\n{{modifiedFiles}}\n\nReview the **git diff** of the modified files for exploitable security flaws. Triage first: only report what has attacker-controlled input, a reachable dangerous point and a known blast radius.\n\nUse session_metadata to create review_findings entries (status: open) for each real finding. If re-reviewing existing findings, update their status to resolved as appropriate. Then call return_value with your findings, or `No security findings.`",
+      "transitions": [
+        {
+          "when": {
+            "type": "always"
+          },
+          "goto": "finalize"
+        }
+      ]
     },
     {
       "id": "finalize",
@@ -107,8 +164,8 @@
       "phase": "verification",
       "agentId": "builder",
       "subGroup": "code review",
-      "prompt": "## Code Review Findings\n{{stepOutput.content}}\n\nThe code reviewer has provided feedback above. Review it and make any final adjustments if needed.\n\nFirst, use `session_metadata` with action `get` and key `review_findings` to see the existing findings and their IDs. Then use `session_metadata` with action `update` and the correct ID to resolve or dismiss each one:\n- If you fixed the issue, set status to **resolved**.\n- If the finding is not applicable, set status to **dismissed**.\n\nAll findings must be resolved or dismissed before you can finish. When you're satisfied, call step_done().",
-      "nudgePrompt": "The step cannot complete because not all review findings have been resolved or dismissed. Use `session_metadata` with action `get` and key `review_findings` to check the current status of each finding by ID, then use `session_metadata` with action `update` to set each one to **resolved** or **dismissed**. Call step_done() once all findings are handled.",
+      "prompt": "## Security Review Findings\n{{stepOutput.content}}\n\nThe security reviewer has reported above, and the code reviewer reported earlier in this conversation. Review both and make any final adjustments if needed. Security findings come first: fix the exploitable ones rather than dismissing them.\n\nFirst, use `session_metadata` with action `get` and key `review_findings` to see the existing findings and their IDs. Then use `session_metadata` with action `update` and the correct ID to resolve or dismiss each one:\n- If you fixed the issue, set status to **resolved**.\n- If the finding is not applicable, set status to **dismissed**.\n\nAll findings must be resolved or dismissed before you can finish. When you're satisfied, call step_done().",
+      "nudgePrompt": "The step cannot complete because not all review findings (code review and security review) have been resolved or dismissed. Use `session_metadata` with action `get` and key `review_findings` to check the current status of each finding by ID, then use `session_metadata` with action `update` to set each one to **resolved** or **dismissed**. Call step_done() once all findings are handled.",
       "transitions": [
         {
           "when": {
@@ -119,7 +176,12 @@
           },
           "goto": "summarize"
         },
-        { "when": { "type": "always" }, "goto": "finalize" }
+        {
+          "when": {
+            "type": "always"
+          },
+          "goto": "finalize"
+        }
       ]
     },
     {
@@ -130,7 +192,14 @@
       "agentId": "builder",
       "subGroup": "summarize",
       "prompt": "Produce a concise summary of what was accomplished in this session. Include:\n- What was implemented or fixed\n- Key files modified\n- Any notable decisions or tradeoffs\n- **What to test** — a short, actionable mini-tutorial from the user's perspective:\n  - Concrete UI flows or interactions to try, with the expected outcome\n  - Edge cases worth poking at\n  - One action per line, numbered, so the user can follow along without extra context\n\nCall step_done() when done.",
-      "transitions": [{ "when": { "type": "always" }, "goto": "$done" }]
+      "transitions": [
+        {
+          "when": {
+            "type": "always"
+          },
+          "goto": "$done"
+        }
+      ]
     }
   ],
   "startCondition": {
