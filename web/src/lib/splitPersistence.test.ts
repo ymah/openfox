@@ -7,6 +7,7 @@ import {
   readSplitLayoutMode,
   writeSplitLayoutMode,
   SPLIT_ROUTE,
+  MAX_SPLIT_PANES,
 } from './splitPersistence'
 
 const KEY = 'openfox:split'
@@ -30,6 +31,14 @@ describe('splitPersistence', () => {
     writeSplitLayout({ openSessionIds: [], focusedSessionId: null })
     expect(localStorage.getItem(KEY)).toBeNull()
     expect(readSplitLayout()).toBeNull()
+  })
+
+  it('ignores saved ids that are not strings and caps the number of panes', () => {
+    localStorage.setItem(KEY, JSON.stringify({ openSessionIds: [1, null, '', 'a', {}, 'b'], focusedSessionId: null }))
+    expect(readSplitLayout()?.openSessionIds).toEqual(['a', 'b'])
+    const many = Array.from({ length: 50 }, (_, i) => `s${i}`)
+    localStorage.setItem(KEY, JSON.stringify({ openSessionIds: many, focusedSessionId: null }))
+    expect(readSplitLayout()?.openSessionIds).toHaveLength(MAX_SPLIT_PANES)
   })
 
   it('returns null for corrupt or malformed stored data', () => {

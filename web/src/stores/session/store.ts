@@ -750,9 +750,16 @@ export const useSessionStore = create<SessionState>((set, get) => {
       void get().listHomeSessions()
       const toLoad = ids.filter((id) => !get().panes[id])
       await Promise.all(toLoad.map((id) => get().openPane(id, { focus: false })))
-      const focus = focusId && ids.includes(focusId) ? focusId : ids[0]!
+      // A session deleted since the layout was saved was pruned by its failed load:
+      // keep only panes that exist, or they come back as empty ghost panes.
+      const live = ids.filter((id) => get().panes[id])
+      if (live.length === 0) {
+        persistSplit()
+        return
+      }
+      const focus = focusId && live.includes(focusId) ? focusId : live[0]!
       set((s) => {
-        const openSessionIds = [...new Set([...s.openSessionIds, ...ids])]
+        const openSessionIds = [...new Set([...s.openSessionIds, ...live])]
         const pane = s.panes[focus] ?? null
         return {
           openSessionIds,

@@ -7,6 +7,9 @@ export interface SplitLayout {
 
 export const SPLIT_ROUTE = '/split-view'
 
+/** More panes than this cannot be usefully shown; a larger saved list is truncated. */
+export const MAX_SPLIT_PANES = 12
+
 const SPLIT_KEY = 'openfox:split'
 const LAYOUT_KEY = 'openfox:split:layout'
 
@@ -42,7 +45,9 @@ export function readSplitLayout(): SplitLayout | null {
   try {
     const parsed = JSON.parse(raw) as Partial<SplitLayout>
     if (!Array.isArray(parsed.openSessionIds)) return null
-    const openSessionIds = (parsed.openSessionIds as string[]).filter(Boolean)
+    const openSessionIds = (parsed.openSessionIds as unknown[])
+      .filter((id): id is string => typeof id === 'string' && id.length > 0)
+      .slice(0, MAX_SPLIT_PANES)
     const focusedSessionId = typeof parsed.focusedSessionId === 'string' ? parsed.focusedSessionId : null
     return { openSessionIds, focusedSessionId }
   } catch {

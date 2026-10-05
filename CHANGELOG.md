@@ -17,6 +17,7 @@
 
 ### Bug Fixes
 
+- **Split view with a stale or corrupted saved layout** — a saved layout holding ids that were not text blanked the page, and sessions deleted since the layout was saved came back as empty ghost panes (500 saved ids took 23 seconds and opened 499 panes). Only existing sessions are restored, ids are checked and the pane count is capped at 12.
 - **Blank page from a corrupted setting** — a saved theme-presets value that was `null`, an object or a list (hand-edited, or from another version) made the whole interface fail with "Cannot read properties of null (reading 'find')", and kept doing so after the setting was reset because the bad copy stayed in the browser. Theme presets, system-theme preferences and the favourite-models list are now validated when read.
 - **Settings stored as text only** — `PUT /api/settings/:key` answered 500 for an object, `null` or a boolean and silently stored a number as "5.0"; it now requires a string value (400 otherwise) and a reasonable key.
 - **Adding an MCP server that never answers** — the request stayed open for a minute or more and left the server's process running. The handshake is now limited to 15 seconds and the process is closed on failure; server names and the types of command, args, env, url and headers are checked when adding one.

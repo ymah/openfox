@@ -150,6 +150,25 @@ describe('split view store', () => {
     expect(state.unreadSessionIds).not.toContain('s1')
   })
 
+  it('does not keep panes for sessions that no longer exist when entering split view', async () => {
+    const useSessionStore = await loadSessionStore()
+    fetchMock.mockImplementation(((url: string | URL | Request) => {
+      const u = String(url)
+      if (u.includes('/background-processes')) {
+        return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve({ processes: [] }) })
+      }
+      const id = /\/sessions\/([^/?]+)/.exec(u)?.[1] ?? 'unknown'
+      if (id === 'gone') return Promise.resolve({ ok: false, status: 404, json: () => Promise.resolve({}) })
+      return Promise.resolve(restResponse(makeSession(id)))
+    }) as never)
+
+    await useSessionStore.getState().enterSplitView(['gone', 's1'], 'gone')
+
+    const state = useSessionStore.getState()
+    expect(state.openSessionIds).toEqual(['s1'])
+    expect(state.focusedSessionId).toBe('s1')
+  })
+
   it('keeps the focused pane streaming in sync with its flat aliases', async () => {
     const useSessionStore = await loadSessionStore()
     mockSessionApis()
