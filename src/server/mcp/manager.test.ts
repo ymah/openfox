@@ -1,5 +1,5 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest'
-import { McpManager } from './manager.js'
+import { McpManager, MCP_CONNECT_TIMEOUT_MS } from './manager.js'
 import { createMcpTools } from './tool-adapter.js'
 
 // Mock the MCP SDK Client
@@ -422,6 +422,22 @@ describe('McpManager', () => {
 
       await manager.setToolEnabled('test', 'get_weather', true)
       expect(server!.tools.find((t) => t.name === 'get_weather')!.enabled).toBe(true)
+    })
+  })
+
+  describe('a server that never answers the handshake', () => {
+    it('bounds the connection attempt and closes the transport it opened', async () => {
+      mockClientInstance.connect.mockRejectedValueOnce(new Error('Request timed out'))
+      mockTransportInstance.close.mockClear()
+      mockClientInstance.connect.mockClear()
+
+      await manager.addServer('silent', { transport: 'stdio', command: 'sleep', args: ['300'] })
+
+      expect(mockClientInstance.connect).toHaveBeenCalledWith(mockTransportInstance, {
+        timeout: MCP_CONNECT_TIMEOUT_MS,
+      })
+      expect(mockTransportInstance.close).toHaveBeenCalled()
+      expect(manager.getServer('silent')!.status).toBe('error')
     })
   })
 

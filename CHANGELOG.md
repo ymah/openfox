@@ -17,6 +17,9 @@
 
 ### Bug Fixes
 
+- **Blank page from a corrupted setting** — a saved theme-presets value that was `null`, an object or a list (hand-edited, or from another version) made the whole interface fail with "Cannot read properties of null (reading 'find')", and kept doing so after the setting was reset because the bad copy stayed in the browser. Theme presets, system-theme preferences and the favourite-models list are now validated when read.
+- **Settings stored as text only** — `PUT /api/settings/:key` answered 500 for an object, `null` or a boolean and silently stored a number as "5.0"; it now requires a string value (400 otherwise) and a reasonable key.
+- **Adding an MCP server that never answers** — the request stayed open for a minute or more and left the server's process running. The handshake is now limited to 15 seconds and the process is closed on failure; server names and the types of command, args, env, url and headers are checked when adding one.
 - **Server freeze on a huge task repeat interval** — a weekly recurring task with an interval of billions made the next-run search loop for minutes, blocking the whole server. Intervals are now limited to 1–1000 (clear error otherwise), and an existing out-of-range rule is ignored instead of scanned.
 - **Endless loop on unusable tool calls** — a model that kept sending tool calls with invalid (truncated) arguments made the turn loop without end, one request per round (100 messages in under 30 seconds). The turn now stops with a clear error after 8 such rounds in a row.
 - **Dev Server process left running** — restarting or starting again while the server was in the "warning" or "error" state replaced it without stopping it, leaving the old process (and its port) alive in the background.

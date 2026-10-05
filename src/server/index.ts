@@ -1,3 +1,4 @@
+import { mcpFieldError } from './mcp/validate-fields.js'
 import express from 'express'
 import cors from 'cors'
 import { createServer as createHttpServer } from 'node:http'
@@ -2028,9 +2029,17 @@ export async function createServerHandle(config: Config): Promise<ServerHandle> 
   app.put('/api/settings/:key', async (req, res) => {
     const { setSetting } = await import('./db/settings.js')
     const key = req.params.key
-    const { value } = req.body
+    const { value } = req.body ?? {}
     if (value === undefined) {
       return res.status(400).json({ error: 'value is required' })
+    }
+    // Settings are stored as text: a number would come back as "5.0", an object or a
+    // boolean would fail inside the database layer.
+    if (typeof value !== 'string') {
+      return res.status(400).json({ error: 'value must be a string' })
+    }
+    if (!/^[A-Za-z0-9_.:-]{1,100}$/.test(key)) {
+      return res.status(400).json({ error: 'invalid setting key' })
     }
     setSetting(key, value)
     res.json({ key, value })
@@ -3094,6 +3103,10 @@ export async function createServerHandle(config: Config): Promise<ServerHandle> 
     }
     if (!name) {
       return res.status(400).json({ error: 'name is required' })
+    }
+    const fieldError = mcpFieldError({ name, command, args, env, url, headers })
+    if (fieldError) {
+      return res.status(400).json({ error: fieldError })
     }
     if (transport !== undefined && transport !== 'stdio' && transport !== 'http') {
       return res.status(400).json({ error: `Invalid transport '${transport}'. Must be 'stdio' or 'http'.` })

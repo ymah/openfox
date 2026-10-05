@@ -10,6 +10,9 @@ import { McpOAuthProvider } from './oauth-provider.js'
 import { readMcpOAuthEntry } from './oauth-store.js'
 import { sanitizeToolSchema } from '../llm/schema-sanitizer.js'
 
+/** Longest a server may take to answer the handshake and the tool listing before it is reported as failed. */
+export const MCP_CONNECT_TIMEOUT_MS = 15_000
+
 /**
  * The server may answer up to a polling interval after its own deadline, so the SDK request
  * timeout needs headroom beyond the wait a tool asks for.
@@ -104,11 +107,11 @@ export class McpManager {
     const entry = this.servers.get(name)
     if (!entry) return
 
+    let transport: Transport | null = null
     try {
       await this.disconnectServer(name)
 
       const client = new Client({ name: 'openfox-mcp', version: '2.0.0' })
-      let transport: Transport | null = null
 
       if (entry.config.transport === 'stdio') {
         if (!entry.config.command) throw new Error('command is required for stdio transport')
@@ -165,9 +168,9 @@ export class McpManager {
         configurable: true,
       })
 
-      await client.connect(transport)
+      await client.connect(transport, { timeout: MCP_CONNECT_TIMEOUT_MS })
 
-      const { tools: mcpTools } = await client.listTools()
+      const { tools: mcpTools } = await client.listTools(undefined, { timeout: MCP_CONNECT_TIMEOUT_MS })
 
       const disabledSet = new Set(entry.config.disabledTools ?? [])
       const tools: McpToolInfo[] = mcpTools.map((t) => {
@@ -199,6 +202,8 @@ export class McpManager {
       logger.info('Connected to MCP server', { name, toolCount: tools.length })
       this.onServersChanged?.()
     } catch (error) {
+      // A server that never answered still has a child process or open request: close it.
+      await transport?.close().catch(() => {})
       const msg = error instanceof Error ? error.message : String(error)
       logger.error('Failed to connect MCP server', { name, error: msg })
 

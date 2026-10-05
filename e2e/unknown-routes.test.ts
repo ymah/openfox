@@ -98,4 +98,19 @@ describe('Unknown routes and malformed bodies', () => {
     expect(res.status).toBe(400)
     await testProject.cleanup()
   })
+
+  it('only stores string values under reasonable setting keys', async () => {
+    const put = (key: string, value: unknown) =>
+      request(`/api/settings/${key}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ value }),
+      })
+    expect((await put('display.theme', 'dark')).status).toBe(200)
+    expect((await put('display.theme', { a: 1 })).status).toBe(400)
+    expect((await put('display.theme', 5)).status).toBe(400)
+    expect((await put('display.theme', null)).status).toBe(400)
+    expect((await put('display.theme', true)).status).toBe(400)
+    expect((await put('k'.repeat(500), 'x')).status).toBe(400)
+  })
 })

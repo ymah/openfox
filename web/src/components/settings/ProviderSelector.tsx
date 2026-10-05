@@ -1,3 +1,4 @@
+import { parseFavoriteKeys } from '../../lib/model-favorites'
 import { ScrollArea } from '../shared/ScrollArea'
 import { useState, useRef, useEffect, useMemo } from 'react'
 import { useConfigStore, getBackendDisplayName, type Provider } from '../../stores/config'
@@ -194,14 +195,7 @@ export function ProviderSelector() {
     useSetting(SETTINGS_KEYS.DISPLAY_COLLAPSE_FAVORITES_BY_DEFAULT, 'false').value === 'true'
   const favoriteModelsSetting = useSetting(SETTINGS_KEYS.DISPLAY_MODEL_FAVORITES, '[]').value
 
-  const favoriteKeys = useMemo(() => {
-    try {
-      const parsed = JSON.parse(favoriteModelsSetting)
-      return Array.isArray(parsed) ? (parsed as string[]) : []
-    } catch {
-      return []
-    }
-  }, [favoriteModelsSetting])
+  const favoriteKeys = useMemo(() => parseFavoriteKeys(favoriteModelsSetting), [favoriteModelsSetting])
 
   // Filter favorites to only those where the provider and model actually exist in the current configuration
   const validFavorites = useMemo(() => {

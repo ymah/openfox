@@ -1,3 +1,4 @@
+import { parseSystemThemePrefs, parseUserPresets } from './theme-parse'
 import { create } from 'zustand'
 import { SETTINGS_KEYS, setSetting } from '../lib/resources'
 import themeData from './theme-presets.json'
@@ -69,22 +70,19 @@ interface ThemeState {
 
 function getUserPresets(): UserThemePreset[] {
   try {
-    const saved = localStorage.getItem('openfox:userPresets')
-    if (saved) return JSON.parse(saved)
+    return parseUserPresets(localStorage.getItem('openfox:userPresets'))
   } catch {
-    // ignore
+    return []
   }
-  return []
 }
 
 function getSystemThemePrefs(): { darkPreset: string; lightPreset: string } {
+  const fallback = { darkPreset: 'dark', lightPreset: 'light' }
   try {
-    const saved = localStorage.getItem('openfox:systemThemePrefs')
-    if (saved) return JSON.parse(saved) as { darkPreset: string; lightPreset: string }
+    return parseSystemThemePrefs(localStorage.getItem('openfox:systemThemePrefs'), fallback)
   } catch {
-    // ignore
+    return fallback
   }
-  return { darkPreset: 'dark', lightPreset: 'light' }
 }
 
 export const useThemeStore = create<ThemeState>((set, get) => {
