@@ -57,7 +57,7 @@ import {
 import type { TaskGateConfig, TaskActor, TaskSchedule } from '../../shared/types.js'
 import { serverT } from '../i18n.js'
 import { logger } from '../utils/logger.js'
-import { nextOccurrence } from './recurrence.js'
+import { MAX_RECURRENCE_INTERVAL, nextOccurrence } from './recurrence.js'
 
 export type TaskDestination = 'todo' | 'in_progress' | 'done'
 
@@ -867,12 +867,15 @@ function normalizeSchedule(input: TaskSchedule): TaskSchedule {
   }
 
   const { freq, interval, startAt, end } = input
-  if (!Number.isInteger(interval) || interval < 1) {
+  if (!Number.isInteger(interval) || interval < 1 || interval > MAX_RECURRENCE_INTERVAL) {
     throw new Error(
-      serverT({
-        en: 'Recurring interval must be a positive integer',
-        fr: 'L’intervalle de récurrence doit être un entier positif',
-      }),
+      serverT(
+        {
+          en: 'Recurring interval must be a whole number between 1 and {{max}}',
+          fr: 'L’intervalle de récurrence doit être un entier entre 1 et {{max}}',
+        },
+        { max: String(MAX_RECURRENCE_INTERVAL) },
+      ),
     )
   }
   if (freq === 'week') {

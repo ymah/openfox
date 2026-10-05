@@ -31,6 +31,12 @@ export interface RecurrenceRule {
 
 const MS_DAY = 86_400_000
 
+/**
+ * Largest accepted repeat interval. The weekly search walks up to `interval` weeks
+ * day by day, so an unbounded value (2 billion weeks) would freeze the server.
+ */
+export const MAX_RECURRENCE_INTERVAL = 1000
+
 /** Whole calendar days from `a` to `b` (UTC-based so DST never drifts). */
 function dayDiff(a: Date, b: Date): number {
   const ua = Date.UTC(a.getFullYear(), a.getMonth(), a.getDate())
@@ -59,6 +65,7 @@ function lastDayOfMonth(y: number, m0: number): number {
 export function nextOccurrence(after: Date, rule: RecurrenceRule): Date | null {
   const start = new Date(rule.startAt)
   if (Number.isNaN(start.getTime()) || !Number.isFinite(after.getTime())) return null
+  if (!Number.isInteger(rule.interval) || rule.interval < 1 || rule.interval > MAX_RECURRENCE_INTERVAL) return null
   if (rule.end.kind === 'count' && rule.occurrencesDone >= rule.end.count) return null
 
   const hour = start.getHours()

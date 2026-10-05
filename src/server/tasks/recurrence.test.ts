@@ -115,3 +115,27 @@ describe('nextOccurrence', () => {
     })
   })
 })
+
+describe('nextOccurrence with an out-of-range interval', () => {
+  const rule = (interval: number) =>
+    ({
+      freq: 'week',
+      interval,
+      weekdays: [1],
+      startAt: '2020-01-01T09:00:00',
+      end: { kind: 'never' },
+      occurrencesDone: 0,
+    }) as never
+
+  it('answers immediately instead of scanning billions of days', () => {
+    const t0 = Date.now()
+    expect(nextOccurrence(new Date('2026-10-05T10:00:00'), rule(2_000_000_000))).toBeNull()
+    expect(Date.now() - t0).toBeLessThan(1000)
+  })
+
+  it('still computes the largest accepted interval quickly', () => {
+    const t0 = Date.now()
+    nextOccurrence(new Date('2026-10-05T10:00:00'), rule(1000))
+    expect(Date.now() - t0).toBeLessThan(1000)
+  })
+})

@@ -7,11 +7,12 @@
  */
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, writeFileSync } from 'node:fs'
 
-const dir = mkdtempSync(join(tmpdir(), 'openfox-explore-'))
+const dir = process.env['EXPLORE_DIR'] ?? mkdtempSync(join(tmpdir(), 'openfox-explore-'))
+mkdirSync(dir, { recursive: true })
 process.env['OPENFOX_MOCK_LLM'] ??= 'true'
-process.env['OPENFOX_DB_PATH'] = ':memory:'
+process.env['OPENFOX_DB_PATH'] ??= ':memory:'
 process.env['OPENFOX_LOG_LEVEL'] = 'warn'
 process.env['OPENFOX_HOST'] = '127.0.0.1'
 process.env['OPENFOX_DATA_DIR'] = join(dir, 'data')
@@ -30,14 +31,15 @@ const projects = join(dir, 'projects')
 mkdirSync(projects, { recursive: true })
 config.workdir = projects
 // The create-project dialog takes its parent folder from the global config.
-writeFileSync(
-  config.globalConfigPath,
-  JSON.stringify({
-    providers: [],
-    server: { port: 10770, host: '127.0.0.1', openBrowser: false },
-    workspace: { workdir: projects },
-  }),
-)
+if (!existsSync(config.globalConfigPath))
+  writeFileSync(
+    config.globalConfigPath,
+    JSON.stringify({
+      providers: [],
+      server: { port: 10770, host: '127.0.0.1', openBrowser: false },
+      workspace: { workdir: projects },
+    }),
+  )
 
 const handle = await createServerHandle(config)
 const port = Number(process.env['EXPLORE_PORT'] ?? 10770)

@@ -17,6 +17,7 @@
 
 ### Bug Fixes
 
+- **Server freeze on a huge task repeat interval** — a weekly recurring task with an interval of billions made the next-run search loop for minutes, blocking the whole server. Intervals are now limited to 1–1000 (clear error otherwise), and an existing out-of-range rule is ignored instead of scanned.
 - **Endless loop on unusable tool calls** — a model that kept sending tool calls with invalid (truncated) arguments made the turn loop without end, one request per round (100 messages in under 30 seconds). The turn now stops with a clear error after 8 such rounds in a row.
 - **Dev Server process left running** — restarting or starting again while the server was in the "warning" or "error" state replaced it without stopping it, leaving the old process (and its port) alive in the background.
 - **Git operations failing at random** — background `git status` refreshes held `index.lock`, so a checkout or commit at the same moment failed with "Unable to create index.lock"; git is now spawned with optional locks disabled.

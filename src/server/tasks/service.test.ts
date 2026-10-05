@@ -855,6 +855,9 @@ describe('project tasks service', () => {
 
     it('rejects a non-positive interval', () => {
       expect(() => create('Bad interval', { schedule: { ...recurring(), interval: 0 } })).toThrow(/interval/)
+      expect(() => create('Huge interval', { schedule: { ...recurring(), interval: 2_000_000_000 } })).toThrow(
+        /interval/,
+      )
     })
 
     it('creates a recurring task whose first trigger is startAt', () => {
