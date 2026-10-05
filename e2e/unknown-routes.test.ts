@@ -74,4 +74,28 @@ describe('Unknown routes and malformed bodies', () => {
     })
     expect(ftp.status).toBe(400)
   })
+
+  it('rejects wrongly typed fields on project and session routes with a 400', async () => {
+    const send = (method: string, path: string, body: unknown) =>
+      request(path, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
+    const testProject = await createTestProject({ template: 'empty' })
+    const project = await createProject(server.url, { name: 'typed', workdir: testProject.path })
+    expect((await send('POST', '/api/projects/check-permissions', { path: 123 })).status).toBe(400)
+    expect((await send('PUT', `/api/projects/${project.id}`, { name: {} })).status).toBe(400)
+    expect((await send('PUT', `/api/projects/${project.id}`, { dangerLevel: 'extreme' })).status).toBe(400)
+    expect((await send('POST', '/api/sessions', { projectId: {} })).status).toBe(400)
+    expect((await send('POST', '/api/sessions', { projectId: project.id, title: [] })).status).toBe(400)
+    await testProject.cleanup()
+  })
+
+  it('rejects a dev-server config whose command or url is not a string', async () => {
+    const testProject = await createTestProject({ template: 'empty' })
+    const res = await request(`/api/dev-server/config?workdir=${encodeURIComponent(testProject.path)}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ command: 5, url: [] }),
+    })
+    expect(res.status).toBe(400)
+    await testProject.cleanup()
+  })
 })

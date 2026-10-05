@@ -301,8 +301,9 @@ class DevServerManager {
   async start(workdir: string): Promise<DevServerStatus> {
     const instance = this.getInstance(workdir)
 
-    // Stop existing process if running
-    if (instance.state === 'running' && instance.process && !instance.exited) {
+    // Stop any live process, whatever its state: a server in 'warning' or 'error' is
+    // still running, and replacing it without killing it leaves it orphaned.
+    if (instance.process && !instance.exited) {
       await this.stop(workdir)
     }
 

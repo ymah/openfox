@@ -34,6 +34,7 @@ vi.mock('../plugins/hook-emitter.js', () => ({
 import { spawn } from 'node:child_process'
 import { readFile } from 'node:fs/promises'
 import { devServerManager } from './manager.js'
+import { terminateProcessTree } from '../utils/process-tree.js'
 import { emitPluginHook } from '../plugins/hook-emitter.js'
 import { getProjectByWorkdir } from '../db/projects.js'
 
@@ -252,6 +253,32 @@ describe('start with port probing and substitution', () => {
     expect(status.state).toBe('running')
     expect(status.url).toBe('http://localhost:3099')
   })
+})
+
+describe('start while a process is already alive', () => {
+  beforeEach(() => {
+    vi.mocked(readFile).mockReset()
+    vi.mocked(spawn).mockReset()
+    vi.mocked(terminateProcessTree).mockReset()
+  })
+
+  it.each(['running', 'warning', 'error'] as const)(
+    'terminates the previous process first when its state is %s',
+    async (state) => {
+      const workdir = `/tmp/project-alive-${state}`
+      vi.mocked(readFile).mockResolvedValue(JSON.stringify({ command: 'sleep 300', url: 'http://localhost:9' }))
+      vi.mocked(spawn).mockReturnValue(makeMockProc('', '', undefined) as any)
+
+      await devServerManager.start(workdir)
+      const instance = (devServerManager as any).getInstance(workdir)
+      instance.state = state
+      vi.mocked(terminateProcessTree).mockClear()
+
+      await devServerManager.start(workdir)
+
+      expect(terminateProcessTree).toHaveBeenCalledTimes(1)
+    },
+  )
 })
 
 describe('plugin dev-server lifecycle hooks', () => {

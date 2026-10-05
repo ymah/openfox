@@ -49,6 +49,10 @@ export function gitSpawnEnv(): Record<string, string | undefined> {
   for (const key of GIT_ENV_VARS) {
     delete env[key]
   }
+  // Background reads (status, diff) refresh the index and would take index.lock,
+  // making a checkout or commit running at the same moment fail with "Unable to
+  // create index.lock". Optional locks are only those refreshes; real writes still lock.
+  env['GIT_OPTIONAL_LOCKS'] = '0'
   // Also sweep any GIT_CONFIG_KEY_N / GIT_CONFIG_VALUE_N vars
   for (const key of Object.keys(env)) {
     if (/^GIT_CONFIG_(KEY|VALUE)_\d+$/.test(key)) {

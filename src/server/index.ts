@@ -493,8 +493,8 @@ export async function createServerHandle(config: Config): Promise<ServerHandle> 
   })
 
   app.post('/api/projects/check-permissions', async (req, res) => {
-    const { path: targetPath } = req.body
-    if (!targetPath) {
+    const { path: targetPath } = req.body ?? {}
+    if (!targetPath || typeof targetPath !== 'string') {
       return res.status(400).json({ error: 'path is required' })
     }
 
@@ -510,8 +510,8 @@ export async function createServerHandle(config: Config): Promise<ServerHandle> 
   })
 
   app.post('/api/projects/fix-permissions', async (req, res) => {
-    const { path: targetPath, action } = req.body
-    if (!targetPath) {
+    const { path: targetPath, action } = req.body ?? {}
+    if (!targetPath || typeof targetPath !== 'string') {
       return res.status(400).json({ error: 'path is required' })
     }
     if (!['group', 'ownership', 'join_group', 'join_group_and_group'].includes(action)) {
@@ -557,7 +557,20 @@ export async function createServerHandle(config: Config): Promise<ServerHandle> 
 
   app.put('/api/projects/:id', async (req, res) => {
     const { updateProject } = await import('./db/projects.js')
-    const { name, customInstructions, dangerLevel, defaultAgent, type } = req.body
+    const { name, customInstructions, dangerLevel, defaultAgent, type } = req.body ?? {}
+    const isStringOrNull = (v: unknown) => v === null || typeof v === 'string'
+    if (name !== undefined && (typeof name !== 'string' || !name.trim())) {
+      return res.status(400).json({ error: 'name must be a non-empty string' })
+    }
+    if (customInstructions !== undefined && !isStringOrNull(customInstructions)) {
+      return res.status(400).json({ error: 'customInstructions must be a string or null' })
+    }
+    if (dangerLevel !== undefined && dangerLevel !== null && dangerLevel !== 'normal' && dangerLevel !== 'dangerous') {
+      return res.status(400).json({ error: 'dangerLevel must be "normal", "dangerous" or null' })
+    }
+    if (defaultAgent !== undefined && !isStringOrNull(defaultAgent)) {
+      return res.status(400).json({ error: 'defaultAgent must be a string or null' })
+    }
     const updates: {
       name?: string
       customInstructions?: string | null
@@ -958,9 +971,12 @@ export async function createServerHandle(config: Config): Promise<ServerHandle> 
   }
 
   app.post('/api/sessions', async (req, res) => {
-    const { projectId, title } = req.body
-    if (!projectId) {
+    const { projectId, title } = req.body ?? {}
+    if (!projectId || typeof projectId !== 'string') {
       return res.status(400).json({ error: 'projectId is required' })
+    }
+    if (title !== undefined && title !== null && typeof title !== 'string') {
+      return res.status(400).json({ error: 'title must be a string' })
     }
 
     const project = sessionManager.getProject(projectId)

@@ -17,6 +17,9 @@
 
 ### Bug Fixes
 
+- **Dev Server process left running** — restarting or starting again while the server was in the "warning" or "error" state replaced it without stopping it, leaving the old process (and its port) alive in the background.
+- **Git operations failing at random** — background `git status` refreshes held `index.lock`, so a checkout or commit at the same moment failed with "Unable to create index.lock"; git is now spawned with optional locks disabled.
+- **Wrongly typed request fields** answer 400 instead of 500: project and session creation and update, permission checks and the Dev Server config.
 - **Request storm in long chat conversations** — each reply asked for the list of versions on every new message (about 1,500 requests for a 40-message exchange); simultaneous requests are now shared.
 - **Session deleted in another tab** — the tab still showing it now returns to the project instead of keeping a conversation that no longer exists.
 - **Unknown `/api/*` routes and missing assets no longer hang** — they answer 404 (JSON for the API) instead of leaving the request open forever.

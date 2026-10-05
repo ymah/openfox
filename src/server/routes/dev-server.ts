@@ -121,8 +121,8 @@ export function createDevServerRoutes(): Router {
   router.post('/config', async (req, res) => {
     const workdir = req.query['workdir'] as string
     if (!workdir) return res.status(400).json({ error: serverT({ en: 'workdir required', fr: 'workdir requis' }) })
-    const { command, url, hotReload, disableInspect } = req.body
-    if (!command || !url) {
+    const { command, url, hotReload, disableInspect } = req.body ?? {}
+    if (!command || !url || typeof command !== 'string' || typeof url !== 'string') {
       return res.status(400).json({
         error: serverT({ en: 'command and url are required', fr: 'command et url sont requis' }),
       })
