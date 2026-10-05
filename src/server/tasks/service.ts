@@ -73,6 +73,12 @@ export interface MoveOptions extends TaskActorInfo {
   reason?: string
   /** Optimistic concurrency guard: fail with CONFLICT if the task version differs. */
   expectedVersion?: number
+  /**
+   * Change the board without writing a system reminder into the session. For moves the
+   * server makes on its own (tracking a workflow run): a "no longer active, do not continue"
+   * reminder would otherwise sit in the context of a run that is meant to be resumed.
+   */
+  silent?: boolean
 }
 
 export interface TaskConflictError extends Error {
@@ -384,7 +390,7 @@ export function createTasksService(deps: TasksServiceDeps): TasksService {
         dbSetTaskRunState(taskId, 'running')
         dbAddTaskLink(taskId, opts.sessionId, true)
         dbAddAuditEntry(taskId, 'agent', 'move', `Moved to In Progress (running)`, opts.actorName)
-        emitReminder(opts.sessionId, reminderForInProgress(task, opts.sessionId, from))
+        if (!opts.silent) emitReminder(opts.sessionId, reminderForInProgress(task, opts.sessionId, from))
         sessionId = opts.sessionId
       } else {
         // Human drag / Start task / system trigger: allocate a slot or queue.
@@ -424,7 +430,7 @@ export function createTasksService(deps: TasksServiceDeps): TasksService {
       dbClearActiveTaskLink(taskId)
       if (task.schedule) dbClearTaskSchedule(taskId)
       dbAddAuditEntry(taskId, opts.actor, 'move', `Moved to Done`, opts.actorName)
-      if (task.activeSessionId) {
+      if (task.activeSessionId && !opts.silent) {
         emitReminder(task.activeSessionId, reminderForDone(task))
       }
     } else {
@@ -434,7 +440,7 @@ export function createTasksService(deps: TasksServiceDeps): TasksService {
       const detailParts = [`Moved back to To Do`]
       if (opts.reason) detailParts.push(`Reason: ${opts.reason}`)
       dbAddAuditEntry(taskId, opts.actor, 'move', detailParts.join('. '), opts.actorName)
-      if (task.activeSessionId) {
+      if (task.activeSessionId && !opts.silent) {
         emitReminder(task.activeSessionId, reminderForTodo(task))
       }
     }

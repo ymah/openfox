@@ -5,6 +5,7 @@
  * (state machine driven). All events are appended to EventStore.
  */
 
+import { beginWorkflowTracking } from '../tasks/workflow-tracker.js'
 import { workflowFitsProject } from '../workflows/project-scope.js'
 import type { OrchestratorOptions, OrchestratorResult } from './types.js'
 import { getProject } from '../db/projects.js'
@@ -100,5 +101,24 @@ export async function runOrchestrator(options: OrchestratorOptions): Promise<Orc
     workflow: workflow.metadata.id,
     subGroup: options.subGroup,
   })
-  return executeWorkflow(workflow, options, options.subGroup)
+
+  // Build & Verify is traced on the task board by the server: a card opens when the run starts
+  // working (not while it waits for the first user choice), closes on success and goes back to
+  // To Do when the run stops without finishing. Never allowed to affect the run itself.
+  // (a workflow definition loaded from disk always has steps; the guard keeps tracking from ever being the thing that throws)
+  const entryStep = workflow.steps?.find((step) => step.id === workflow.entryStep)
+  const tracking = await beginWorkflowTracking({
+    sessionManager: options.sessionManager,
+    sessionId: options.sessionId,
+    workflowId: workflow.metadata.id,
+    startsWork: Boolean(options.resumeFromStep) || entryStep?.type !== 'user',
+  })
+  try {
+    const result = await executeWorkflow(workflow, options, options.subGroup)
+    await tracking.finish(result.finalAction)
+    return result
+  } catch (error) {
+    await tracking.fail(error)
+    throw error
+  }
 }

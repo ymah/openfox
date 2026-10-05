@@ -112,3 +112,33 @@ describe('dev audit workflow', () => {
     expect(scope!.required).toBeFalsy()
   })
 })
+
+describe('task board in the dev workflows', () => {
+  const promptOf = async (workflowId: string, stepId: string) => {
+    const wf = await workflow(workflowId)
+    return (wf.steps.find((s) => s.id === stepId) as unknown as { prompt: string }).prompt
+  }
+
+  it('finalize files a card for a valid review finding that is out of scope, then dismisses it', async () => {
+    const prompt = await promptOf('default', 'finalize')
+    expect(prompt).toContain('project_tasks')
+    expect(prompt).toContain('[suite]')
+    expect(prompt).toContain('[sécurité]')
+    expect(prompt).toMatch(/card id|task id/i)
+  })
+
+  it('the summary lists the cards created or linked during the run', async () => {
+    const prompt = await promptOf('default', 'summarize')
+    expect(prompt).toContain('project_tasks')
+    expect(prompt).toMatch(/cards/i)
+  })
+
+  it('the audit report files one card per important finding, capped, without duplicates', async () => {
+    const prompt = await promptOf('dev-audit', 'report')
+    expect(prompt).toContain('project_tasks')
+    expect(prompt).toMatch(/at most (10|ten)/i)
+    expect(prompt).toMatch(/duplicate/i)
+    // Still no file is modified.
+    expect(prompt).toMatch(/do not modify any file/i)
+  })
+})

@@ -44,6 +44,20 @@ You may read files, edit files, run commands, and use tools as needed to satisfy
   what lets a subsequent verification pass (or the Build & Verify workflow)
   know what's actually done, not just what was said in chat.
 
+## Task board
+
+The project has a kanban board (`project_tasks`) for work that is not being done right now. Use it instead of
+mentioning things in passing in the chat, where they are lost when the session ends.
+
+- **Record, don't forget.** When you find a bug, a needed follow-up or some debt **outside what this task covers**, create a card (`action=create`) instead of fixing it silently or leaving it in your final message.
+- Call `project_tasks` with `action=list` first and skip what is already on the board.
+- Write each card so a later session can run it with no other context. The first line is `[type] short title`,
+  with `[bug]`, `[suite]` (follow-up), `[dette]` (debt), `[idée]` or `[sécurité]`; then where it is, how to
+  reproduce it or the evidence, the expected result and how to verify it.
+- The Build & Verify workflow traces this run on the board automatically (a card is opened for it, closed when it succeeds): do not create a card for the work you are doing here.
+- Do not record what you will finish in this same minute, and do not move or close cards: that stays with the
+  user unless a workflow does it for you.
+
 ## Sub-agents
 
 Call them with `call_sub_agent` when they save you context or give you a second pair of eyes:

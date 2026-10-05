@@ -63,6 +63,49 @@ export function startFakeLlm(port: number): Server {
         res.write('data: [DONE]\n\n')
         return res.end()
       }
+      if (mode === 'note') {
+        // Notes what the user says "for later" as a card, the way the Planner is told to; then confirms.
+        let messages: { role: string; content?: unknown }[] = []
+        let tools: string[] = []
+        try {
+          const parsed = JSON.parse(body) as { messages?: typeof messages; tools?: { function?: { name?: string } }[] }
+          messages = parsed.messages ?? []
+          tools = (parsed.tools ?? []).map((t) => t.function?.name ?? '')
+        } catch {}
+        res.setHeader('content-type', 'text/event-stream')
+        res.statusCode = 200
+        const last = messages[messages.length - 1]
+        if (tools.includes('project_tasks') && last?.role !== 'tool') {
+          const args = JSON.stringify({
+            action: 'create',
+            prompt:
+              '[bug] Login redirect loses the target page\n\nWhere: login handler. Evidence: user lands on / after signing in. Expected: back to the page they asked for. Verify: sign in from /settings.',
+          })
+          sse({
+            id: 'x',
+            object: 'chat.completion.chunk',
+            created: 0,
+            model: 'fake-model',
+            choices: [
+              {
+                index: 0,
+                delta: {
+                  tool_calls: [
+                    { index: 0, id: 'c1', type: 'function', function: { name: 'project_tasks', arguments: args } },
+                  ],
+                },
+                finish_reason: null,
+              },
+            ],
+          })
+          sse(chunk('', 'tool_calls'))
+        } else {
+          sse(chunk('Noted on the board.'))
+          sse(chunk('', 'stop'))
+        }
+        res.write('data: [DONE]\n\n')
+        return res.end()
+      }
       if (mode === 'http500') {
         res.statusCode = 500
         return res.end('{"error":{"message":"boom"}}')

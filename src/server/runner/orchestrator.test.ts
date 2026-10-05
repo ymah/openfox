@@ -32,6 +32,15 @@ vi.mock('../workflows/registry.js', () => ({
 
 vi.mock('../db/projects.js', () => ({ getProject: vi.fn(() => undefined) }))
 
+const tracking = vi.hoisted(() => ({
+  finish: vi.fn(async () => {}),
+  fail: vi.fn(async () => {}),
+  begin: vi.fn(async () => ({ finish: async () => {}, fail: async () => {} })),
+}))
+vi.mock('../tasks/workflow-tracker.js', () => ({
+  beginWorkflowTracking: tracking.begin,
+}))
+
 vi.mock('../workflows/executor.js', () => ({
   executeWorkflow: vi.fn(async () => ({
     finalAction: { type: 'DONE' },
@@ -127,6 +136,49 @@ describe('runOrchestrator', () => {
     expect(executeWorkflow).toHaveBeenCalledWith(mockWorkflow, mockOptions, undefined)
     expect(result.finalAction.type).toBe('DONE')
     expect(result.iterations).toBe(1)
+  })
+
+  describe('task board tracking', () => {
+    const workflow = {
+      metadata: { id: 'default', name: 'Build', description: '', version: '1' },
+      entryStep: 'work_location',
+      settings: { maxIterations: 5 },
+      steps: [
+        { id: 'work_location', name: 'Where', type: 'user' as const, phase: 'build', transitions: [] },
+        { id: 'build', name: 'Build', type: 'agent' as const, phase: 'build', transitions: [] },
+      ],
+    }
+
+    beforeEach(() => {
+      tracking.begin.mockReset()
+      tracking.finish.mockReset()
+      tracking.fail.mockReset()
+      tracking.begin.mockResolvedValue({ finish: tracking.finish, fail: tracking.fail })
+      vi.mocked(findWorkflowById).mockReturnValue(workflow as never)
+      vi.mocked(executeWorkflow).mockClear()
+    })
+
+    it('starts tracking after the entry user step only when the run resumes past it', async () => {
+      await runOrchestrator({ ...mockOptions })
+      expect(tracking.begin).toHaveBeenLastCalledWith(
+        expect.objectContaining({ workflowId: 'default', sessionId: 'test-session', startsWork: false }),
+      )
+      await runOrchestrator({ ...mockOptions, resumeFromStep: 'work_location' })
+      expect(tracking.begin).toHaveBeenLastCalledWith(expect.objectContaining({ startsWork: true }))
+    })
+
+    it('reports the final action when the run ends', async () => {
+      await runOrchestrator({ ...mockOptions })
+      expect(tracking.finish).toHaveBeenCalledWith({ type: 'DONE' })
+      expect(tracking.fail).not.toHaveBeenCalled()
+    })
+
+    it('reports a stopped or failed run and still throws the original error', async () => {
+      vi.mocked(executeWorkflow).mockRejectedValueOnce(new Error('Aborted'))
+      await expect(runOrchestrator({ ...mockOptions })).rejects.toThrow('Aborted')
+      expect(tracking.fail).toHaveBeenCalledWith(expect.objectContaining({ message: 'Aborted' }))
+      expect(tracking.finish).not.toHaveBeenCalled()
+    })
   })
 
   describe('project function scoping', () => {

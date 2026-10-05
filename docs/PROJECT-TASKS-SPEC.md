@@ -280,3 +280,33 @@ Reminder content always includes: task title, previous → new state, and (relev
 - Gate templates (bundled common definitions of done) for one-click setup.
 - Board filters per gate status (e.g. "all tasks blocked on commit").
 - Export/archive of the Done column to a Markdown changelog.
+
+## Use by the agents
+
+The board is only worth having if it is filled. Agents are told to use it and the server traces what an agent
+could forget.
+
+**Traced by the server (Build & Verify only).** When a Build & Verify run starts working — not while it waits
+for the first choice of where to work — a card is created in **In Progress**, bound to the session, with the
+session title on the first line and the acceptance criteria below it (so the card can be run again later). The
+run's end moves it: **Done** on success (if a required Done gate is not satisfied the card stays In Progress for
+you to review), **To Do** with the reason when the run is blocked, stopped or fails — which also frees the
+project's single running slot. Resuming the run reuses the same card. These moves are made as the agent
+"Build & Verify", silently (no reminder is written into the session), and are recorded in the audit trail. A card
+already bound to the session by another flow (a run launched from the board) is left alone, and a failure of the
+board never affects the run.
+
+**Recorded by the agents.** `project_tasks` is available to the Planner and the Builder, whose prompts tell them to
+create a card for what they discover outside the work at hand instead of mentioning it in the chat: a bug, a
+follow-up, some debt, an idea, or something the user asks to note "for later". They list the board first to skip
+what is already there. In Build & Verify, a review finding that is valid but out of scope becomes a card before it
+is dismissed, and the final summary lists the cards created; the Audit workflow records its important findings
+(at most ten).
+
+**Card convention.** A task is only text, so the first line carries the type: `[bug]`, `[suite]` (follow-up),
+`[dette]` (debt), `[idée]` or `[sécurité]`, then a short title. The rest is self-contained — where, how to reproduce
+it or the evidence, the expected result, how to verify — because a later session runs the card with no other
+context. A dedicated type field with a board filter is a possible follow-up if the convention holds.
+
+**Moves stay yours** for anything else: an agent moves or closes a card it is not running itself only with your
+approval.

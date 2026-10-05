@@ -2,8 +2,8 @@
   "metadata": {
     "id": "dev-audit",
     "name": "Audit (architecture & security)",
-    "description": "Read-only audit of existing code: an architecture review, then a security review, then a prioritized report. Changes nothing.",
-    "version": "1.0.0",
+    "description": "Read-only audit of existing code: an architecture review, then a security review, then a prioritized report. Changes no file; records the important findings as cards on the task board.",
+    "version": "1.1.0",
     "color": "#0ea5e9",
     "category": "dev",
     "parameters": [
@@ -62,7 +62,7 @@
       "phase": "plan",
       "agentId": "planner",
       "subGroup": "report",
-      "prompt": "## Security audit\n{{stepOutput.content}}\n\nThe architecture review is earlier in this conversation. Write the audit report for the user: the most important points first, grouped under Security and Architecture, each with the file it concerns and what to do about it. Be honest about what was not examined. This is a read-only audit: do not modify any file. Call step_done() when you have written the report.",
+      "prompt": "## Security audit\n{{stepOutput.content}}\n\nThe architecture review is earlier in this conversation. Write the audit report for the user: the most important points first, grouped under Security and Architecture, each with the file it concerns and what to do about it. Be honest about what was not examined. This is a read-only audit: do not modify any file. Call step_done() when you have written the report.\n\nThen record the important findings on the project board: one card per finding, at most 10, the most serious first. Call `project_tasks` with `action=list` first and do not add a finding that is already there (no duplicate). The first line is `[sécurité]`, `[dette]` or `[suite]` followed by a short title; then the file, the evidence, what to do and how to verify it. Say in the report which cards you created. Creating cards is allowed — it changes the board, not the project; still do not modify any file.",
       "transitions": [
         {
           "when": {

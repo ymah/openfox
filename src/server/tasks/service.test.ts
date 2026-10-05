@@ -290,6 +290,48 @@ describe('project tasks service', () => {
       expect(sm.queued[0]?.content).toBe('Start me here')
     })
 
+    it('a silent agent move changes the board without writing a reminder into the session', async () => {
+      const task = create('Tracked by the workflow')
+      sm.sessions.set('sess-run', { id: 'sess-run', projectId, messages: [] })
+      const before = sm.reminders.length
+
+      const started = await service.move(projectId, task.id, 'in_progress', {
+        actor: 'agent',
+        actorName: 'Build & Verify',
+        sessionId: 'sess-run',
+        silent: true,
+      })
+      expect(started.task.status).toBe('in_progress')
+      expect(started.task.activeSessionId).toBe('sess-run')
+
+      const reverted = await service.move(projectId, task.id, 'todo', {
+        actor: 'agent',
+        actorName: 'Build & Verify',
+        reason: 'Run stopped',
+        silent: true,
+      })
+      expect(reverted.task.status).toBe('todo')
+      const again = await service.move(projectId, task.id, 'in_progress', {
+        actor: 'agent',
+        sessionId: 'sess-run',
+        silent: true,
+      })
+      const done = await service.move(projectId, task.id, 'done', { actor: 'agent', silent: true })
+      expect(again.task.status).toBe('in_progress')
+      expect(done.task.status).toBe('done')
+
+      // The audit trail still records who did what.
+      expect(done.task.auditTrail.some((e) => e.actorName === 'Build & Verify')).toBe(true)
+      expect(sm.reminders).toHaveLength(before)
+    })
+
+    it('a normal agent move still reminds the session', async () => {
+      const task = create('Moved by an agent')
+      sm.sessions.set('sess-agent', { id: 'sess-agent', projectId, messages: [] })
+      await service.move(projectId, task.id, 'in_progress', { actor: 'agent', sessionId: 'sess-agent' })
+      expect(sm.reminders.some((r) => r.sessionId === 'sess-agent')).toBe(true)
+    })
+
     it('falls back to seeding a new session when the supplied sessionId is foreign', async () => {
       const task = create('Foreign target')
       sm.sessions.set('sess-foreign', { id: 'sess-foreign', projectId: 'another-project', messages: [] })

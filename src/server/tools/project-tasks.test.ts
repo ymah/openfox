@@ -766,10 +766,30 @@ describe('project_tasks tool', () => {
 
   it('keeps the LLM-facing definition lean', () => {
     const desc = projectTasksTool.definition.function.description
-    expect(desc.length).toBeLessThanOrEqual(1200)
+    // Sent with every request of an agent that has the tool, so it stays short. Raised from 1200 when
+    // the recording rules (type tags, self-contained cards) and the Build & Verify exception were added.
+    expect(desc.length).toBeLessThanOrEqual(1550)
     expect(desc).toContain('get_attachment')
     for (const removed of ['duplicate', 'reorder', 'set_gates']) {
       expect(desc).not.toContain(removed)
     }
+  })
+})
+
+describe('project_tasks tool description', () => {
+  const description = projectTasksTool.definition.function.description
+
+  it('invites agents to record work they discover, with a type tag and a self-contained text', () => {
+    expect(description).toMatch(/create/i)
+    for (const tag of ['[bug]', '[suite]', '[dette]', '[idée]', '[sécurité]']) expect(description).toContain(tag)
+    expect(description).toMatch(/self-contained/i)
+    // Look before creating, so the board does not fill with repeats.
+    expect(description).toMatch(/list first|before creating/i)
+  })
+
+  it('keeps moves for tasks an agent is not running itself subject to the user', () => {
+    expect(description).toMatch(/approval/i)
+    // The Build & Verify run keeps its own card: agents are told not to manage it.
+    expect(description).toMatch(/Build & Verify/)
   })
 })

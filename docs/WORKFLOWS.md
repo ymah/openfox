@@ -22,10 +22,15 @@ The dev project function ships these workflows (`src/server/workflows/defaults/`
 - **Build & Verify** (`default`) — where to work → **architecture review** (`architect`) → implement
   (`builder`) → verify the criteria (`verifier`) → code review (`code_reviewer`) → **security review**
   (`security_reviewer`) → finalize (`builder`) → summary. Findings from both reviews are recorded under
-  `review_findings`; finalize cannot finish until each one is resolved or dismissed.
+  `review_findings`; finalize cannot finish until each one is resolved or dismissed. A finding that is valid but
+  out of scope becomes a `[suite]` / `[sécurité]` card on the task board before it is dismissed.
+- The run itself is **traced on the task board by the server**: a card opens (In Progress, bound to the session)
+  when the run starts working, moves to Done when it succeeds, and goes back to To Do with the reason when it is
+  blocked, stopped or fails — a resumed run reuses its card. See `docs/PROJECT-TASKS-SPEC.md`.
 - **Audit (architecture & security)** (`dev-audit`) — read-only: an architecture review, a security audit,
   then a prioritized report by the planner. Optional `scope` parameter (a folder or an area); without it the
-  whole project is audited. It changes no file, so it is safe to launch on existing code.
+  whole project is audited. It changes no file, so it is safe to launch on existing code; it does add the
+  important findings (at most ten, most serious first, no duplicates) as cards on the project's task board.
 
 Sub-agents (`src/server/agents/defaults/`), all `category: dev`, called with `call_sub_agent`:
 

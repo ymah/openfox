@@ -654,6 +654,8 @@ export async function createServerHandle(config: Config): Promise<ServerHandle> 
     launchWorkflow: (sessionId, launch) => deferTasksLaunchWorkflow(sessionId, launch),
   })
   setTasksService(tasksService)
+  const { setWorkflowTrackingService } = await import('./tasks/workflow-tracker.js')
+  setWorkflowTrackingService(tasksService)
   // Periodic tick for scheduled tasks: runs once at boot (catch-up for tasks
   // missed while OpenFox was off) then every 30s. Stopped in close().
   const { createTaskScheduler } = await import('./tasks/scheduler.js')

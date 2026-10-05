@@ -76,3 +76,27 @@ describe('architect', () => {
     expect(prompt).toMatch(/return_value/)
   })
 })
+
+describe('task board instructions', () => {
+  it.each(['planner', 'builder'])('%s knows when to record a task, with the type tags', async (id) => {
+    const agent = (await byId()).get(id)
+    expect(agent?.metadata.allowedTools).toContain('project_tasks')
+    const prompt = agent?.prompt ?? ''
+    expect(prompt).toContain('project_tasks')
+    for (const tag of ['[bug]', '[suite]']) expect(prompt).toContain(tag)
+    // Look first, so the board does not collect duplicates.
+    expect(prompt).toMatch(/list/i)
+  })
+
+  it('tells the builder the run is traced for it, so it does not open a card for its own work', async () => {
+    const prompt = (await byId()).get('builder')?.prompt ?? ''
+    expect(prompt).toMatch(/Build & Verify/)
+    expect(prompt).toMatch(/automatically/i)
+  })
+
+  it('tells the planner a bug report or a "note it for later" becomes a card instead of a plan', async () => {
+    const prompt = (await byId()).get('planner')?.prompt ?? ''
+    expect(prompt).toMatch(/later/i)
+    expect(prompt).toContain('[bug]')
+  })
+})

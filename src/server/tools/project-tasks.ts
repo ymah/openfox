@@ -74,14 +74,16 @@ export const projectTasksTool = createTool<ProjectTasksArgs>(
     function: {
       name: 'project_tasks',
       description:
-        'Kanban task board for this project. Core loop: list → move → set_gate_value.\n\n' +
-        'Rules:\n' +
-        '- Moving to in_progress binds the task to YOUR current session.\n' +
-        '- Do not move tasks or fill gate values without explicit user approval or a system instruction — ' +
-        'complete the work, then let the user review before the task advances.\n' +
-        '- Moving to done is blocked by unmet gates: the error names the missing fields — fill them only with ' +
-        'user approval, then retry the move.\n' +
-        '- Stale writes fail with CONFLICT — re-list and retry.\n\n' +
+        'Kanban task board for this project: work to do, in progress and done.\n\n' +
+        'Record work freely: a bug, follow-up, debt or idea outside what you are doing now, or something the user ' +
+        'wants noted for later, goes in with action=create (action=list first, skip what is already there). Write a ' +
+        'self-contained card, since a later session runs it with no other context: first line "[type] short title" ' +
+        '([bug] [suite] [dette] [idée] [sécurité]), then where, how to reproduce or the evidence, the expected ' +
+        'result, how to verify.\n\n' +
+        'Moving cards: a Build & Verify run keeps its own card — do not create, move or close one for the work you ' +
+        'do in it. Otherwise move tasks or fill gate values only with explicit user approval or a system ' +
+        'instruction. Moving to in_progress binds the task to YOUR session; done is blocked by unmet gates (fill ' +
+        'them only with user approval, then retry); stale writes fail with CONFLICT — re-list and retry.\n\n' +
         'Actions:\n' +
         '- list: tasks (status, gate values, queue position, bound session, audit trail); defaults to open tasks, ' +
         'filter via status (todo | in_progress | done | all); paginated — limit 10 max 25, page with offset\n' +
