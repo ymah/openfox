@@ -1,3 +1,4 @@
+import { appendFileSync } from 'node:fs'
 import { createServer, type Server } from 'node:http'
 
 /** A misbehaving OpenAI-compatible server. The first path segment picks the failure. */
@@ -7,6 +8,30 @@ export function startFakeLlm(port: number): Server {
     let body = ''
     req.on('data', (c) => (body += c))
     req.on('end', () => {
+      if (process.env['FAKE_LLM_LOG'] && req.url?.includes('/chat/completions')) {
+        try {
+          const parsed = JSON.parse(body) as {
+            messages?: { role: string; content?: unknown }[]
+            tools?: { function?: { name?: string } }[]
+          }
+          const text = (c: unknown) => (typeof c === 'string' ? c : JSON.stringify(c ?? '')).replace(/\s+/g, ' ')
+          const msgs = parsed.messages ?? []
+          const last = msgs[msgs.length - 1]
+          const lastUser = [...msgs].reverse().find((m) => m.role === 'user')
+          appendFileSync(
+            process.env['FAKE_LLM_LOG'],
+            JSON.stringify({
+              mode,
+              system: text(msgs.find((m) => m.role === 'system')?.content).slice(0, 90),
+              lastUser: text(lastUser?.content).slice(0, 140),
+              lastRole: last?.role,
+              lastToolResult: last?.role === 'tool' ? text(last.content).slice(0, 100) : undefined,
+              n: msgs.length,
+              tools: (parsed.tools ?? []).map((t) => t.function?.name).join(','),
+            }) + '\n',
+          )
+        } catch {}
+      }
       if (!req.url?.includes('/chat/completions')) {
         if (req.url?.includes('/models')) {
           res.setHeader('content-type', 'application/json')

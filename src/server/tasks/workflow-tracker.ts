@@ -2,6 +2,7 @@ import type { ProjectTask } from '../../shared/types.js'
 import type { SessionManager } from '../session/index.js'
 import type { TasksService } from './service.js'
 import { logger } from '../utils/logger.js'
+import { getSetting, setSetting } from '../db/settings.js'
 
 /**
  * Traces a Build & Verify run on the project's task board, by the server rather than by the
@@ -146,13 +147,17 @@ export function setWorkflowTrackingService(next: TrackerService | null): void {
   service = next
 }
 
-const TRACKED_KEY = 'tracked_task'
+/**
+ * The session → card correspondence lives in the server settings, not in the session's metadata: the
+ * metadata is shown to the person in the session sidebar (and listed to the agents), where an internal
+ * card id has no place.
+ */
+const trackedKey = (sessionId: string) => `tracked_task.${sessionId}`
 
-function sessionStore(sessionManager: SessionManager): TrackerStore {
+function settingsStore(): TrackerStore {
   return {
-    get: (sessionId) => sessionManager.requireSession(sessionId).metadataEntries?.[TRACKED_KEY]?.[0]?.description,
-    set: (sessionId, taskId) =>
-      sessionManager.setMetadataEntries(sessionId, TRACKED_KEY, [{ id: '1', description: taskId, status: 'active' }]),
+    get: (sessionId) => getSetting(trackedKey(sessionId)) ?? undefined,
+    set: (sessionId, taskId) => setSetting(trackedKey(sessionId), taskId),
   }
 }
 
@@ -167,7 +172,7 @@ export async function beginWorkflowTracking(args: {
   if (!service || args.workflowId !== TRACKED_WORKFLOW_ID || !args.startsWork) return NOOP_HANDLE
   try {
     const session = args.sessionManager.requireSession(args.sessionId)
-    return await createWorkflowTracker(service, sessionStore(args.sessionManager)).begin({
+    return await createWorkflowTracker(service, settingsStore()).begin({
       workflowId: args.workflowId,
       projectId: session.projectId,
       sessionId: args.sessionId,

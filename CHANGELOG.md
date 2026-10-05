@@ -19,6 +19,7 @@
 
 ### Bug Fixes
 
+- **Build & Verify no longer shows an internal "Tracked Task" section** — the card id kept for a traced run was stored as session metadata, which the session sidebar lists; it is now kept in the server settings. Also, when `finalize` dismisses a review finding after recording it on the board, it keeps the finding's text and adds the card id instead of replacing it.
 - **Writing: an agent's edit is no longer overwritten by the editor** — scenes and Codex entries carry a version (modification time) from the read to the write. If an agent or another tab changed the file in between, the save is refused (409, `code: "conflict"`) instead of silently replacing it: the scene editor shows a banner with "Load the changed version" or "Keep my version" and stops autosaving until you choose, and the Codex editor loads the new version. Creating a Codex entry no longer replaces an existing one of the same name.
 - **A plugin page that crashes no longer blanks the app** — a render error in a plugin page (Codex, Manuscript, editor), a project home or any route now shows an error message with "Try again" and a link home while the sidebar and header stay usable; navigating elsewhere clears it.
 - **Workflows stay in their project function on the server** — launching a workflow of another function (a chat workflow in a dev project, the dev build loop in a GTD project) is refused by the server, not only hidden in the interface, so a stale tab, an MCP client or a task cannot start it.
