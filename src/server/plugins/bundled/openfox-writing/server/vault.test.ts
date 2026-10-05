@@ -138,3 +138,103 @@ describe('vault round-trips', () => {
     expect(entries.map((e) => e.slug)).toEqual(['lena'])
   })
 })
+
+describe('vault write conflicts (a file changed since it was read)', () => {
+  const scenePath = 'manuscript/01-act/01-chapter/01-scene.md'
+
+  /** Simulate another writer (an agent): rewrite the file and move its modification time. */
+  async function changeElsewhere(relPath: string, text: string): Promise<void> {
+    const { utimes } = await import('node:fs/promises')
+    const abs = join(workdir, relPath)
+    await writeFile(abs, text)
+    const later = new Date(Date.now() + 5000)
+    await utimes(abs, later, later)
+  }
+
+  it('returns the version of a scene and accepts a save based on it', async () => {
+    await call('scene.save', { path: scenePath, frontmatter: { title: 'One' }, body: 'first' })
+    const read = (await call('scene.get', { path: scenePath })) as { mtime: number }
+    expect(typeof read.mtime).toBe('number')
+
+    const saved = (await call('scene.save', {
+      path: scenePath,
+      frontmatter: {},
+      body: 'second',
+      expectedMtime: read.mtime,
+    })) as { mtime: number }
+    expect(typeof saved.mtime).toBe('number')
+    // The version returned by a save is the one the next save must present.
+    await expect(
+      call('scene.save', { path: scenePath, frontmatter: {}, body: 'third', expectedMtime: saved.mtime }),
+    ).resolves.toBeTruthy()
+  })
+
+  it('refuses a scene save when the file was changed elsewhere, and keeps the other writer text', async () => {
+    await call('scene.save', { path: scenePath, frontmatter: { title: 'One' }, body: 'mine' })
+    const read = (await call('scene.get', { path: scenePath })) as { mtime: number }
+    await changeElsewhere(scenePath, '---\ntitle: One\n---\nthe agent rewrote this\n')
+
+    const attempt = call('scene.save', {
+      path: scenePath,
+      frontmatter: {},
+      body: 'stale edit',
+      expectedMtime: read.mtime,
+    })
+    await expect(attempt).rejects.toMatchObject({ code: 'conflict' })
+    expect(await readFile(join(workdir, scenePath), 'utf-8')).toContain('the agent rewrote this')
+  })
+
+  it('still lets a caller without a version (an agent, an older client) write unconditionally', async () => {
+    await call('scene.save', { path: scenePath, frontmatter: {}, body: 'a' })
+    await changeElsewhere(scenePath, 'changed\n')
+    await expect(call('scene.save', { path: scenePath, frontmatter: {}, body: 'b' })).resolves.toBeTruthy()
+  })
+
+  it('refuses to replace an existing codex entry when asked to create one', async () => {
+    await call('codex.save', { type: 'characters', slug: 'lena', title: 'Lena', tags: [], facts: {}, body: 'original' })
+
+    await expect(
+      call('codex.save', {
+        type: 'characters',
+        slug: 'lena',
+        title: 'Lena',
+        tags: [],
+        facts: {},
+        body: '',
+        expectedMtime: null,
+      }),
+    ).rejects.toMatchObject({ code: 'conflict' })
+    const entry = (await call('codex.get', { type: 'characters', slug: 'lena' })) as { body: string }
+    expect(entry.body).toBe('original')
+
+    await expect(
+      call('codex.save', {
+        type: 'characters',
+        slug: 'new-one',
+        title: 'New',
+        tags: [],
+        facts: {},
+        body: '',
+        expectedMtime: null,
+      }),
+    ).resolves.toBeTruthy()
+  })
+
+  it('refuses a codex edit based on an out-of-date read', async () => {
+    await call('codex.save', { type: 'lore', slug: 'magic', title: 'Magic', tags: [], facts: {}, body: 'v1' })
+    const read = (await call('codex.get', { type: 'lore', slug: 'magic' })) as { mtime: number }
+    await changeElsewhere('codex/lore/magic.md', '---\nid: magic\ntype: lore\ntitle: Magic\n---\nagent edit\n')
+
+    await expect(
+      call('codex.save', {
+        type: 'lore',
+        slug: 'magic',
+        title: 'Magic',
+        tags: [],
+        facts: {},
+        body: 'mine',
+        expectedMtime: read.mtime,
+      }),
+    ).rejects.toMatchObject({ code: 'conflict' })
+  })
+})

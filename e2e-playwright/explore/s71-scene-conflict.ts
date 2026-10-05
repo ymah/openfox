@@ -1,0 +1,41 @@
+import { api, ensureProjects, launch, note, report, BASE, SHOTS } from './lib.js'
+const fx = await ensureProjects()
+const rpc = (method: string, params: Record<string, unknown>) =>
+  api(`/api/plugins/openfox-writing/rpc/${method}`, { json: { params, projectId: fx.writing } })
+const scene = 'manuscript/act-1/ch-1/scene-1.md'
+await rpc('scene.save', { path: scene, frontmatter: { title: 'S1' }, body: 'original text' })
+const { browser, page } = await launch('scene-conflict')
+await page.goto(`${BASE}/p/${fx.writing}/write?path=${encodeURIComponent(scene)}`)
+await page.waitForTimeout(1500)
+const box = page.getByPlaceholder(/Write the scene/)
+console.log('editor shows:', await box.inputValue())
+// the agent rewrites the scene while the editor is open
+await new Promise((r) => setTimeout(r, 1100))
+await rpc('scene.save', { path: scene, frontmatter: { title: 'S1' }, body: 'agent rewrote the scene' })
+await box.click()
+await box.press('End')
+await page.keyboard.type(' plus my typing')
+await page.waitForTimeout(2800)
+const conflict = await page.getByTestId('scene-conflict').count()
+console.log('conflict banner:', conflict)
+if (!conflict) note('no conflict banner after the scene was changed elsewhere')
+const onDisk = ((await rpc('scene.get', { path: scene })).body as any).result.body
+console.log('on disk:', JSON.stringify(onDisk.trim()))
+if (!onDisk.includes('agent rewrote')) note('the agent version was overwritten by the autosave')
+await page.screenshot({ path: `${SHOTS}/71-conflict.png` })
+await page.getByText('Load the changed version').click()
+await page.waitForTimeout(1200)
+console.log('after load:', await box.inputValue())
+if (!(await box.inputValue()).includes('agent rewrote'))
+  note('"Load the changed version" did not show the disk version')
+// type again: saves work again
+await box.click()
+await box.press('End')
+await page.keyboard.type(' ok')
+await page.waitForTimeout(2800)
+const final = ((await rpc('scene.get', { path: scene })).body as any).result.body
+console.log('final on disk:', JSON.stringify(final.trim()))
+if (!final.includes(' ok')) note('autosave did not resume after loading the changed version')
+report()
+await browser.close()
+process.exit(0)

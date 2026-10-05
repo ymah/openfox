@@ -88,6 +88,39 @@ describe('SkillsContent', () => {
     expect(mockToggleSkill).toHaveBeenCalledWith('my-skill', undefined)
   })
 
+  it('lists the skills a plugin provides in their own read-only section', async () => {
+    const pluginSkill: SkillInfo = {
+      ...skill,
+      id: 'gtd',
+      name: 'GTD reference',
+      source: 'plugin',
+      readOnly: true,
+      path: null as never,
+    }
+    vi.mocked(authFetch).mockImplementation(async () => {
+      return {
+        ok: true,
+        json: async () => ({
+          defaults: [],
+          userItems: [],
+          projectItems: [],
+          items: [pluginSkill],
+          selectedDirectory: null,
+          diagnostics: [],
+        }),
+      } as unknown as Response
+    })
+    clearCache()
+    await skillsResource.refresh()
+
+    render(<SkillsContent isOpen={false} />)
+
+    expect(await screen.findByText('Plugins')).toBeTruthy()
+    expect(screen.getByText('GTD reference')).toBeTruthy()
+    // Read-only: no way to delete a skill a plugin owns.
+    expect(screen.queryByTitle('Delete')).toBeNull()
+  })
+
   it('requires modal confirmation before deleting the full skill folder', async () => {
     render(<SkillsContent isOpen={false} />)
     const deleteBtn = screen.getByRole('button', { name: /delete/i })

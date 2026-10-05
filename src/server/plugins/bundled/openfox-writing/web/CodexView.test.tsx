@@ -4,6 +4,7 @@ import { cleanup, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { listCodex, saveCodexEntry } from './vault-client'
 import { CodexView } from './CodexView'
+import { PluginRpcError } from '@/lib/plugin-actions'
 
 vi.mock('./vault-client', () => ({
   listCodex: vi.fn(),
@@ -68,6 +69,28 @@ describe('CodexView', () => {
     expect(screen.getByDisplayValue('A retired pilot.')).toBeTruthy()
   })
 
+  it('sends the version it read, and loads the agent version instead of overwriting it on conflict', async () => {
+    const mine = { type: 'characters', slug: 'lena', title: 'Lena', tags: [], facts: {}, body: 'A pilot.', mtime: 100 }
+    const theirs = { ...mine, body: 'Rewritten by an agent.', mtime: 200 }
+    mockedListCodex
+      .mockResolvedValueOnce({ entries: [mine] } as never)
+      .mockResolvedValue({ entries: [theirs] } as never)
+    mockedSaveEntry.mockRejectedValue(new PluginRpcError('changed', 409, 'conflict'))
+    render(<CodexView projectId="p1" />)
+
+    await waitFor(() => expect(screen.getByText('Lena')).toBeTruthy())
+    await userEvent.click(screen.getByText('Lena'))
+    const bodyField = screen.getByDisplayValue('A pilot.')
+    await userEvent.clear(bodyField)
+    await userEvent.type(bodyField, 'My edit.')
+    await userEvent.click(screen.getByText('Save'))
+
+    expect(mockedSaveEntry).toHaveBeenCalledWith('p1', expect.objectContaining({ slug: 'lena' }), 100)
+    await waitFor(() => expect(screen.getByText(/changed elsewhere/)).toBeTruthy())
+    expect(screen.getByDisplayValue('Rewritten by an agent.')).toBeTruthy()
+    expect(screen.queryByDisplayValue('My edit.')).toBeNull()
+  })
+
   it('creates a new entry via the type-scoped "+ New" control', async () => {
     mockedListCodex.mockResolvedValue({ entries: [] })
     render(<CodexView projectId="p1" />)
@@ -81,7 +104,11 @@ describe('CodexView', () => {
     await userEvent.click(screen.getByText('Add'))
 
     await waitFor(() =>
-      expect(mockedSaveEntry).toHaveBeenCalledWith('p1', expect.objectContaining({ type: 'characters', slug: 'lena' })),
+      expect(mockedSaveEntry).toHaveBeenCalledWith(
+        'p1',
+        expect.objectContaining({ type: 'characters', slug: 'lena' }),
+        null,
+      ),
     )
   })
 

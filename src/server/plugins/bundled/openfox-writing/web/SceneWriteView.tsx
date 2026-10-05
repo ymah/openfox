@@ -5,6 +5,7 @@ import { Button } from '@/components/shared/Button'
 import { Input } from '@/components/shared/Input'
 import { useT } from '@/hooks/useT'
 import { getScene, saveScene } from './vault-client'
+import { PluginRpcError } from '@/lib/plugin-actions'
 import { useSessionStore } from '@/stores/session'
 
 interface SceneWriteViewProps {
@@ -24,25 +25,45 @@ export function SceneWriteView({ projectId }: SceneWriteViewProps) {
   const [body, setBody] = useState('')
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState<string | null>(null)
-  const [saveState, setSaveState] = useState<'idle' | 'pending' | 'saved' | 'error'>('idle')
+  const [saveState, setSaveState] = useState<'idle' | 'pending' | 'saved' | 'error' | 'conflict'>('idle')
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   // Pending (debounced) edit and the path it belongs to — flushed on path
   // change / unmount so the last keystrokes are never lost, and never written
   // to a different scene than the one they were typed in.
   const pendingSave = useRef<{ path: string; frontmatter: Record<string, unknown>; body: string } | null>(null)
   const loaded = useRef(false)
+  // The version of each scene as last read or written. Sent with every save so a scene
+  // an agent (or another tab) changed in between is not silently overwritten.
+  const versions = useRef(new Map<string, number | null | undefined>())
+  // While a conflict is unresolved, autosave stays off: it would only be refused again.
+  const conflicted = useRef(false)
+  const [reloadNonce, setReloadNonce] = useState(0)
 
   // Saves run one after the other: two in flight could reach the server out of
   // order and leave the older text on disk.
   const saveChain = useRef<Promise<void>>(Promise.resolve())
   const save = useCallback(
     (targetPath: string, nextFrontmatter: Record<string, unknown>, nextBody: string): Promise<void> => {
+      if (conflicted.current) return Promise.resolve()
       setSaveState('pending')
       const run = async () => {
+        if (conflicted.current) return
         try {
-          await saveScene(projectId, targetPath, nextFrontmatter, nextBody)
+          const result = await saveScene(
+            projectId,
+            targetPath,
+            nextFrontmatter,
+            nextBody,
+            versions.current.get(targetPath),
+          )
+          versions.current.set(targetPath, result.mtime)
           setSaveState('saved')
         } catch (error) {
+          if (error instanceof PluginRpcError && error.code === 'conflict') {
+            conflicted.current = true
+            setSaveState('conflict')
+            return
+          }
           console.error('Scene save failed:', error)
           setSaveState('error')
         }
@@ -68,6 +89,7 @@ export function SceneWriteView({ projectId }: SceneWriteViewProps) {
     // Leaving a scene: write what is still debounced for the previous one.
     flushPendingSave()
     loaded.current = false
+    conflicted.current = false
     setLoading(true)
     setLoadError(null)
     setSaveState('idle')
@@ -77,6 +99,7 @@ export function SceneWriteView({ projectId }: SceneWriteViewProps) {
     getScene(projectId, path)
       .then((data) => {
         if (cancelled) return
+        versions.current.set(path, data.mtime)
         setFrontmatter(data.frontmatter ?? {})
         setBody(data.body ?? '')
         // Autosave is only armed once the real content is in the editor —
@@ -94,7 +117,7 @@ export function SceneWriteView({ projectId }: SceneWriteViewProps) {
     return () => {
       cancelled = true
     }
-  }, [projectId, path, flushPendingSave])
+  }, [projectId, path, flushPendingSave, reloadNonce])
 
   // Unmount: flush the debounced edit instead of dropping it.
   useEffect(() => flushPendingSave, [flushPendingSave])
@@ -123,6 +146,29 @@ export function SceneWriteView({ projectId }: SceneWriteViewProps) {
   const updateBody = (value: string) => {
     setBody(value)
     scheduleSave(frontmatter, value)
+  }
+
+  /** The scene changed elsewhere: drop my edits and show what is on disk now. */
+  const loadChangedScene = () => {
+    if (saveTimer.current) clearTimeout(saveTimer.current)
+    saveTimer.current = null
+    pendingSave.current = null
+    setReloadNonce((n) => n + 1)
+  }
+
+  /** The scene changed elsewhere: keep what is in the editor and overwrite the file. */
+  const keepMyVersion = async () => {
+    conflicted.current = false
+    versions.current.set(path, undefined)
+    setSaveState('pending')
+    try {
+      const result = await saveScene(projectId, path, frontmatter, body)
+      versions.current.set(path, result.mtime)
+      setSaveState('saved')
+    } catch (error) {
+      console.error('Scene save failed:', error)
+      setSaveState('error')
+    }
   }
 
   const handleChatAboutScene = async () => {
@@ -170,6 +216,28 @@ export function SceneWriteView({ projectId }: SceneWriteViewProps) {
           </p>
         ) : (
           <>
+            {saveState === 'conflict' && (
+              <div
+                role="alert"
+                data-testid="scene-conflict"
+                className="mb-4 rounded border border-warning/50 bg-warning/10 px-4 py-3 text-sm text-text-primary"
+              >
+                <p className="mb-2">
+                  {t({
+                    en: 'This scene was changed elsewhere (an agent or another tab) while you were editing. Your latest edits are not saved.',
+                    fr: 'Cette scène a été modifiée ailleurs (un agent ou un autre onglet) pendant votre édition. Vos dernières modifications ne sont pas enregistrées.',
+                  })}
+                </p>
+                <div className="flex gap-2">
+                  <Button size="sm" onClick={loadChangedScene}>
+                    {t({ en: 'Load the changed version', fr: 'Charger la version modifiée' })}
+                  </Button>
+                  <Button size="sm" onClick={keepMyVersion}>
+                    {t({ en: 'Keep my version', fr: 'Garder ma version' })}
+                  </Button>
+                </div>
+              </div>
+            )}
             <div className="flex items-center justify-between mb-4">
               <Input
                 value={typeof frontmatter['title'] === 'string' ? frontmatter['title'] : ''}
@@ -205,7 +273,9 @@ export function SceneWriteView({ projectId }: SceneWriteViewProps) {
                     ? t({ en: 'Saved', fr: 'Enregistré' })
                     : saveState === 'error'
                       ? t({ en: 'Save failed', fr: 'Échec de l’enregistrement' })
-                      : ''}
+                      : saveState === 'conflict'
+                        ? t({ en: 'Not saved — changed elsewhere', fr: 'Non enregistré — modifié ailleurs' })
+                        : ''}
               </span>
             </div>
 

@@ -1,15 +1,19 @@
 # GTD Mode — Getting Started
 
-OpenFox ships with a built-in GTD (Getting Things Done) system: agents, a skill, and four
-workflows, all bundled defaults — nothing to install per folder. This page is the human-facing
-walkthrough; the full technical reference (folder layout, frontmatter schema, decision tree,
-`PROJECT.md` template, task → sub-agent routing) lives in the bundled **`gtd` skill**
-(`src/server/skills/defaults/gtd/SKILL.md`), which the agents load on demand.
+OpenFox ships with a GTD (Getting Things Done) system as the bundled **GTD plugin**
+(`openfox-gtd`): agents, a skill, and four workflows — nothing to install per folder. The plugin is
+on by default; it can be turned off in **Settings → Plugins**, which hides the GTD project function
+and its agents and workflows (existing GTD projects then show a notice instead of opening). This
+page is the human-facing walkthrough; the full technical reference (folder layout, frontmatter
+schema, decision tree, `PROJECT.md` template, task → sub-agent routing) lives in the plugin's
+**`gtd` skill** (`src/server/plugins/bundled/openfox-gtd/skill/SKILL.md`), which the agents load
+on demand.
 
 ## Zero install: any folder is a vault
 
 Open or create any folder as an OpenFox project — that folder **is** the vault. There's nothing to
-copy into it; the agents, skill, and workflows are bundled with OpenFox and available everywhere.
+copy into it; the agents, skill, and workflows come with the GTD plugin and are available in every
+GTD project.
 The first time you capture an idea there, an `AGENTS.md` landing page is created automatically.
 
 ## Start in three steps

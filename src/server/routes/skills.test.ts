@@ -15,6 +15,7 @@ vi.mock('../db/settings.js', () => {
 })
 
 import { createSkillRoutes } from './skills.js'
+import { setPluginSkills } from '../skills/registry.js'
 
 const settings = ((await import('../db/settings.js')) as unknown as { __store: Map<string, string> }).__store
 
@@ -75,6 +76,35 @@ describe('skill library routes', () => {
       }),
     )
     expect(body).toMatchObject({ defaults: expect.any(Array), userItems: [], projectItems: [] })
+  })
+
+  it('lists a plugin skill as read-only, and refuses to edit or delete it', async () => {
+    setPluginSkills([
+      {
+        metadata: { id: 'plugin-skill', name: 'Plugin skill', description: 'From a plugin', version: '1.0.0' },
+        prompt: 'Original prompt.',
+        source: 'plugin',
+      },
+    ])
+    try {
+      const list = (await (await fetch(`${baseUrl}/api/skills`)).json()) as {
+        items: Array<{ id: string; source: string; readOnly: boolean }>
+      }
+      expect(list.items).toContainEqual(
+        expect.objectContaining({ id: 'plugin-skill', source: 'plugin', readOnly: true }),
+      )
+
+      const edit = await fetch(`${baseUrl}/api/skills/plugin-skill`, {
+        method: 'PUT',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ metadata: { name: 'Hacked', description: 'x' }, prompt: 'hacked' }),
+      })
+      expect(edit.status).toBe(403)
+      const del = await fetch(`${baseUrl}/api/skills/plugin-skill`, { method: 'DELETE' })
+      expect(del.status).toBe(403)
+    } finally {
+      setPluginSkills([])
+    }
   })
 
   it('edits portable skills from the shared folder', async () => {

@@ -4,6 +4,7 @@ import { Button } from '@/components/shared/Button'
 import { Input } from '@/components/shared/Input'
 import { useT } from '@/hooks/useT'
 import { listCodex, saveCodexEntry } from './vault-client'
+import { PluginRpcError } from '@/lib/plugin-actions'
 import { slugify } from './utils'
 import { CODEX_TYPES, CODEX_TYPE_LABELS, type CodexEntry, type CodexType } from './types'
 
@@ -55,21 +56,44 @@ export function CodexView({ projectId }: CodexViewProps) {
     if (!draft || !selected) return
     setSaving(true)
     try {
-      const saved = await saveCodexEntry(projectId, {
-        type: selected.type,
-        slug: selected.slug,
-        title: draft.title,
-        tags: draft.tags,
-        facts: draft.facts,
-        body: draft.body,
-      })
+      const saved = await saveCodexEntry(
+        projectId,
+        {
+          type: selected.type,
+          slug: selected.slug,
+          title: draft.title,
+          tags: draft.tags,
+          facts: draft.facts,
+          body: draft.body,
+        },
+        draft.mtime ?? undefined,
+      )
+      setDraft(saved)
       // Keep the entry in place: replacing it with an error body used to make
       // it vanish from the list and reset the draft.
       setEntries((prev) => prev.map((e) => (e.type === selected.type && e.slug === selected.slug ? saved : e)))
       setError(null)
     } catch (err) {
       console.error('Codex save failed:', err)
-      setError(err instanceof Error ? err.message : String(err))
+      if (err instanceof PluginRpcError && err.code === 'conflict') {
+        // Someone else (an agent) changed this entry since it was opened: show what is on
+        // disk now rather than overwrite it with an out-of-date copy.
+        setError(
+          t({
+            en: 'This entry was changed elsewhere (an agent or another tab). The latest version has been loaded — your edits were not saved.',
+            fr: 'Cette entrée a été modifiée ailleurs (un agent ou un autre onglet). La dernière version a été chargée — vos modifications n’ont pas été enregistrées.',
+          }),
+        )
+        try {
+          const fresh = (await listCodex(projectId)).entries
+          setEntries(fresh)
+          setDraft(fresh.find((e) => e.type === selected.type && e.slug === selected.slug) ?? null)
+        } catch {
+          // keep the message; the list reloads on the next action
+        }
+      } else {
+        setError(err instanceof Error ? err.message : String(err))
+      }
     } finally {
       setSaving(false)
     }
@@ -95,7 +119,8 @@ export function CodexView({ projectId }: CodexViewProps) {
     const existing = entries.find((e) => e.type === type && e.slug === slug)
     if (!existing) {
       try {
-        await saveCodexEntry(projectId, { type, slug, title, tags: [], facts: {}, body: '' })
+        // null: create only — an entry an agent added under the same name meanwhile is not replaced.
+        await saveCodexEntry(projectId, { type, slug, title, tags: [], facts: {}, body: '' }, null)
       } catch (err) {
         console.error('Codex create failed:', err)
         setError(err instanceof Error ? err.message : String(err))

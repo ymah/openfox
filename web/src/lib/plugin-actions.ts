@@ -146,9 +146,21 @@ export async function invokePluginRpc(
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ params, ...context }),
   })
-  const body = (await res.json()) as { result?: unknown; error?: string }
-  if (!res.ok) throw new Error(body.error ?? `Plugin RPC failed (${res.status})`)
+  const body = (await res.json().catch(() => ({}))) as { result?: unknown; error?: string; code?: string }
+  if (!res.ok) throw new PluginRpcError(body.error ?? `Plugin RPC failed (${res.status})`, res.status, body.code)
   return body.result
+}
+
+/** A failed plugin RPC: `code` is what the method raised (e.g. "not_found"), `status` the HTTP status. */
+export class PluginRpcError extends Error {
+  constructor(
+    message: string,
+    readonly status: number,
+    readonly code?: string,
+  ) {
+    super(message)
+    this.name = 'PluginRpcError'
+  }
 }
 
 export async function markNotificationsRead(id?: string): Promise<void> {

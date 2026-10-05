@@ -452,7 +452,7 @@ export function SkillsContent({ isOpen }: { isOpen: boolean }) {
         })}
         onNew={handleNew}
         loading={loading}
-        hasItems={defaults.length > 0 || userItems.length > 0}
+        hasItems={defaults.length > 0 || userItems.length > 0 || items.some((skill) => skill.source === 'plugin')}
         loadingLabel={t({ en: 'Loading skills...', fr: 'Chargement des compétences...' })}
         emptyLabel={t({ en: 'No skills created yet.', fr: 'Aucune compétence créée pour l’instant.' })}
       >
@@ -460,6 +460,14 @@ export function SkillsContent({ isOpen }: { isOpen: boolean }) {
           <ItemsHeader label={t({ en: 'Built-in', fr: 'Intégrées' })}>
             <GroupedSkillItems items={defaults} isBuiltIn={true} />
           </ItemsHeader>
+        )}
+
+        {items.some((skill) => skill.source === 'plugin') && (
+          <div className="mt-4">
+            <ItemsHeader label={t({ en: 'Plugins', fr: 'Plugins' })}>
+              <GroupedSkillItems items={items.filter((skill) => skill.source === 'plugin')} />
+            </ItemsHeader>
+          </div>
         )}
 
         {userItems.length > 0 && (

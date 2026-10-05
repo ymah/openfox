@@ -7,7 +7,7 @@
 // manuscript/**/*.md, reject traversal, and confine every resolved path to the
 // project's workdir. The workdir itself is resolved server-side by the RPC route
 // from the projectId — never taken from the caller.
-import { readdir, readFile, writeFile, mkdir } from 'node:fs/promises'
+import { readdir, readFile, writeFile, mkdir, stat } from 'node:fs/promises'
 import { join, resolve, dirname, sep } from 'node:path'
 import matter from 'gray-matter'
 
@@ -55,6 +55,32 @@ class VaultError extends Error {
 }
 
 const notFound = (what) => new VaultError('not_found', `${what} not found`)
+const conflict = (what) =>
+  new VaultError('conflict', `${what} was changed elsewhere since it was opened (an agent or another tab)`)
+
+/**
+ * Version of a file as seen by a client: its modification time in whole milliseconds.
+ * A client sends back the version it last read, so a write can tell that someone
+ * else (typically an agent in a chat session) changed the file in between.
+ */
+async function versionOf(absPath) {
+  try {
+    return Math.floor((await stat(absPath)).mtimeMs)
+  } catch {
+    return null
+  }
+}
+
+/**
+ * Refuse a write based on an out-of-date read. `expected` undefined = unconditional
+ * (agents, older clients); a number = the file must still have that version;
+ * null = the file must not exist yet (creating an entry must not replace one).
+ */
+async function assertUnchanged(absPath, expected, what) {
+  if (expected === undefined) return
+  const current = await versionOf(absPath)
+  if (expected === null ? current !== null : current !== null && current !== expected) throw conflict(what)
+}
 const invalid = (message) => new VaultError('invalid_request', message)
 
 function slugTitle(slug) {
@@ -69,6 +95,7 @@ function requireWorkdir(context) {
 
 async function readCodexEntry(absPath, type, slug) {
   const raw = await readFile(absPath, 'utf-8')
+  const mtime = await versionOf(absPath)
   // gray-matter caches every distinct input string forever unless options are
   // passed; each autosave would pin a full copy of the text in memory.
   const parsed = matter(raw, {})
@@ -80,6 +107,7 @@ async function readCodexEntry(absPath, type, slug) {
     tags: Array.isArray(data.tags) ? data.tags : [],
     facts: typeof data.facts === 'object' && data.facts !== null ? data.facts : {},
     body: parsed.content.trim(),
+    mtime,
   }
 }
 
@@ -136,6 +164,7 @@ export function registerVaultRpc(registry) {
   registry.registerRpc('codex.save', async (params, context) => {
     const workdir = requireWorkdir(context)
     const absPath = codexPathFor(workdir, params.type, params.slug)
+    await assertUnchanged(absPath, params.expectedMtime, 'Entry')
     const content = matter.stringify(params.body ?? '', {
       id: params.slug,
       type: CODEX_TYPE_LABEL[params.type],
@@ -217,7 +246,12 @@ export function registerVaultRpc(registry) {
     const absPath = scenePathFor(workdir, params.path)
     try {
       const parsed = matter(await readFile(absPath, 'utf-8'), {})
-      return { path: params.path, frontmatter: { ...parsed.data }, body: parsed.content.replace(/^\n/, '') }
+      return {
+        path: params.path,
+        frontmatter: { ...parsed.data },
+        body: parsed.content.replace(/^\n/, ''),
+        mtime: await versionOf(absPath),
+      }
     } catch {
       throw notFound('Scene')
     }
@@ -228,6 +262,7 @@ export function registerVaultRpc(registry) {
     const relPath = params.path
     const absPath = scenePathFor(workdir, relPath)
 
+    await assertUnchanged(absPath, params.expectedMtime, 'Scene')
     let existingFrontmatter = {}
     try {
       existingFrontmatter = { ...matter(await readFile(absPath, 'utf-8'), {}).data }
@@ -239,6 +274,6 @@ export function registerVaultRpc(registry) {
     const frontmatter = { id: sceneSlug, ...existingFrontmatter, ...(params.frontmatter ?? {}) }
     await mkdir(dirname(absPath), { recursive: true })
     await writeFile(absPath, matter.stringify(params.body ?? '', frontmatter), 'utf-8')
-    return { path: relPath, frontmatter, body: params.body ?? '' }
+    return { path: relPath, frontmatter, body: params.body ?? '', mtime: await versionOf(absPath) }
   })
 }

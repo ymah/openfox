@@ -7,6 +7,8 @@ export interface CodexEntry {
   tags: string[]
   facts: Record<string, unknown>
   body: string
+  /** Version of the file when it was read; sent back so a stale write is refused. */
+  mtime?: number | null
 }
 
 export interface SceneSummary {

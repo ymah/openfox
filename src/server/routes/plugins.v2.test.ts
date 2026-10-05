@@ -48,6 +48,8 @@ describe('plugin routes (v2)', () => {
         { key: 'token', type: 'password', label: { en: 'Token', fr: 'Jeton' }, secret: true },
       ] });
       registry.registerRpc('ping', async () => 'pong');
+      registry.registerRpc('gone', async () => { throw Object.assign(new Error('Scene not found'), { code: 'not_found' }) });
+      registry.registerRpc('bad', async () => { throw Object.assign(new Error('Invalid slug'), { code: 'invalid_request' }) });
       registry.registerAsset('panel.html');
       `,
     )
@@ -87,7 +89,7 @@ describe('plugin routes (v2)', () => {
     expect(list.plugins).toHaveLength(1)
     expect(list.plugins[0]!.id).toBe('demo-plugin')
     expect(list.plugins[0]!.displayName).toBe('Demo')
-    expect(list.plugins[0]!.contributions.rpcMethods).toBe(1)
+    expect(list.plugins[0]!.contributions.rpcMethods).toBe(3)
     expect(list.contributions.actions).toHaveLength(1)
     expect(list.contributions.panels).toHaveLength(1)
 
@@ -155,6 +157,23 @@ describe('plugin routes (v2)', () => {
     })
     expect(missing.status).toBe(400)
     expect(((await missing.json()) as { error: string }).error).toContain("no RPC method 'nope'")
+  })
+
+  it('carries the error code a method raises, and answers 404 for not_found', async () => {
+    const call = (method: string) =>
+      fetch(`${baseUrl}/api/plugins/demo-plugin/rpc/${method}`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ params: {} }),
+      })
+
+    const gone = await call('gone')
+    expect(gone.status).toBe(404)
+    expect(await gone.json()).toEqual({ error: 'Scene not found', code: 'not_found' })
+
+    const bad = await call('bad')
+    expect(bad.status).toBe(400)
+    expect(await bad.json()).toEqual({ error: 'Invalid slug', code: 'invalid_request' })
   })
 
   it('serves only registered plugin assets', async () => {

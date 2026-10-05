@@ -394,6 +394,18 @@ registry.registerUiAction({
 - `{ kind: 'openPanel', panelId }` — opens one of your panels.
 - `{ kind: 'openUrl', url }` — opens a URL in a new tab.
 
+#### RPC errors
+
+A failing RPC method answers `400` with `{ error }`. To let a page tell failures apart, throw an
+error that carries a string `code`: `not_found` is answered `404`, `conflict` is answered `409`,
+and any other code stays `400`; the code is returned as `{ error, code }`. In the web app
+`invokePluginRpc` rejects with a `PluginRpcError` exposing `status` and `code`.
+
+A method that writes a file can use `conflict` for optimistic concurrency: return the file's version
+(its modification time) from the read, take it back as `expectedMtime` on the write, and refuse the
+write when the file has changed since. The bundled Writing plugin does this for scenes and Codex
+entries, so an agent's edit is never silently overwritten by an editor that had the old text open.
+
 `visibleWhen` gates a contribution on the slot context: `hasSession`,
 `hasProject`, `hasMessage`. Fields are ANDed and omitted fields impose no
 constraint, so `{ hasMessage: true }` hides the action everywhere except the

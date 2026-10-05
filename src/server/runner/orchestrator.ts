@@ -5,6 +5,7 @@
  * (state machine driven). All events are appended to EventStore.
  */
 
+import { workflowFitsProject } from '../workflows/project-scope.js'
 import type { OrchestratorOptions, OrchestratorResult } from './types.js'
 import { getProject } from '../db/projects.js'
 import type { ProjectType } from '../../shared/types.js'
@@ -17,6 +18,7 @@ import {
   loadUserWorkflows,
   loadProjectWorkflows,
   findWorkflowById,
+  isDefaultWorkflow,
   normalizeWorkflowScope,
 } from '../workflows/registry.js'
 import { executeWorkflow } from '../workflows/executor.js'
@@ -72,6 +74,16 @@ export async function runOrchestrator(options: OrchestratorOptions): Promise<Orc
 
   if (!workflow) {
     throw new Error(`Workflow "${workflowId}" not found`)
+  }
+
+  if (
+    !workflowFitsProject(
+      { id: workflow.metadata.id, category: workflow.metadata.category },
+      projectType,
+      await isDefaultWorkflow(workflow.metadata.id),
+    )
+  ) {
+    throw new Error(`Workflow "${workflowId}" cannot run in a ${projectType} project`)
   }
 
   // Validate required params

@@ -71,6 +71,7 @@ function mapToResponse(skill: SkillDefinition) {
     legacy: skill.legacy ?? true,
     readOnly:
       source === 'bundled' ||
+      source === 'plugin' ||
       ((source === 'global-shared' || source === 'selected' || source === 'project-shared') && (skill.legacy ?? true)),
     warnings: skill.warnings ?? [],
   }

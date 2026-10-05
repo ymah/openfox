@@ -4,6 +4,7 @@ import { cleanup, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { getScene, saveScene } from './vault-client'
 import { SceneWriteView } from './SceneWriteView'
+import { PluginRpcError } from '@/lib/plugin-actions'
 
 const mockNavigate = vi.fn()
 const scenePath = 'manuscript/01-act-one/01-chapter-one/01-scene.md'
@@ -124,6 +125,78 @@ describe('SceneWriteView', () => {
     releaseFirst()
     await waitFor(() => expect(mockedSaveScene).toHaveBeenCalledTimes(2))
     expect(mockedSaveScene.mock.calls[1]?.[3]).toBe('One. Two.')
+  })
+
+  describe('a scene changed elsewhere while it is being edited', () => {
+    const conflict = () => new PluginRpcError('changed', 409, 'conflict')
+
+    it('sends the version it read and the version the last save returned', async () => {
+      mockedGetScene.mockResolvedValue({ path: scenePath, frontmatter: {}, body: '', mtime: 100 })
+      mockedSaveScene.mockReset()
+      mockedSaveScene.mockResolvedValue({ path: scenePath, mtime: 150 } as never)
+      render(<SceneWriteView projectId="p1" />)
+      await waitFor(() => expect(mockedGetScene).toHaveBeenCalledTimes(1))
+
+      const textarea = screen.getByPlaceholderText('Write the scene…')
+      await userEvent.type(textarea, 'One.')
+      await waitFor(() => expect(mockedSaveScene).toHaveBeenCalledTimes(1), { timeout: 3000 })
+      expect(mockedSaveScene.mock.calls[0]?.[4]).toBe(100)
+
+      await userEvent.type(textarea, ' Two.')
+      await waitFor(() => expect(mockedSaveScene).toHaveBeenCalledTimes(2), { timeout: 3000 })
+      expect(mockedSaveScene.mock.calls[1]?.[4]).toBe(150)
+    })
+
+    it('shows the conflict, stops autosaving, and keeps my text until I choose', async () => {
+      mockedGetScene.mockResolvedValue({ path: scenePath, frontmatter: {}, body: '', mtime: 100 })
+      mockedSaveScene.mockReset()
+      mockedSaveScene.mockRejectedValue(conflict())
+      render(<SceneWriteView projectId="p1" />)
+      await waitFor(() => expect(mockedGetScene).toHaveBeenCalledTimes(1))
+
+      const textarea = screen.getByPlaceholderText('Write the scene…')
+      await userEvent.type(textarea, 'My text.')
+      await waitFor(() => expect(screen.getByTestId('scene-conflict')).toBeTruthy(), { timeout: 3000 })
+
+      await userEvent.type(textarea, ' More.')
+      await new Promise((r) => setTimeout(r, 1500))
+      expect(mockedSaveScene).toHaveBeenCalledTimes(1)
+      expect(screen.getByDisplayValue('My text. More.')).toBeTruthy()
+    })
+
+    it('"Load the changed version" replaces my text with what is on disk', async () => {
+      mockedGetScene
+        .mockResolvedValueOnce({ path: scenePath, frontmatter: {}, body: '', mtime: 100 })
+        .mockResolvedValue({ path: scenePath, frontmatter: {}, body: 'Agent text.', mtime: 200 })
+      mockedSaveScene.mockReset()
+      mockedSaveScene.mockRejectedValue(conflict())
+      render(<SceneWriteView projectId="p1" />)
+      await waitFor(() => expect(mockedGetScene).toHaveBeenCalledTimes(1))
+
+      await userEvent.type(screen.getByPlaceholderText('Write the scene…'), 'My text.')
+      await waitFor(() => expect(screen.getByTestId('scene-conflict')).toBeTruthy(), { timeout: 3000 })
+      await userEvent.click(screen.getByText('Load the changed version'))
+
+      await waitFor(() => expect(screen.getByDisplayValue('Agent text.')).toBeTruthy())
+      expect(screen.queryByTestId('scene-conflict')).toBeNull()
+    })
+
+    it('"Keep my version" overwrites the file with what is in the editor', async () => {
+      mockedGetScene.mockResolvedValue({ path: scenePath, frontmatter: {}, body: '', mtime: 100 })
+      mockedSaveScene.mockReset()
+      mockedSaveScene.mockRejectedValueOnce(conflict()).mockResolvedValue({ path: scenePath, mtime: 300 } as never)
+      render(<SceneWriteView projectId="p1" />)
+      await waitFor(() => expect(mockedGetScene).toHaveBeenCalledTimes(1))
+
+      await userEvent.type(screen.getByPlaceholderText('Write the scene…'), 'My text.')
+      await waitFor(() => expect(screen.getByTestId('scene-conflict')).toBeTruthy(), { timeout: 3000 })
+      await userEvent.click(screen.getByText('Keep my version'))
+
+      await waitFor(() => expect(mockedSaveScene).toHaveBeenCalledTimes(2))
+      expect(mockedSaveScene.mock.calls[1]?.[3]).toBe('My text.')
+      expect(mockedSaveScene.mock.calls[1]?.[4]).toBeUndefined()
+      await waitFor(() => expect(screen.queryByTestId('scene-conflict')).toBeNull())
+    })
   })
 
   it('seeds a draft message and navigates to a new session on "Chat about this scene"', async () => {

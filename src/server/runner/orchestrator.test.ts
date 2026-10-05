@@ -24,10 +24,13 @@ vi.mock('../workflows/registry.js', () => ({
   loadUserWorkflows: vi.fn(async () => []),
   loadProjectWorkflows: vi.fn(async () => []),
   findWorkflowById: vi.fn(),
+  isDefaultWorkflow: vi.fn(async () => false),
   normalizeWorkflowScope: vi.fn((value: unknown) =>
     typeof value === 'string' && ['auto', 'builtin', 'user', 'project'].includes(value) ? value : 'auto',
   ),
 }))
+
+vi.mock('../db/projects.js', () => ({ getProject: vi.fn(() => undefined) }))
 
 vi.mock('../workflows/executor.js', () => ({
   executeWorkflow: vi.fn(async () => ({
@@ -48,6 +51,7 @@ import {
   normalizeWorkflowScope,
 } from '../workflows/registry.js'
 import { executeWorkflow } from '../workflows/executor.js'
+import { getProject } from '../db/projects.js'
 
 const mockOptions: OrchestratorOptions = {
   sessionManager: {
@@ -123,6 +127,36 @@ describe('runOrchestrator', () => {
     expect(executeWorkflow).toHaveBeenCalledWith(mockWorkflow, mockOptions, undefined)
     expect(result.finalAction.type).toBe('DONE')
     expect(result.iterations).toBe(1)
+  })
+
+  describe('project function scoping', () => {
+    const workflowOf = (id: string, category?: string) => ({
+      metadata: { id, name: id, description: '', version: '1', ...(category ? { category } : {}) },
+      entryStep: 's',
+      settings: { maxIterations: 5 },
+      steps: [{ id: 's', name: 'S', type: 'agent' as const, phase: 'build', transitions: [] }],
+    })
+
+    it('refuses a workflow of another project function', async () => {
+      vi.mocked(getProject).mockReturnValue({ type: 'dev' } as never)
+      const workflow = workflowOf('chat-decide', 'chat')
+      vi.mocked(findWorkflowById).mockReturnValue(workflow)
+
+      await expect(runOrchestrator({ ...mockOptions, workflowId: 'chat-decide' })).rejects.toThrow(
+        /cannot run in a dev project/,
+      )
+      expect(executeWorkflow).not.toHaveBeenCalled()
+    })
+
+    it('runs a workflow of the project function', async () => {
+      vi.mocked(getProject).mockReturnValue({ type: 'gtd' } as never)
+      const workflow = workflowOf('gtd-capture', 'gtd')
+      vi.mocked(findWorkflowById).mockReturnValue(workflow)
+
+      await runOrchestrator({ ...mockOptions, workflowId: 'gtd-capture' })
+
+      expect(executeWorkflow).toHaveBeenCalled()
+    })
   })
 
   it('should prefer options.workflowId over runtime config', async () => {

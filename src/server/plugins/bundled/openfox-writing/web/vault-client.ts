@@ -23,8 +23,10 @@ export function listCodex(projectId: string): Promise<{ entries: CodexEntry[] }>
 export function saveCodexEntry(
   projectId: string,
   entry: { type: CodexType; slug: string; title: string; tags: string[]; facts: Record<string, unknown>; body: string },
+  /** A number: the version the edit is based on. null: create — refuse if the entry already exists. */
+  expectedMtime?: number | null,
 ): Promise<CodexEntry> {
-  return call('codex.save', projectId, entry)
+  return call('codex.save', projectId, { ...entry, ...(expectedMtime !== undefined ? { expectedMtime } : {}) })
 }
 
 export function getManuscript(projectId: string): Promise<{ acts: ActSummary[] }> {
@@ -34,7 +36,7 @@ export function getManuscript(projectId: string): Promise<{ acts: ActSummary[] }
 export function getScene(
   projectId: string,
   path: string,
-): Promise<{ path: string; frontmatter: Record<string, unknown>; body: string }> {
+): Promise<{ path: string; frontmatter: Record<string, unknown>; body: string; mtime?: number | null }> {
   return call('scene.get', projectId, { path })
 }
 
@@ -43,6 +45,13 @@ export function saveScene(
   path: string,
   frontmatter: Record<string, unknown>,
   body: string,
-): Promise<{ path: string }> {
-  return call('scene.save', projectId, { path, frontmatter, body })
+  /** The version the edit is based on; a scene changed elsewhere since then is refused with code "conflict". */
+  expectedMtime?: number | null,
+): Promise<{ path: string; mtime?: number | null }> {
+  return call('scene.save', projectId, {
+    path,
+    frontmatter,
+    body,
+    ...(expectedMtime !== undefined && expectedMtime !== null ? { expectedMtime } : {}),
+  })
 }

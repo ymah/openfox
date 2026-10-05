@@ -232,7 +232,14 @@ export function createPluginRoutes(options: PluginRoutesOptions): Router {
       })
       res.json({ result })
     } catch (error) {
-      res.status(400).json({ error: error instanceof Error ? error.message : String(error) })
+      // A method says "not found" or "invalid" through `error.code`; the transport used to
+      // flatten every failure into a bare 400, so views could not tell them apart.
+      const code = (error as { code?: unknown } | null)?.code
+      const stringCode = typeof code === 'string' ? code : undefined
+      res.status(stringCode === 'not_found' ? 404 : stringCode === 'conflict' ? 409 : 400).json({
+        error: error instanceof Error ? error.message : String(error),
+        ...(stringCode ? { code: stringCode } : {}),
+      })
     }
   })
 

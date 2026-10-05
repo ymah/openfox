@@ -1,3 +1,4 @@
+import { PageErrorBoundary } from './components/shared/PageErrorBoundary'
 import { parseServerBoolean } from './lib/server-boolean'
 import { ScrollArea } from './components/shared/ScrollArea'
 import { useEffect, useMemo, useRef, useState, type ReactElement } from 'react'
@@ -144,7 +145,15 @@ function PluginPageRoute({
   return (
     <>
       <Sidebar projectId={projectId!} isOpen={sidebarOpen} overlay={sidebarOverlay} onClose={onSidebarToggle} />
-      <div className="flex-1 min-w-0 bg-primary">{pluginEnabled ? render(projectId!) : <DisabledFunctionNotice />}</div>
+      <div className="flex-1 min-w-0 bg-primary">
+        {pluginEnabled ? (
+          <PageErrorBoundary resetKey={`${routePath}:${projectId}:${window.location.search}`}>
+            {render(projectId!)}
+          </PageErrorBoundary>
+        ) : (
+          <DisabledFunctionNotice />
+        )}
+      </div>
     </>
   )
 }
@@ -175,7 +184,11 @@ function ProjectHome({ projectId, projectType }: { projectId: string; projectTyp
   const pluginId = pluginIdForProjectMode(projectType)
   if (!home || !pluginId) return <EmptyProjectView />
   const enabled = plugins.some((plugin) => plugin.id === pluginId && plugin.enabled)
-  return enabled ? home(projectId) : <DisabledFunctionNotice />
+  return enabled ? (
+    <PageErrorBoundary resetKey={projectId}>{home(projectId)}</PageErrorBoundary>
+  ) : (
+    <DisabledFunctionNotice />
+  )
 }
 
 function ProjectSessionView({
@@ -598,56 +611,58 @@ function App() {
         <Header onMenuClick={handleLeftToggle} onCriteriaToggle={handleRightToggle} />
 
         <div className="@container flex-1 flex overflow-hidden">
-          <Switch>
-            <Route path="/onboarding">
-              <OnboardingPage />
-            </Route>
-            <Route path="/split-view">
-              {splitReady ? <SplitView controlOpen={splitControlOpen} /> : <LoadingSpinner />}
-            </Route>
-            <Route path="/p/:projectId/s/:sessionId">
-              <ProjectSessionView
-                sidebarOpen={effectiveLeftOpen}
-                sidebarOverlay={leftOverlay}
-                onSidebarToggle={handleLeftToggle}
-                rightSidebarOpen={effectiveRightOpen}
-                rightSidebarOverlay={rightOverlay}
-                onRightSidebarToggle={handleRightToggle}
-              />
-            </Route>
-            <Route path="/p/:projectId/new">
-              <NewSessionHandler />
-            </Route>
-            {/* Pages owned by bundled plugins. Declared by each plugin's web
+          <PageErrorBoundary resetKey={location}>
+            <Switch>
+              <Route path="/onboarding">
+                <OnboardingPage />
+              </Route>
+              <Route path="/split-view">
+                {splitReady ? <SplitView controlOpen={splitControlOpen} /> : <LoadingSpinner />}
+              </Route>
+              <Route path="/p/:projectId/s/:sessionId">
+                <ProjectSessionView
+                  sidebarOpen={effectiveLeftOpen}
+                  sidebarOverlay={leftOverlay}
+                  onSidebarToggle={handleLeftToggle}
+                  rightSidebarOpen={effectiveRightOpen}
+                  rightSidebarOverlay={rightOverlay}
+                  onRightSidebarToggle={handleRightToggle}
+                />
+              </Route>
+              <Route path="/p/:projectId/new">
+                <NewSessionHandler />
+              </Route>
+              {/* Pages owned by bundled plugins. Declared by each plugin's web
                 entry and compiled in at build time, so a plugin can own a real
                 route with a real editor. Order matters: these are more specific
                 than /p/:projectId below. */}
-            {BUNDLED_PLUGIN_PAGES.map((page) => (
-              <Route key={page.path} path={page.path}>
-                <PluginPageRoute
-                  pluginId={page.pluginId}
-                  routePath={page.path}
-                  render={page.render}
+              {BUNDLED_PLUGIN_PAGES.map((page) => (
+                <Route key={page.path} path={page.path}>
+                  <PluginPageRoute
+                    pluginId={page.pluginId}
+                    routePath={page.path}
+                    render={page.render}
+                    sidebarOpen={effectiveLeftOpen}
+                    sidebarOverlay={leftOverlay}
+                    onSidebarToggle={handleLeftToggle}
+                  />
+                </Route>
+              ))}
+              <Route path="/p/:projectId">
+                <ProjectView
                   sidebarOpen={effectiveLeftOpen}
                   sidebarOverlay={leftOverlay}
                   onSidebarToggle={handleLeftToggle}
                 />
               </Route>
-            ))}
-            <Route path="/p/:projectId">
-              <ProjectView
-                sidebarOpen={effectiveLeftOpen}
-                sidebarOverlay={leftOverlay}
-                onSidebarToggle={handleLeftToggle}
-              />
-            </Route>
-            <Route path="/">
-              <HomePage />
-            </Route>
-            <Route>
-              <NotFoundView kind="page" />
-            </Route>
-          </Switch>
+              <Route path="/">
+                <HomePage />
+              </Route>
+              <Route>
+                <NotFoundView kind="page" />
+              </Route>
+            </Switch>
+          </PageErrorBoundary>
         </div>
       </div>
       <UpdateBanner />
