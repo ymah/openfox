@@ -8,6 +8,7 @@
  * - runTopLevelAgentLoop(): replaces duplicated planner/builder turns
  */
 
+import { createUnparseableRoundCounter, MAX_UNPARSEABLE_TOOL_ROUNDS } from './unparseable-tool-rounds.js'
 import type { InjectedFile, StatsIdentity, ToolCall, ToolMode, ToolResult } from '../../shared/types.js'
 import type { ServerMessage } from '../../shared/protocol.js'
 import type { LLMClientWithModel } from '../llm/client.js'
@@ -246,6 +247,7 @@ export async function runTopLevelAgentLoop(
   let compacting = config.initialCompacting ?? false
   let kickoffInjected = false
   let returnValueNudgeCount = 0
+  const unparseableRounds = createUnparseableRoundCounter()
 
   for (;;) {
     if (signal?.aborted) throw new Error('Aborted')
@@ -909,6 +911,15 @@ ${COMPACTION_PROMPT}`,
         const { appendCompactionPrompt } = await import('../context/compactor.js')
         appendCompactionPrompt(sessionId, append, config.subAgentMetadata)
         compacting = true
+      }
+
+      if (unparseableRounds.record(result.toolCalls)) {
+        throw new Error(
+          serverT({
+            en: `The model keeps sending tool calls with invalid arguments (${MAX_UNPARSEABLE_TOOL_ROUNDS} times in a row). Turn stopped.`,
+            fr: `Le modèle renvoie sans cesse des appels d'outil aux arguments invalides (${MAX_UNPARSEABLE_TOOL_ROUNDS} fois de suite). Tour arrêté.`,
+          }),
+        )
       }
 
       retryLimiter.reset()

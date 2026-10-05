@@ -10,7 +10,7 @@ import { join } from 'node:path'
 import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs'
 
 const dir = mkdtempSync(join(tmpdir(), 'openfox-explore-'))
-process.env['OPENFOX_MOCK_LLM'] = 'true'
+process.env['OPENFOX_MOCK_LLM'] ??= 'true'
 process.env['OPENFOX_DB_PATH'] = ':memory:'
 process.env['OPENFOX_LOG_LEVEL'] = 'warn'
 process.env['OPENFOX_HOST'] = '127.0.0.1'
